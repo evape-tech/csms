@@ -183,7 +183,13 @@ export default function DatabaseManagementPage() {
 
               {stats.timestamp && (
                 <Typography variant="body2" color="text.secondary">
-                  Last checked: {new Date(stats.timestamp).toLocaleString()}
+                  Last checked: {new Date(stats.timestamp).toLocaleString('zh-TW', { 
+                    year: 'numeric', 
+                    month: '2-digit', 
+                    day: '2-digit', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
                 </Typography>
               )}
 

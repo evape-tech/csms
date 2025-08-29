@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 // 使用統一的 database service
-const DatabaseUtils = require('../../../../lib/database/utils');
-const { databaseService } = require('../../../../lib/database/service');
+import DatabaseUtils from '../../../../lib/database/utils.js';
+import { databaseService } from '../../../../lib/database/service.js';
 
 export async function POST(request: NextRequest) {
   try {

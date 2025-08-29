@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Card, CardContent, Typography, Box, TextField, Button, Alert, CircularProgress, Avatar, FormControlLabel, Checkbox, Divider, Stack } from '@mui/material';
+import { Card, Typography, Box, TextField, Button, Alert, CircularProgress, Avatar, FormControlLabel, Checkbox, Divider, Stack } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { loginAction } from '../../actions/authActions';
 
@@ -37,9 +37,10 @@ export default function LoginPage() {
         }
         // 如果成功，server action 會自動重定向，不需要額外處理
         
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Login failed', err);
-        setError(err?.message || '登入失敗');
+        const errorMessage = err instanceof Error ? err.message : '登入失敗';
+        setError(errorMessage);
       }
     });
   };

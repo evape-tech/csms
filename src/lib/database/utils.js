@@ -1,5 +1,5 @@
-const { databaseManager } = require('./adapter');
-const { databaseService } = require('./service');
+import { databaseManager } from './adapter.js';
+import { databaseService } from './service.js';
 
 class DatabaseUtils {
   
@@ -184,4 +184,4 @@ class DatabaseUtils {
   }
 }
 
-module.exports = DatabaseUtils;
+export default DatabaseUtils;

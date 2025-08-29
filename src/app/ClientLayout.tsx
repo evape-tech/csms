@@ -26,7 +26,7 @@ const sites = [
 
 // Stable sx objects to avoid recreating on every render
 const flexBoxSx = { display: 'flex' };
-const appBarSx = { zIndex: (theme: any) => theme.zIndex.drawer + 1 };
+const appBarSx = { zIndex: (theme: { zIndex: { drawer: number } }) => theme.zIndex.drawer + 1 };
 const menuIconButtonSx = { mr: 2, display: 'flex' };
 const titleSx = { flexGrow: 1 };
 const siteNameSx = { mr: 2, display: { xs: 'none', sm: 'block' } };

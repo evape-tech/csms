@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 // 使用統一的 database service
-const DatabaseUtils = require('../../../../../lib/database/utils');
-const { databaseService } = require('../../../../../lib/database/service');
+import DatabaseUtils from '../../../../../lib/database/utils.js';
+import { databaseService } from '../../../../../lib/database/service.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     console.log('[api/guns/[id]/ocpp] incoming request url=', req.url);
-    try { console.log('[api/guns/[id]/ocpp] incoming body=', JSON.stringify(body)); } catch(e) { console.log('[api/guns/[id]/ocpp] incoming body (raw)=', body); }
+    try { console.log('[api/guns/[id]/ocpp] incoming body=', JSON.stringify(body)); } catch { console.log('[api/guns/[id]/ocpp] incoming body (raw)=', body); }
 
     // extract dynamic id from request URL instead of relying on params
     const url = new URL(req.url);
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
     // build forward payload (ensure shape: { apikey, cp_id, cmd, [payload] })
     const cmd = body.cmd ?? 'cmd_start_charging';
-    const forwardBody: any = { apikey, cmd };
+    const forwardBody: Record<string, unknown> = { apikey, cmd };
     if (cpId) {
       forwardBody.cp_id = cpId;
     } else if (body.cp_id) {
@@ -60,15 +60,16 @@ export async function POST(req: Request) {
       method: 'POST',
       headers,
       body: JSON.stringify(forwardBody),
-    }).catch(e => { throw e });
+    }).catch(() => { throw new Error('Upstream request failed') });
 
     const text = await upstream.text().catch(() => null);
     console.log('[api/guns/[id]/ocpp] upstream status=', upstream?.status, 'ok=', upstream?.ok);
-    try { console.log('[api/guns/[id]/ocpp] upstream body=', text); } catch(e) { console.log('[api/guns/[id]/ocpp] upstream body (raw)=', text); }
+    try { console.log('[api/guns/[id]/ocpp] upstream body=', text); } catch { console.log('[api/guns/[id]/ocpp] upstream body (raw)=', text); }
 
     return NextResponse.json({ success: upstream.ok, status: upstream.status, upstreamBody: text });
-  } catch (err: any) {
-    console.error('[api/guns/[id]/ocpp] POST error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[api/guns/[id]/ocpp] POST error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }

@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 
 // 直接使用資料庫服務，避免繞過 API 路由
-const DatabaseUtils = require('../lib/database/utils');
-const { databaseService } = require('../lib/database/service');
+import DatabaseUtils from '../lib/database/utils.js';
+import { databaseService } from '../lib/database/service.js';
 
 // OCPP 通知設定
 const OCPP_NOTIFY_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089/ocpp/api/spacepark_cp_api';
@@ -84,6 +84,7 @@ export async function updateBalanceMode(formData) {
     const emsMode = formData.get('ems_mode');
     
     console.log(`🔍 [updateBalanceMode] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
+    console.log(`🔍 [updateBalanceMode] Updating ems_mode to: "${emsMode}"`);
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
@@ -96,9 +97,12 @@ export async function updateBalanceMode(formData) {
       throw new Error('No site_settings row found');
     }
 
+    console.log(`🔍 [updateBalanceMode] Current ems_mode: "${existing.ems_mode}" -> "${emsMode}"`);
+
     // 更新資料庫
     const updated = await databaseService.updateSiteSettings(existing.id, { ems_mode: emsMode });
     console.log(`✅ [updateBalanceMode] Updated site_setting:`, updated.id);
+    console.log(`✅ [updateBalanceMode] New ems_mode in DB: "${updated.ems_mode}"`);
 
     // 將 Decimal 轉換為普通數字以避免序列化問題
     const serializedData = {
@@ -108,13 +112,15 @@ export async function updateBalanceMode(formData) {
       updatedAt: updated.updatedAt?.toISOString() || new Date().toISOString()
     };
 
+    console.log(`🔍 [updateBalanceMode] Returning serialized data:`, serializedData);
+
     // 非阻塞通知 OCPP 服務
     notifyOcpp({
       action: 'site_setting_changed',
       data: serializedData
     });
 
-    revalidatePath('/');
+    revalidatePath('/api/site_setting');
     return { success: true, data: serializedData };
   } catch (error) {
     console.error('Server action error:', error);
@@ -161,7 +167,7 @@ export async function updateMaxPower(formData) {
       data: serializedData
     });
 
-    revalidatePath('/');
+    revalidatePath('/api/site_setting');
     return { success: true, data: serializedData };
   } catch (error) {
     console.error('Server action error:', error);

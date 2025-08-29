@@ -6,8 +6,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 // 直接使用資料庫服務
-const DatabaseUtils = require('../lib/database/utils');
-const { databaseService } = require('../lib/database/service');
+import DatabaseUtils from '../lib/database/utils.js';
+import { databaseService } from '../lib/database/service.js';
 
 export async function loginAction(formData) {
   try {

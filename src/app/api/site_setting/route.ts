@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 // 使用統一的 database service
-const DatabaseUtils = require('../../../lib/database/utils');
-const { databaseService } = require('../../../lib/database/service');
+import DatabaseUtils from '../../../lib/database/utils.js';
+import { databaseService } from '../../../lib/database/service.js';
+
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
 
 // notify configuration for ocpp server (used to inform ocpp service after DB changes)
 const OCPP_NOTIFY_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089/ocpp/api/spacepark_cp_api';
 const OCPP_API_KEY = process.env.OCPP_API_KEY || '';
 
-async function notifyOcpp(payload: any) {
+async function notifyOcpp(payload: Record<string, unknown>) {
   // notifyOcpp 註解與追蹤日誌：
   // 1) 構造出 ocppController 預期的 body（broadcastBody）
   // 2) 先嘗試一次對 OCPP_NOTIFY_URL 的「廣播呼叫」(若伺服器支援廣播)
@@ -19,7 +23,7 @@ async function notifyOcpp(payload: any) {
   const defaultApiKey = OCPP_API_KEY || 'cp_api_key16888';
 
   // 構造 broadcastBody，使其符合 ocppController 的期待格式
-  let broadcastBody: any;
+  let broadcastBody: Record<string, unknown>;
   if (payload?.action === 'site_setting_changed' && payload.data) {
     // site setting 被改變 — 使用 siteSetting 欄位包裹
     broadcastBody = {
@@ -48,7 +52,7 @@ async function notifyOcpp(payload: any) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const guns = await databaseService.getGuns({});
-    const cpRows = guns.map((gun: any) => ({ cpid: gun.cpid }));
+    const cpRows = guns.map((gun: { cpid: unknown }) => ({ cpid: gun.cpid }));
     
     console.log('[notifyOcpp] fallback: found cp rows count =', cpRows.length);
     if (!cpRows || cpRows.length === 0) {
@@ -58,11 +62,11 @@ async function notifyOcpp(payload: any) {
 
     // Filter out rows with null/empty cpid and map only confirmed string cpids
     const perCpPromises = cpRows
-      .filter((r: any): r is { cpid: string } => typeof r.cpid === 'string' && r.cpid.length > 0)
+      .filter((r: { cpid: unknown }): r is { cpid: string } => typeof r.cpid === 'string' && r.cpid.length > 0)
       .map((r: { cpid: string }) => {
         const bodyPerCp = { ...broadcastBody, cp_id: r.cpid };
         // log each outgoing body minimally (avoid huge logs)
-        console.log('[notifyOcpp] sending to cp:', r.cpid, 'cmd:', bodyPerCp.cmd);
+        console.log('[notifyOcpp] sending to cp:', r.cpid, 'cmd:', (broadcastBody as { cmd?: string }).cmd);
         return fetch(OCPP_NOTIFY_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -75,8 +79,8 @@ async function notifyOcpp(payload: any) {
     const results = await Promise.allSettled(perCpPromises);
 
     // 簡短統計與每台結果 log
-    const summary = { success: 0, fail: 0, details: [] as any[] };
-    results.forEach((r: any) => {
+    const summary = { success: 0, fail: 0, details: [] as Array<{ cpid: string; ok: boolean; status?: number; error?: string }> };
+    results.forEach((r: PromiseSettledResult<{ cpid: string; ok: boolean; status?: number; error?: string }>) => {
       if (r.status === 'fulfilled') {
         summary.details.push(r.value);
         if (r.value.ok) summary.success += 1;
@@ -104,10 +108,19 @@ export async function GET(req: Request) {
     // return all site settings; adjust to findFirst or where clause if needed
     const rows = await databaseService.getSiteSettings();
     console.log(`✅ [API /api/site_setting] Found ${rows.length} site_settings records via databaseService`);
-    return NextResponse.json(rows);
-  } catch (err: any) {
-    console.error('/api/site_setting GET error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+    
+    const response = NextResponse.json(rows);
+    
+    // 設置快取控制標頭，確保不會被快取
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
+  } catch (err: unknown) {
+    console.error('/api/site_setting GET error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }
 
@@ -127,7 +140,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'No site_settings row found' }, { status: 404 });
     }
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
     if (Object.prototype.hasOwnProperty.call(body, 'ems_mode')) data.ems_mode = body.ems_mode;
     if (Object.prototype.hasOwnProperty.call(body, 'max_power_kw')) data.max_power_kw = body.max_power_kw;
 
@@ -148,9 +161,13 @@ export async function PATCH(req: Request) {
       }
     });
 
+    // 清除快取
+    revalidatePath('/api/site_setting');
+
     return NextResponse.json(updated);
-  } catch (err: any) {
-    console.error('/api/site_setting PATCH error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('/api/site_setting PATCH error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }

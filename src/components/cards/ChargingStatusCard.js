@@ -23,23 +23,26 @@ import CircularProgressWithLabel from '../common/CircularProgressWithLabel';
 import { updateBalanceMode, updateMaxPower } from '../../actions/siteActions';
 import { useDynamicLoading } from '../common/withDynamicLoading';
 
+// 負載平衡模式選項 - 移到組件外部避免初始化問題
+const balanceOptions = [
+  { value: 'static', label: '靜態分配' },
+  { value: 'dynamic', label: '動態分配' },
+];
+
 export default function ChargingStatusCard() {
   // 動態載入控制
   const { isLoading, stopLoading, LoadingSkeleton } = useDynamicLoading({ height: 200 });
   
-  // 狀態管理
+  // 一次性宣告所有狀態，避免依賴順序問題
   const [siteSettings, setSiteSettings] = useState([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [settingsError, setSettingsError] = useState(null);
   const [emsMode, setEmsMode] = useState(null);
   const [maxPowerKw, setMaxPowerKw] = useState(null);
   const [totalWatts, setTotalWatts] = useState(null);
-  
-  // 使用 useTransition 來處理 server actions
+  const [balanceMode, setBalanceMode] = useState('static');
   const [isPendingBalance, startBalanceTransition] = useTransition();
   const [isPendingPower, startPowerTransition] = useTransition();
-
-  // 充電狀態數據
   const [chargingStatus, setChargingStatus] = useState([
     { label: '充電中', count: 0, percentage: 0, color: '#1976d2', ocppStatus: 'Charging' },
     { label: '閒置', count: 0, percentage: 0, color: '#4caf50', ocppStatus: 'Available' },
@@ -48,12 +51,10 @@ export default function ChargingStatusCard() {
   ]);
   const [totalStations, setTotalStations] = useState(20);
 
-  // 負載平衡模式
-  const balanceOptions = [
-    { value: 'static', label: '靜態分配' },
-    { value: 'dynamic', label: '動態分配' },
-  ];
-  const [balanceMode, setBalanceMode] = useState(balanceOptions[0].value);
+  // 除錯用：監控關鍵狀態變化 - 移到所有狀態定義之後
+  useEffect(() => {
+    console.log('State updated - emsMode:', emsMode, 'balanceMode:', balanceMode);
+  }, [emsMode, balanceMode]);
 
   // 工具函數
   const getSettingValue = useCallback((key) => {
@@ -74,6 +75,7 @@ export default function ChargingStatusCard() {
         throw new Error('Failed to fetch guns data');
       }
       const guns = await response.json();
+      console.log('Loaded guns data from API:', guns.length, 'guns');
 
       // 統計各狀態數量
       const counts = { Charging: 0, Available: 0, Unavailable: 0, Faulted: 0 };
@@ -110,6 +112,7 @@ export default function ChargingStatusCard() {
         { label: '故障', count: counts.Faulted, percentage: faultedPct, color: '#f44336', ocppStatus: 'Faulted' },
       ];
 
+      console.log('Updated charging status:', chargingStatus);
       setChargingStatus(chargingStatus);
       setTotalStations(totalStations);
     } catch (error) {
@@ -128,19 +131,26 @@ export default function ChargingStatusCard() {
         throw new Error('Failed to fetch site settings');
       }
       const settings = await response.json();
+      console.log('Loaded site settings from API:', settings);
       setSiteSettings(settings);
 
       if (settings && settings.length > 0) {
         const first = settings[0];
         if (first) {
-          if (first.ems_mode) {
+          // 確保正確設定 EMS 模式
+          if (first.ems_mode !== undefined && first.ems_mode !== null) {
+            console.log('Setting EMS mode from API:', first.ems_mode);
             setEmsMode(first.ems_mode);
             setBalanceMode(first.ems_mode);
           }
-          if (first.max_power_kw !== undefined) {
+          // 確保正確設定最大功率
+          if (first.max_power_kw !== undefined && first.max_power_kw !== null) {
             const kw = Number(first.max_power_kw);
-            setMaxPowerKw(kw);
-            setTotalWatts(kw);
+            if (!isNaN(kw)) {
+              console.log('Setting max power from API:', kw);
+              setMaxPowerKw(kw);
+              setTotalWatts(kw);
+            }
           }
         }
       }
@@ -155,27 +165,48 @@ export default function ChargingStatusCard() {
   // 更新負載平衡模式 - 使用 server action
   const handleBalanceModeChange = useCallback(async (event) => {
     const newMode = event.target.value;
-    setBalanceMode(newMode);
+    const previousMode = event.target.value; // 避免閉包問題
 
     startBalanceTransition(async () => {
-      const formData = new FormData();
-      formData.append('ems_mode', newMode);
-      
-      const result = await updateBalanceMode(formData);
-      
-      if (result.success) {
-        setEmsMode(newMode);
-        console.log('負載平衡模式更新成功');
-        // 重新載入設定以確保同步
+      try {
+        const formData = new FormData();
+        formData.append('ems_mode', newMode);
+        
+        const result = await updateBalanceMode(formData);
+        
+        if (result.success) {
+          // 直接使用 server action 返回的數據更新狀態
+          if (result.data) {
+            setEmsMode(result.data.ems_mode);
+            setBalanceMode(result.data.ems_mode);
+            
+            // 同步更新本地設置狀態
+            setSiteSettings(prev => {
+              if (!prev || prev.length === 0) return prev;
+              const copy = [...prev];
+              copy[0] = { 
+                ...copy[0], 
+                ems_mode: result.data.ems_mode,
+                max_power_kw: result.data.max_power_kw 
+              };
+              return copy;
+            });
+          }
+          console.log('負載平衡模式更新成功:', result.data);
+        } else {
+          console.error('Failed to update ems_mode:', result.error);
+          alert('更新負載平衡模式失敗: ' + result.error);
+          // 恢復到之前的模式 - 這裡需要重新獲取當前值
+          loadSiteSettings();
+        }
+      } catch (error) {
+        console.error('Failed to update ems_mode:', error);
+        alert('更新負載平衡模式失敗: ' + error.message);
+        // 恢復到之前的模式 - 這裡需要重新獲取當前值
         loadSiteSettings();
-      } else {
-        console.error('Failed to update ems_mode:', result.error);
-        alert('更新負載平衡模式失敗: ' + result.error);
-        // 恢復到之前的模式
-        if (emsMode) setBalanceMode(emsMode);
       }
     });
-  }, [emsMode, loadSiteSettings]);
+  }, [loadSiteSettings]); // 添加 loadSiteSettings 依賴
 
   // 更新場域總功率 - 使用 server action
   const handleUpdateMaxPower = useCallback(async () => {
@@ -242,6 +273,24 @@ export default function ChargingStatusCard() {
     
     initializeData();
   }, [loadChargingStatus, loadSiteSettings, stopLoading]);
+
+  // 提供一個重新載入充電狀態的方法給外部組件使用
+  useEffect(() => {
+    // 將重新載入方法暴露到 window 對象，供其他組件使用
+    if (typeof window !== 'undefined') {
+      window.refreshChargingStatus = async () => {
+        console.log('Refreshing charging status...');
+        loadChargingStatus();
+      };
+    }
+    
+    // 清理函數
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.refreshChargingStatus;
+      }
+    };
+  }, [loadChargingStatus]);
 
   // 如果還在載入中，顯示 Skeleton
   if (isLoading) {
@@ -336,7 +385,7 @@ export default function ChargingStatusCard() {
                 <Select
                   labelId="balance-mode-label"
                   id="balance-mode-select"
-                  value={balanceMode}
+                  value={balanceMode || ''} // 確保有預設值
                   label="模式"
                   onChange={handleBalanceModeChange}
                   disabled={isPendingBalance}

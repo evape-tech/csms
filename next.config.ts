@@ -34,96 +34,9 @@ const nextConfig: NextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   
-  // webpack 優化
-  webpack: (config, { dev, isServer }) => {
-    // 開發環境優化
-    if (dev) {
-      // 減少開發環境的編譯時間
-      config.optimization = {
-        ...config.optimization,
-        removeAvailableModules: false,
-        removeEmptyChunks: false,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              chunks: 'all',
-            },
-          },
-        },
-      };
-      
-      // 排除不必要的模組以加速編譯
-      config.externals = config.externals || [];
-      if (!isServer) {
-        config.externals.push({
-          'echarts': 'echarts',
-          'echarts-for-react': 'echarts-for-react',
-        });
-      }
-    }
-    
-    // 生產環境優化
-    if (!dev) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          maxInitialRequests: 25,
-          maxAsyncRequests: 25,
-          cacheGroups: {
-            default: false,
-            vendors: false,
-            // 分離 MUI 組件
-            mui: {
-              name: 'mui',
-              test: /[\\/]node_modules[\\/]@mui[\\/]/,
-              chunks: 'all',
-              priority: 30,
-              enforce: true,
-            },
-            // 分離圖表庫
-            charts: {
-              name: 'charts',
-              test: /[\\/]node_modules[\\/](echarts|recharts)[\\/]/,
-              chunks: 'all',
-              priority: 25,
-              enforce: true,
-            },
-            // 分離 React
-            react: {
-              name: 'react',
-              test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-              chunks: 'all',
-              priority: 20,
-              enforce: true,
-            },
-            // 其他 vendor 庫
-            vendor: {
-              name: 'vendor',
-              test: /[\\/]node_modules[\\/]/,
-              chunks: 'all',
-              priority: 10,
-              minChunks: 1,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      };
-    }
-    
-    // 加速模組解析
-    config.resolve = {
-      ...config.resolve,
-      modules: ['node_modules'],
-      extensions: ['.js', '.jsx', '.ts', '.tsx'],
-    };
-    
-    return config;
-  },
-  
+  // webpack 設定已移除以啟用 Turbopack（開發模式）
+  // 如果你需要自訂打包流程，再把自定義 webpack 配置放回來或改用 Next.js 其他配置選項。
+
   // 啟用 gzip 壓縮
   compress: true,
   

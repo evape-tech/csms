@@ -19,14 +19,26 @@ const columns = [
     label: '開始時間',
     minWidth: 160,
     sortable: true,
-    format: (value: string) => new Date(value).toLocaleString('zh-TW')
+    format: (value: string) => new Date(value).toLocaleString('zh-TW', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
   },
   {
     id: 'endTime',
     label: '結束時間',
     minWidth: 160,
     sortable: true,
-    format: (value: string) => new Date(value).toLocaleString('zh-TW')
+    format: (value: string) => new Date(value).toLocaleString('zh-TW', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
   },
   {
     id: 'kWh',

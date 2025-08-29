@@ -1,5 +1,5 @@
-const { PrismaClient: MySQLClient } = require('../../../prisma-clients/mysql');
-const { PrismaClient: MSSQLClient } = require('../../../prisma-clients/mssql');
+import { PrismaClient as MySQLClient } from '../../../prisma-clients/mysql/index.js';
+import { PrismaClient as MSSQLClient } from '../../../prisma-clients/mssql/index.js';
 
 class DatabaseManager {
   constructor() {
@@ -159,7 +159,7 @@ async function switchDatabase(provider) {
   return await databaseManager.switchDatabase(provider);
 }
 
-module.exports = {
+export {
   databaseManager,
   getDatabase,
   getDatabaseClient,

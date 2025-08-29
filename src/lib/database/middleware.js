@@ -1,5 +1,5 @@
-const { NextResponse } = require('next/server');
-const DatabaseUtils = require('./utils');
+import { NextResponse } from 'next/server';
+import DatabaseUtils from './utils.js';
 
 /**
  * 數據庫中間件 - 確保在處理請求前數據庫已初始化
@@ -79,7 +79,7 @@ function withDatabasePage(getServerSideProps) {
   };
 }
 
-module.exports = {
+export {
   databaseMiddleware,
   withDatabase,
   withDatabasePage

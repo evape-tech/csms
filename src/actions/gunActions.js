@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 
 // 直接使用資料庫服務
-const DatabaseUtils = require('../lib/database/utils');
-const { databaseService } = require('../lib/database/service');
+import DatabaseUtils from '../lib/database/utils.js';
+import { databaseService } from '../lib/database/service.js';
 
 export async function createGunAction(formData) {
   try {
@@ -58,9 +58,9 @@ export async function createGunAction(formData) {
       updatedAt: created.updatedAt?.toISOString() || new Date().toISOString()
     };
     
-    // 重新驗證相關頁面
+    // 重新驗證相關頁面和API
+    revalidatePath('/api/guns');
     revalidatePath('/charging_status');
-    revalidatePath('/');
     
     return { success: true, data: serializedData };
   } catch (error) {
@@ -139,9 +139,9 @@ export async function updateGunAction(formData) {
       updatedAt: updated.updatedAt?.toISOString() || new Date().toISOString()
     };
     
-    // 重新驗證相關頁面
+    // 重新驗證相關頁面和API
+    revalidatePath('/api/guns');
     revalidatePath('/charging_status');
-    revalidatePath('/');
     
     return { success: true, data: serializedData };
   } catch (error) {
@@ -181,9 +181,9 @@ export async function deleteGunAction(formData) {
     await databaseService.deleteGun(gunId);
     console.log(`✅ [deleteGunAction] Deleted gun:`, gunId);
     
-    // 重新驗證相關頁面
+    // 重新驗證相關頁面和API
+    revalidatePath('/api/guns');
     revalidatePath('/charging_status');
-    revalidatePath('/');
     
     return { success: true };
   } catch (error) {

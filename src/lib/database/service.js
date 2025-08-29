@@ -1,4 +1,4 @@
-const { getDatabaseClient } = require('./adapter');
+import { getDatabaseClient } from './adapter.js';
 
 class DatabaseService {
   
@@ -193,7 +193,7 @@ class DatabaseService {
 // 導出單例實例
 const databaseService = new DatabaseService();
 
-module.exports = {
+export {
   DatabaseService,
   databaseService
 };

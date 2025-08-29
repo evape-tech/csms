@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '../../../lib/database/utils.js';
 import { databaseManager } from '../../../lib/database/adapter.js';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const stats = await DatabaseUtils.getDatabaseStats();
     return NextResponse.json(stats);
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Failed to get database stats' },
       { status: 500 }

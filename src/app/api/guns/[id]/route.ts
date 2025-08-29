@@ -1,9 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 // 使用統一的 database service
-const DatabaseUtils = require('../../../../lib/database/utils');
-const { databaseService } = require('../../../../lib/database/service');
+import DatabaseUtils from '../../../../lib/database/utils.js';
+import { databaseService } from '../../../../lib/database/service.js';
 
-export async function POST(req: NextRequest, { params }: { params: any }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log(`🔍 [API /api/guns/[id] POST] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
     
@@ -27,19 +28,25 @@ export async function POST(req: NextRequest, { params }: { params: any }) {
     try {
       const updated = await databaseService.updateGun(id, body);
       console.log(`✅ [API /api/guns/[id] POST] Updated gun via databaseService:`, updated.id);
+      
+      // 使用 revalidatePath 清除相關快取
+      revalidatePath('/api/guns');
+      
       return NextResponse.json({ success: true, updated });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // if record not found, prisma throws
       console.error('[api/guns/[id]] update error', err);
-      return NextResponse.json({ error: 'Update failed', message: err?.message ?? String(err) }, { status: 500 });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'Update failed', message: errorMessage }, { status: 500 });
     }
-  } catch (err: any) {
-    console.error('/api/guns/[id] POST error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('/api/guns/[id] POST error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: any }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log(`🔍 [API /api/guns/[id] DELETE] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
     
@@ -56,18 +63,24 @@ export async function DELETE(req: NextRequest, { params }: { params: any }) {
     try {
       const deleted = await databaseService.deleteGun(id);
       console.log(`✅ [API /api/guns/[id] DELETE] Deleted gun via databaseService:`, deleted.id);
+      
+      // 使用 revalidatePath 清除相關快取
+      revalidatePath('/api/guns');
+      
       return NextResponse.json({ success: true, deleted });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[api/guns/[id]] delete error', err);
-      return NextResponse.json({ error: 'Delete failed', message: err?.message ?? String(err) }, { status: 500 });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'Delete failed', message: errorMessage }, { status: 500 });
     }
-  } catch (err: any) {
-    console.error('/api/guns/[id] DELETE error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('/api/guns/[id] DELETE error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: any }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log(`🔍 [API /api/guns/[id] PATCH] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
     
@@ -89,13 +102,19 @@ export async function PATCH(req: NextRequest, { params }: { params: any }) {
     try {
       const updated = await databaseService.updateGun(id, body);
       console.log(`✅ [API /api/guns/[id] PATCH] Updated gun via databaseService:`, updated.id);
+      
+      // 使用 revalidatePath 清除相關快取
+      revalidatePath('/api/guns');
+      
       return NextResponse.json({ success: true, updated });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[api/guns/[id]] PATCH error', err);
-      return NextResponse.json({ error: 'Update failed', message: err?.message ?? String(err) }, { status: 500 });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: 'Update failed', message: errorMessage }, { status: 500 });
     }
-  } catch (err: any) {
-    console.error('/api/guns/[id] PATCH error', err && err.stack ? err.stack : err);
-    return NextResponse.json({ error: 'Internal Server Error', message: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('/api/guns/[id] PATCH error', err instanceof Error ? err.stack : err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }

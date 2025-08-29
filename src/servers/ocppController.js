@@ -1,12 +1,19 @@
-// 使用新的Prisma數據庫適配器
-const DatabaseUtils = require('../lib/database/utils.js');
-const { databaseService } = require('../lib/database/service.js');
+// 使用新的Prisma數據庫適配器 - 使用動態 import
+let DatabaseUtils;
+let databaseService;
+let createCpLog;
 
-// 便利的函數別名
-const { 
-  createCpLog,
-
-} = databaseService;
+// 動態載入 ES6 modules
+const loadDatabaseModules = async () => {
+  if (!DatabaseUtils) {
+    const utilsModule = await import('../lib/database/utils.js');
+    const serviceModule = await import('../lib/database/service.js');
+    DatabaseUtils = utilsModule.default;
+    databaseService = serviceModule.databaseService;
+    createCpLog = databaseService.createCpLog;
+  }
+  return { DatabaseUtils, databaseService, createCpLog };
+};
 
 // Initialize database connection
 let isDbInitialized = false;
@@ -18,18 +25,21 @@ const initializeDatabase = async () => {
     console.log(`🔍 [Environment] DATABASE_URL = "${process.env.DATABASE_URL?.substring(0, 20)}..."`);
     console.log(`🔍 [Environment] DATABASE_URL_MSSQL = "${process.env.DATABASE_URL_MSSQL?.substring(0, 20)}..."`);
     
+    // 載入資料庫模組
+    const { DatabaseUtils: dbUtils } = await loadDatabaseModules();
+    
     // 初始化數據庫連接，明確指定 provider
     const targetProvider = process.env.DB_PROVIDER || 'mysql';
     console.log(`🎯 [OCPP] Target database provider: ${targetProvider}`);
-    const initialized = await DatabaseUtils.initialize(targetProvider);
+    const initialized = await dbUtils.initialize(targetProvider);
     
     if (initialized) {
       isDbInitialized = true;
       console.log('✅ OCPP Controller: Database initialized successfully with Prisma');
-      console.log(`📊 Current provider: ${DatabaseUtils.getCurrentProvider()?.toUpperCase()}`);
+      console.log(`📊 Current provider: ${dbUtils.getCurrentProvider()?.toUpperCase()}`);
       
       // 執行數據庫健康檢查
-      const isHealthy = await DatabaseUtils.healthCheck();
+      const isHealthy = await dbUtils.healthCheck();
       console.log(`💚 Database health: ${isHealthy ? 'Healthy' : 'Unhealthy'}`);
       
     } else {
@@ -64,14 +74,16 @@ async function ensureDbInitialized() {
 // Gun 相關操作
 async function findAllGuns(whereClause = {}) {
   await ensureDbInitialized();
-  return await databaseService.getGuns(whereClause);
+  const { databaseService: dbService } = await loadDatabaseModules();
+  return await dbService.getGuns(whereClause);
 }
 
 async function updateGun(whereClause, updateData) {
   await ensureDbInitialized();
   
   // Prisma 需要先找到目標記錄，然後更新
-  const guns = await databaseService.getGuns(whereClause);
+  const { databaseService: dbService } = await loadDatabaseModules();
+  const guns = await dbService.getGuns(whereClause);
   
   if (guns.length === 0) {
     return [0]; // 返回格式類似 Sequelize
@@ -79,7 +91,7 @@ async function updateGun(whereClause, updateData) {
   
   // 批量更新所有匹配的記錄
   const updatePromises = guns.map(gun => 
-    databaseService.updateGun(gun.id, {
+    dbService.updateGun(gun.id, {
       ...updateData,
       updatedAt: new Date()
     })
@@ -91,25 +103,29 @@ async function updateGun(whereClause, updateData) {
 
 async function findGunByCpsn(cpsn) {
   await ensureDbInitialized();
-  return await databaseService.getGunByCpsn(cpsn);
+  const { databaseService: dbService } = await loadDatabaseModules();
+  return await dbService.getGunByCpsn(cpsn);
 }
 
 // SiteSetting 相關操作
 async function getSiteSettings() {
   await ensureDbInitialized();
-  const settings = await databaseService.getSiteSettings();
+  const { databaseService: dbService } = await loadDatabaseModules();
+  const settings = await dbService.getSiteSettings();
   return settings.length > 0 ? settings[0] : null;
 }
 
 async function updateSiteSettings(id, updateData) {
   await ensureDbInitialized();
-  return await databaseService.updateSiteSettings(id, updateData);
+  const { databaseService: dbService } = await loadDatabaseModules();
+  return await dbService.updateSiteSettings(id, updateData);
 }
 
 // 通用輔助函數
 async function executeRawQuery(query, params = []) {
   await ensureDbInitialized();
-  return await databaseService.executeRawQuery(query, ...params);
+  const { databaseService: dbService } = await loadDatabaseModules();
+  return await dbService.executeRawQuery(query, ...params);
 }
 
 console.log('📦 Database helper functions loaded');
@@ -253,19 +269,22 @@ async function updateStationOnlineStatus(cpsn) {
         console.log(`[updateStationOnlineStatus] ✅ 成功更新 ${updateResult[0]} 個充電樁狀態為 Available`);
         
         // 記錄每個充電樁的狀態變更
-        guns.forEach(gun => {
+        guns.forEach(async gun => {
             console.log(`[updateStationOnlineStatus] 📍 CPID:${gun.cpid} | 連接器:${gun.connector} | 狀態: ${gun.guns_status} -> Available`);
             
             // 記錄到 Cp_log
-            createCpLog({
-                cpid: gun.cpid,
-                cpsn: cpsn,
-                log: `WebSocket connection established - Status changed to Available`,
-                time: new Date(),
-                inout: "system",
-            }).catch(err => {
+            try {
+                const { createCpLog: logFunction } = await loadDatabaseModules();
+                await logFunction({
+                    cpid: gun.cpid,
+                    cpsn: cpsn,
+                    log: `WebSocket connection established - Status changed to Available`,
+                    time: new Date(),
+                    inout: "system",
+                });
+            } catch (err) {
                 console.error(`[updateStationOnlineStatus] 記錄 ${gun.cpid} 日誌失敗:`, err);
-            });
+            }
         });
         
         // 充電站上線後，觸發功率重新分配
@@ -347,19 +366,22 @@ async function updateStationOfflineStatus(cpsn) {
         console.log(`[updateStationOfflineStatus] ✅ 成功更新 ${updateResult[0]} 個充電樁狀態為 Unavailable`);
         
         // 記錄每個充電樁的狀態變更
-        guns.forEach(gun => {
+        guns.forEach(async gun => {
             console.log(`[updateStationOfflineStatus] 📍 CPID:${gun.cpid} | 連接器:${gun.connector} | 狀態: ${gun.guns_status} -> Unavailable`);
             
             // 記錄到 Cp_log
-            createCpLog({
-                cpid: gun.cpid,
-                cpsn: cpsn,
-                log: `WebSocket connection lost - Status changed to Unavailable`,
-                time: new Date(),
-                inout: "system",
-            }).catch(err => {
+            try {
+                const { createCpLog: logFunction } = await loadDatabaseModules();
+                await logFunction({
+                    cpid: gun.cpid,
+                    cpsn: cpsn,
+                    log: `WebSocket connection lost - Status changed to Unavailable`,
+                    time: new Date(),
+                    inout: "system",
+                });
+            } catch (err) {
                 console.error(`[updateStationOfflineStatus] 記錄 ${gun.cpid} 日誌失敗:`, err);
-            });
+            }
         });
         
         // 如果充電站斷線，也需要觸發功率重新分配
@@ -510,7 +532,8 @@ async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS) {
             
             // 額外記錄當前充電樁配置概況（簡化版）
             try {
-                const guns = await databaseService.getGuns({ cpid });
+                const { databaseService: dbService } = await loadDatabaseModules();
+                const guns = await dbService.getGuns({ cpid });
                 const gun = guns.length > 0 ? guns[0] : null;
                 if (gun) {
                     console.log(`🔍 [單樁更新] ${cpid} -> 類型:${gun.acdc} | 規格:${gun.max_kw}kW | 狀態:${gun.guns_status} | EMS:${siteSetting.ems_mode}`);
@@ -537,7 +560,8 @@ async function getSiteSetting() {
     console.log('[getSiteSetting] 開始獲取場域設定...');
     
     try {
-        const settings = await databaseService.getSiteSettings();
+        const { databaseService: dbService } = await loadDatabaseModules();
+        const settings = await dbService.getSiteSettings();
         const setting = settings.length > 0 ? settings[0] : null;
         
         if (setting) {
@@ -698,7 +722,8 @@ var before_status = "Available";
 async function cpid_mapping(gun_cpsn,gun_connector){
     console.log(`[cpid_mapping] 開始為 ${gun_cpsn}:${gun_connector} 建立映射`);
     
-    const guns = await databaseService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
+    const { databaseService: dbService } = await loadDatabaseModules();
+    const guns = await dbService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
     const gun_cpid = guns.length > 0 ? guns[0] : null;
 
     console.log(`[cpid_mapping] 資料庫查詢結果: 找到 ${guns.length} 筆記錄`);
@@ -740,7 +765,7 @@ async function cpid_mapping(gun_cpsn,gun_connector){
         
         // 查詢該 cpsn 的所有記錄進行診斷
         try {
-            const allGunsForCpsn = await databaseService.getGuns({ cpsn: gun_cpsn });
+            const allGunsForCpsn = await dbService.getGuns({ cpsn: gun_cpsn });
             console.log(`[cpid_mapping] 該 cpsn ${gun_cpsn} 在資料庫中的所有記錄:`, allGunsForCpsn.length);
             allGunsForCpsn.forEach((gun, index) => {
                 console.log(`[cpid_mapping] 記錄 ${index + 1}: cpid=${gun.cpid}, connector=${gun.connector}, status=${gun.guns_status}`);
@@ -756,7 +781,8 @@ async function cpid_mapping(gun_cpsn,gun_connector){
 
 async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun_data3,gun_data4){
     console.log("into update_guns_meters()");
-    const guns = await databaseService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
+    const { databaseService: dbService } = await loadDatabaseModules();
+    const guns = await dbService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
     const gun_cpid = guns.length > 0 ? guns[0] : null;
     var now_time=new Date(+new Date() + 8 * 3600 * 1000).toISOString()
 
@@ -783,7 +809,7 @@ async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun
                 }
             }
 
-            await databaseService.updateGun(gun_cpid.id, updateData);
+            await dbService.updateGun(gun_cpid.id, updateData);
 
             if(gun_connector =="1"){
                 await send_cp_to_kw_api(gun_cpid.cpid,gun_cpid.guns_status,gun_data1,gun_data2,gun_data3,gun_cpid.guns_metervalue4,gun_cpid.guns_metervalue5 || "0.00",gun_cpid.guns_metervalue6 || "0.00")
@@ -812,7 +838,7 @@ async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun
                 }
             }
 
-            await databaseService.updateGun(gun_cpid.id, updateData);
+            await dbService.updateGun(gun_cpid.id, updateData);
         }
     }
     else{
@@ -825,12 +851,13 @@ async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun
 
 async function update_guns_memo2(gun_cpsn,gun_connector){
     console.log("into update_guns_memo2()");
-    const guns = await databaseService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
+    const { databaseService: dbService } = await loadDatabaseModules();
+    const guns = await dbService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
     const gun_cpid = guns.length > 0 ? guns[0] : null;
     
     if (gun_cpid) {
         var now_time=new Date(+new Date() + 8 * 3600 * 1000).toISOString()
-        await databaseService.updateGun(gun_cpid.id, {
+        await dbService.updateGun(gun_cpid.id, {
             guns_memo2:now_time
         });
     }
@@ -880,7 +907,8 @@ async function ocpp_send_command(cpid,cmd, payload) {
     //外站接口
     //gun_cpid={"id":4,"connector":"0","cpsn":"spacepark102","guns_data1":"Available","createdAt":null,"updatedAt":"2024-01-09"}
     console.log("into function ocpp_send_command");
-    const guns = await databaseService.getGuns({ cpid : cpid });
+    const { databaseService: dbService } = await loadDatabaseModules();
+    const guns = await dbService.getGuns({ cpid : cpid });
     const gun = guns.length > 0 ? guns[0] : null;
     
     if (!gun) {
@@ -989,7 +1017,7 @@ async function ocpp_send_command(cpid,cmd, payload) {
         console.log('在線上充電樁清單:', onlineCpids);
 
         // 取得所有充電樁資料
-        const allGuns = await databaseService.getGuns({});
+        const allGuns = await dbService.getGuns({});
         
         let unit, limit;
 
@@ -1234,7 +1262,8 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
         console.log('='.repeat(80));
         
         // 獲取所有充電樁資料
-        const allGuns = await databaseService.getGuns({});
+        const { databaseService: dbService } = await loadDatabaseModules();
+        const allGuns = await dbService.getGuns({});
         const onlineCpids = Object.keys(wsClients).filter(cpid => wsClients[cpid] && wsClients[cpid].length > 0);
         
         // 分類統計
@@ -1422,7 +1451,8 @@ const ocppController = {
 
 
             try {
-                const guns = await databaseService.getGuns({ cpid : cpid });
+                const { databaseService: dbService } = await loadDatabaseModules();
+                const guns = await dbService.getGuns({ cpid : cpid });
                 const gun = guns.length > 0 ? guns[0] : null;
 
                 console.log("gundata="+JSON.stringify(gun));
@@ -1467,7 +1497,7 @@ const ocppController = {
                                 var start_charging_id = req.body.start_charging_id;
                                 console.log("start_charging_id="+start_charging_id);
 
-                                await databaseService.updateGun(gun.id, {
+                                await dbService.updateGun(gun.id, {
                                     guns_metervalue6: start_charging_id,
                                     updatedAt: new Date()
                                 });
@@ -1852,10 +1882,11 @@ const ocppController = {
         
         try {
             // 直接查詢資料庫取得所有 connector 的 cpid 映射
-            const guns1 = await databaseService.getGuns({ cpsn: req.params.id, guns_connector: 1 });
-            const guns2 = await databaseService.getGuns({ cpsn: req.params.id, guns_connector: 2 });
-            const guns3 = await databaseService.getGuns({ cpsn: req.params.id, guns_connector: 3 });
-            const guns4 = await databaseService.getGuns({ cpsn: req.params.id, guns_connector: 4 });
+            const { databaseService: dbService } = await loadDatabaseModules();
+            const guns1 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 1 });
+            const guns2 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 2 });
+            const guns3 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 3 });
+            const guns4 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 4 });
             
             cpidMapping1 = guns1.length > 0 ? guns1[0].cpid : "";
             cpidMapping2 = guns2.length > 0 ? guns2[0].cpid : "";
@@ -1955,13 +1986,20 @@ const ocppController = {
             //   console.log("read_Cp_gun_datas="+JSON.stringify(cpsn));
             //  update_guns_data(id,"1","Charging")
             // 建立 cp log (通用日誌，cpid 使用 cpsn 作為標識)
-            createCpLog({
-                cpid: getStationPrimaryCpid(id), // 使用充電站的主要 cpid
-                cpsn: id,
-                log: ocpp_message,
-                time: new Date(),
-                inout: "in",
-            })
+            (async () => {
+                try {
+                    const { createCpLog: logFunction } = await loadDatabaseModules();
+                    await logFunction({
+                        cpid: getStationPrimaryCpid(id), // 使用充電站的主要 cpid
+                        cpsn: id,
+                        log: ocpp_message,
+                        time: new Date(),
+                        inout: "in",
+                    });
+                } catch (err) {
+                    console.error('記錄 CP log 失敗:', err);
+                }
+            })();
             if(id=="2022111407200005"){
                 console.log("2022incoming:"+id );
                 update_guns_memo2(id,1)
@@ -2579,14 +2617,15 @@ const ocppController = {
 }
 async function update_guns_status(gun_cpsn, gun_connector, new_status) {
     try {
-        const guns = await databaseService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
+        const { databaseService: dbService } = await loadDatabaseModules();
+        const guns = await dbService.getGuns({ cpsn: gun_cpsn, connector: String(gun_connector) });
         const gun = guns.length > 0 ? guns[0] : null;
         if (!gun) {
             console.log('update_guns_status: gun not found', gun_cpsn, gun_connector);
             return 0;
         }
         const now_time = new Date(+new Date() + 8 * 3600 * 1000).toISOString();
-        await databaseService.updateGun(gun.id, {
+        await dbService.updateGun(gun.id, {
             guns_status: new_status,
             guns_memo2: now_time,
             updatedAt: new Date()
