@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../prisma-clients/mssql"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL_MSSQL")
+}
+
+// Models adapted for SQL Server (NVARCHAR / NTEXT where appropriate). Keep types generic where possible.
+
+model cartitems {
+  id        Int      @id @default(autoincrement())
+  CartId    Int?
+  ProductId Int?
+  quantity  Int?
+  createdAt DateTime
+  updatedAt DateTime
+  carts     carts?   @relation(fields: [CartId], references: [id], onDelete: Cascade)
+
+  @@index([CartId])
+}
+
+model carts {
+  id        Int         @id @default(autoincrement())
+  UserId    Int?
+  createdAt DateTime
+  updatedAt DateTime
+  cartitems cartitems[]
+}
+
+model cp_gun_datas {
+  id                  Int      @id @default(autoincrement())
+  gunid               String   @db.NVarChar(45)
+  cpsn                String   @db.NVarChar(45)
+  connector_num       String   @db.NVarChar(45)
+  connector           String   @db.NVarChar(45)
+  last_heartbeat      String?  @db.NVarChar(45)
+  online              String?  @db.NVarChar(45)
+  brand               String?  @db.NVarChar(45)
+  loc                 String?  @db.NVarChar(max)
+  station_name        String?  @db.NVarChar(45)
+  local_cp_num        String?  @db.NVarChar(45)
+  current_status      String?  @db.NVarChar(45)
+  charging_current_a  String?  @db.NVarChar(45)
+  charging_voltage    String?  @db.NVarChar(45)
+  charging_start_time DateTime?
+  charging_end_time   DateTime?
+}
+
+model cp_logs {
+  id        BigInt   @id @default(autoincrement())
+  cpid      String?  @db.NVarChar(255)
+  cpsn      String?  @db.NVarChar(255)
+  log       String?  @db.NVarChar(max)
+  inout     String?  @db.NVarChar(255)
+  time      DateTime?
+  createdAt DateTime
+  updatedAt DateTime
+}
+
+model guns {
+  id               Int      @id @default(autoincrement())
+  connector        String?  @db.NVarChar(255)
+  cpid             String?  @db.NVarChar(255)
+  cpsn             String?  @db.NVarChar(255)
+  guns_status      String?  @db.NVarChar(255)
+  createdAt        DateTime
+  updatedAt        DateTime
+  guns_metervalue1 String?  @db.NVarChar(255)
+  guns_metervalue2 String?  @db.NVarChar(255)
+  guns_metervalue3 String?  @db.NVarChar(255)
+  guns_metervalue4 String?  @db.NVarChar(255)
+  guns_metervalue5 String?  @db.NVarChar(255)
+  guns_metervalue6 String?  @db.NVarChar(255)
+  guns_memo1       String?  @db.NVarChar(255)
+  guns_memo2       String?  @db.NVarChar(255)
+  transactionid    String?  @db.NVarChar(255)
+  acdc             String? @default("AC") @db.NVarChar(10)
+  max_kw           Int?     @default(0)
+}
+
+model orderitems {
+  id        Int      @id @default(autoincrement())
+  OrderId   Int?
+  ProductId Int?
+  price     Int?
+  quantity  Int?
+  createdAt DateTime
+  updatedAt DateTime
+  orders    orders?  @relation(fields: [OrderId], references: [id], onDelete: Cascade)
+
+  @@index([OrderId])
+}
+
+model orders {
+  id              Int          @id @default(autoincrement())
+  name            String?      @db.NVarChar(255)
+  phone           String?      @db.NVarChar(255)
+  address         String?      @db.NVarChar(255)
+  amount          Int?
+  sn              String?      @db.NVarChar(255)
+  shipping_status String?      @db.NVarChar(255)
+  payment_status  String?      @db.NVarChar(255)
+  UserId          Int?
+  createdAt       DateTime
+  updatedAt       DateTime
+  orderitems      orderitems[]
+  payments        payments[]
+}
+
+model payments {
+  id              Int       @id @default(autoincrement())
+  payment_method  String?   @db.NVarChar(255)
+  isSuccess       Boolean?
+  failure_message String?   @db.NVarChar(max)
+  payTime         DateTime?
+  OrderId         Int?
+  createdAt       DateTime
+  updatedAt       DateTime
+  orders          orders?   @relation(fields: [OrderId], references: [id], onDelete: NoAction)
+
+  @@index([OrderId])
+}
+
+model products {
+  id          Int      @id @default(autoincrement())
+  name        String?  @db.NVarChar(255)
+  description String?  @db.NVarChar(max)
+  price       Int?
+  image       String?  @db.NVarChar(255)
+  createdAt   DateTime
+  updatedAt   DateTime
+}
+
+model sequelizemeta {
+  name String @id @unique @db.NVarChar(255)
+}
+
+model site_settings {
+  id           Int      @id @default(autoincrement())
+  ems_mode     String?  @default("static") @db.NVarChar(255)
+  max_power_kw Decimal? @default(480.00) @db.Decimal(10, 2)
+  updatedAt    DateTime? @map("updated_at")
+}
+
+model users {
+  id        Int      @id @default(autoincrement())
+  email     String?  @db.NVarChar(255)
+  password  String?  @db.NVarChar(255)
+  role      String?  @db.NVarChar(255)
+  createdAt DateTime
+  updatedAt DateTime
+}

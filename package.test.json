@@ -1,0 +1,24 @@
+{
+  "name": "csms-nextjs-testing",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:ems": "jest tests/emsAllocator.test.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/tests"],
+    "collectCoverageFrom": [
+      "src/lib/**/*.js",
+      "!src/lib/**/index.js"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.js",
+      "**/tests/**/*.test.js"
+    ]
+  }
+}
