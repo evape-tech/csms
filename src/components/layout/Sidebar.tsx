@@ -199,7 +199,7 @@ function Sidebar({ drawerOpen, selectedSite, onOpenSiteDialog } : {drawerOpen:bo
 
       <Divider />
 
-      <VersionSelector />
+      {/* VersionSelector hidden */}
 
       <SiteSelector 
         drawerOpen={drawerOpen}

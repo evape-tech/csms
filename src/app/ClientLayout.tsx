@@ -186,7 +186,7 @@ export default function ClientLayout({
 
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={flexBoxSx}>
+      <Box sx={flexBoxSx} suppressHydrationWarning>
         <CssBaseline />
         
         <AppBarComponent

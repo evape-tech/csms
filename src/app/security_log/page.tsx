@@ -91,39 +91,49 @@ export default function SecurityLog() {
           <Button variant="contained">查詢</Button>
         </Stack>
       </Paper>
-      {/* 統計概覽（使用 Box + CSS Grid） */}
-      <Box sx={{ display: 'grid', gap: 2, mb: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(5,1fr)' } }}>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">總事件數</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.total}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">異常事件</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.abnormal}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">警告事件</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.warning}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">登入事件</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.login}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">登出事件</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.logout}</Typography>
-          </CardContent>
-        </Card>
-      </Box>
+      {/* 統計概覽（使用 MUI Grid v2） */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">總事件數</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.total}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">異常事件</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.abnormal}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">警告事件</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.warning}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">登入事件</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.login}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">登出事件</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.logout}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
       {/* 安全日誌表格 */}
       <Paper sx={{ p: 2 }}>
         <Typography fontWeight="bold" mb={1}>安全日誌列表</Typography>

@@ -83,39 +83,49 @@ export default function HardwareMaintenance() {
           <Button variant="contained">查詢</Button>
         </Stack>
       </Paper>
-      {/* 統計概覽（使用 Box + CSS Grid 以避免 MUI Grid 的版本衝突） */}
-      <Box sx={{ display: 'grid', gap: 2, mb: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2,1fr)', md: 'repeat(5,1fr)' } }}>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">總工單數</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.total}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">待處理</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.pending}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">處理中</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.processing}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">已完成</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.done}</Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography color="text.secondary">已關閉</Typography>
-            <Typography variant="h6" fontWeight="bold">{summary.closed}</Typography>
-          </CardContent>
-        </Card>
-      </Box>
+      {/* 統計概覽（使用 MUI Grid v2） */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">總工單數</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.total}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">待處理</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.pending}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">處理中</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.processing}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">已完成</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.done}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary">已關閉</Typography>
+              <Typography variant="h6" fontWeight="bold">{summary.closed}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
       {/* 維護工單列表表格 */}
       <Paper sx={{ p: 2 }}>
         <Typography fontWeight="bold" mb={1}>維護工單列表</Typography>

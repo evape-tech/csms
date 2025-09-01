@@ -33,15 +33,9 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
-  
-  // webpack 設定已移除以啟用 Turbopack（開發模式）
-  // 如果你需要自訂打包流程，再把自定義 webpack 配置放回來或改用 Next.js 其他配置選項。
 
   // 啟用 gzip 壓縮
   compress: true,
-  
-  // 輸出配置
-  output: 'standalone',
   
   // 快取優化標頭
   async headers() {
@@ -79,7 +73,6 @@ const nextConfig: NextConfig = {
   // 其他性能優化
   poweredByHeader: false,
   reactStrictMode: true,
-  // swcMinify 在 Next.js 15 中已移除，因為 SWC 現在是默認的
 };
 
 export default withBundleAnalyzer(nextConfig);

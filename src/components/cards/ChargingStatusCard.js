@@ -14,14 +14,12 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Alert from '@mui/material/Alert';
-import Skeleton from '@mui/material/Skeleton';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import EvStationIcon from '@mui/icons-material/EvStation';
 import CircularProgressWithLabel from '../common/CircularProgressWithLabel';
 import { updateBalanceMode, updateMaxPower } from '../../actions/siteActions';
-import { useDynamicLoading } from '../common/withDynamicLoading';
 
 // 負載平衡模式選項 - 移到組件外部避免初始化問題
 const balanceOptions = [
@@ -30,9 +28,6 @@ const balanceOptions = [
 ];
 
 export default function ChargingStatusCard() {
-  // 動態載入控制
-  const { isLoading, stopLoading, LoadingSkeleton } = useDynamicLoading({ height: 200 });
-  
   // 一次性宣告所有狀態，避免依賴順序問題
   const [siteSettings, setSiteSettings] = useState([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -267,12 +262,11 @@ export default function ChargingStatusCard() {
         loadChargingStatus(),
         loadSiteSettings()
       ]);
-      // 數據載入完成，停止 loading
-      stopLoading();
+      // loading placeholder removed -- no stopLoading()
     };
     
     initializeData();
-  }, [loadChargingStatus, loadSiteSettings, stopLoading]);
+  }, [loadChargingStatus, loadSiteSettings]);
 
   // 提供一個重新載入充電狀態的方法給外部組件使用
   useEffect(() => {
@@ -291,11 +285,6 @@ export default function ChargingStatusCard() {
       }
     };
   }, [loadChargingStatus]);
-
-  // 如果還在載入中，顯示 Skeleton
-  if (isLoading) {
-    return <LoadingSkeleton />;
-  }
 
   return (
     <Card sx={{

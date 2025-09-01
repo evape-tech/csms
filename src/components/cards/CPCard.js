@@ -248,7 +248,7 @@ export default function CPCard({ chargers }) {
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             {filterFields.map((field, idx) => (
-              <Grid item xs={12} sm={idx === 2 ? 2 : 2} key={field.label}>
+              <Grid item size={{ xs: 12, sm: idx === 2 ? 2 : 2 }} key={field.label}>
                 <FormControl fullWidth size="small">
                   <InputLabel>{field.label}</InputLabel>
                   <Select
@@ -264,7 +264,7 @@ export default function CPCard({ chargers }) {
               </Grid>
             ))}
             {/* 搜尋框 */}
-            <Grid item xs={12} sm={3}>
+            <Grid item size={{ xs: 12, sm: 3 }}>
               <TextField
                 fullWidth
                 size="small"
@@ -281,7 +281,7 @@ export default function CPCard({ chargers }) {
               />
             </Grid>
             {/* 視圖切換 */}
-            <Grid item xs={12} sm={1}>
+            <Grid item size={{ xs: 12, sm: 1 }}>
               <Box display="flex" gap={1}>
                 <Tooltip title="卡片視圖">
                   <IconButton size="small" color={viewMode === 'card' ? 'primary' : 'default'} onClick={() => setViewMode('card')}>
@@ -296,7 +296,7 @@ export default function CPCard({ chargers }) {
               </Box>
             </Grid>
             {/* 新增充電樁按鈕 */}
-            <Grid item xs={12} sm={2} sx={{ textAlign: 'right' }}>
+            <Grid item size={{ xs: 12, sm: 2 }} sx={{ textAlign: 'right' }}>
               <Tooltip title="新增充電樁">
                 <Box display="flex" justifyContent="flex-end">
                   <Button variant="contained" color="primary" size="medium" onClick={() => setAddDialogOpen(true)}>

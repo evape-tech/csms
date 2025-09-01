@@ -16,7 +16,8 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemIcon
+  ListItemIcon,
+  Grid
 } from '@mui/material';
 import { 
   Storage as DatabaseIcon,
@@ -154,9 +155,9 @@ export default function DatabaseManagementPage() {
         </Alert>
       )}
 
-      <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
         {/* 當前狀態 */}
-        <Box>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -213,10 +214,10 @@ export default function DatabaseManagementPage() {
               </Box>
             </CardContent>
           </Card>
-        </Box>
+        </Grid>
 
         {/* 數據統計 */}
-        <Box>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -251,8 +252,8 @@ export default function DatabaseManagementPage() {
               )}
             </CardContent>
           </Card>
-        </Box>
-      </Box>
+        </Grid>
+      </Grid>
 
       {/* 連接測試 */}
       <Box sx={{ mt: 3 }}>
@@ -262,28 +263,32 @@ export default function DatabaseManagementPage() {
               Connection Tests
             </Typography>
               
-            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: '1fr 1fr', mb: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <DatabaseIcon />
-                <Typography variant="subtitle1">MySQL</Typography>
-                <Chip 
-                  icon={connectionTests.mysql ? <CheckIcon /> : <ErrorIcon />}
-                  label={connectionTests.mysql ? 'Available' : 'Unavailable'} 
-                  color={connectionTests.mysql ? 'success' : 'error'}
-                  size="small"
-                />
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <DatabaseIcon />
-                <Typography variant="subtitle1">MSSQL</Typography>
-                <Chip 
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid size={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <DatabaseIcon />
+                  <Typography variant="subtitle1">MySQL</Typography>
+                  <Chip 
+                    icon={connectionTests.mysql ? <CheckIcon /> : <ErrorIcon />}
+                    label={connectionTests.mysql ? 'Available' : 'Unavailable'} 
+                    color={connectionTests.mysql ? 'success' : 'error'}
+                    size="small"
+                  />
+                </Box>
+              </Grid>
+              <Grid size={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <DatabaseIcon />
+                  <Typography variant="subtitle1">MSSQL</Typography>
+                  <Chip 
                   icon={connectionTests.mssql ? <CheckIcon /> : <ErrorIcon />}
                   label={connectionTests.mssql ? 'Available' : 'Unavailable'} 
                   color={connectionTests.mssql ? 'success' : 'error'}
                   size="small"
                 />
-              </Box>
-            </Box>
+                </Box>
+              </Grid>
+            </Grid>
 
             <Button 
               variant="outlined" 
@@ -310,7 +315,8 @@ export default function DatabaseManagementPage() {
               reconnect to the selected database.
             </Typography>
 
-              <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
+              <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
               <Button
                 variant={currentProvider === 'mysql' ? 'contained' : 'outlined'}
                 startIcon={<SwitchIcon />}
@@ -321,6 +327,8 @@ export default function DatabaseManagementPage() {
               >
                 {loading ? <CircularProgress size={24} /> : 'Switch to MySQL'}
               </Button>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
               <Button
                 variant={currentProvider === 'mssql' ? 'contained' : 'outlined'}
                 startIcon={<SwitchIcon />}
@@ -331,7 +339,8 @@ export default function DatabaseManagementPage() {
               >
                 {loading ? <CircularProgress size={24} /> : 'Switch to MSSQL'}
               </Button>
-            </Box>
+              </Grid>
+            </Grid>
 
             {loading && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
