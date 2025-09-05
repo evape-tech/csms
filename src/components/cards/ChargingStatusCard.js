@@ -18,6 +18,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import EvStationIcon from '@mui/icons-material/EvStation';
+import TuneIcon from '@mui/icons-material/Tune';
 import CircularProgressWithLabel from '../common/CircularProgressWithLabel';
 import { updateBalanceMode, updateMaxPower } from '../../actions/siteActions';
 
@@ -27,9 +28,15 @@ const balanceOptions = [
   { value: 'dynamic', label: '動態分配' },
 ];
 
-export default function ChargingStatusCard() {
+/**
+ * 充電狀態卡片組件
+ * @param {Object} props
+ * @param {Array} props.siteSettings - 站點設置數據
+ * @param {Array} props.guns - 充電樁數據
+ */
+export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
   // 一次性宣告所有狀態，避免依賴順序問題
-  const [siteSettings, setSiteSettings] = useState([]);
+  const [siteSettingsState, setSiteSettingsState] = useState([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [settingsError, setSettingsError] = useState(null);
   const [emsMode, setEmsMode] = useState(null);
@@ -38,6 +45,7 @@ export default function ChargingStatusCard() {
   const [balanceMode, setBalanceMode] = useState('static');
   const [isPendingBalance, startBalanceTransition] = useTransition();
   const [isPendingPower, startPowerTransition] = useTransition();
+  const [isPendingReallocation, startReallocationTransition] = useTransition();
   const [chargingStatus, setChargingStatus] = useState([
     { label: '充電中', count: 0, percentage: 0, color: '#1976d2', ocppStatus: 'Charging' },
     { label: '閒置', count: 0, percentage: 0, color: '#4caf50', ocppStatus: 'Available' },
@@ -53,24 +61,19 @@ export default function ChargingStatusCard() {
 
   // 工具函數
   const getSettingValue = useCallback((key) => {
-    if (!siteSettings || siteSettings.length === 0) return undefined;
-    const row = siteSettings[0];
+    if (!siteSettingsState || siteSettingsState.length === 0) return undefined;
+    const row = siteSettingsState[0];
     if (!row) return undefined;
     if (key === 'ems_mode') return row.ems_mode ?? row.emsMode ?? undefined;
     if (key === 'max_power_kw') return row.max_power_kw ?? row.maxPowerKw ?? row.max_power ?? undefined;
     if (key === 'total_stations') return row.total_stations ?? row.totalStations ?? undefined;
     return undefined;
-  }, [siteSettings]);
+  }, [siteSettingsState]);
 
-  // 加載充電狀態統計
-  const loadChargingStatus = useCallback(async () => {
+  // 處理充電狀態統計
+  const processChargingStatus = useCallback(() => {
     try {
-      const response = await fetch('/api/guns');
-      if (!response.ok) {
-        throw new Error('Failed to fetch guns data');
-      }
-      const guns = await response.json();
-      console.log('Loaded guns data from API:', guns.length, 'guns');
+      console.log('Processing guns data from props:', guns.length, 'guns');
 
       // 統計各狀態數量
       const counts = { Charging: 0, Available: 0, Unavailable: 0, Faulted: 0 };
@@ -111,30 +114,25 @@ export default function ChargingStatusCard() {
       setChargingStatus(chargingStatus);
       setTotalStations(totalStations);
     } catch (error) {
-      console.error('Failed to load charging status:', error);
+      console.error('Failed to process charging status:', error);
     }
-  }, []);
+  }, [guns]);
 
-  // 加載站點設置
-  const loadSiteSettings = useCallback(async () => {
+  // 處理站點設置
+  const processSiteSettings = useCallback(() => {
     setLoadingSettings(true);
     setSettingsError(null);
 
     try {
-      const response = await fetch('/api/site_setting');
-      if (!response.ok) {
-        throw new Error('Failed to fetch site settings');
-      }
-      const settings = await response.json();
-      console.log('Loaded site settings from API:', settings);
-      setSiteSettings(settings);
+      console.log('Processing site settings from props:', siteSettings);
+      setSiteSettingsState(siteSettings);
 
-      if (settings && settings.length > 0) {
-        const first = settings[0];
+      if (siteSettings && siteSettings.length > 0) {
+        const first = siteSettings[0];
         if (first) {
           // 確保正確設定 EMS 模式
           if (first.ems_mode !== undefined && first.ems_mode !== null) {
-            console.log('Setting EMS mode from API:', first.ems_mode);
+            console.log('Setting EMS mode from props:', first.ems_mode);
             setEmsMode(first.ems_mode);
             setBalanceMode(first.ems_mode);
           }
@@ -142,7 +140,7 @@ export default function ChargingStatusCard() {
           if (first.max_power_kw !== undefined && first.max_power_kw !== null) {
             const kw = Number(first.max_power_kw);
             if (!isNaN(kw)) {
-              console.log('Setting max power from API:', kw);
+              console.log('Setting max power from props:', kw);
               setMaxPowerKw(kw);
               setTotalWatts(kw);
             }
@@ -150,12 +148,12 @@ export default function ChargingStatusCard() {
         }
       }
     } catch (error) {
-      setSettingsError(error.message || 'Failed to load site settings');
-      console.error('Failed to load site settings:', error);
+      setSettingsError(error.message || 'Failed to process site settings');
+      console.error('Failed to process site settings:', error);
     } finally {
       setLoadingSettings(false);
     }
-  }, []);
+  }, [siteSettings]);
 
   // 更新負載平衡模式 - 使用 server action
   const handleBalanceModeChange = useCallback(async (event) => {
@@ -176,7 +174,7 @@ export default function ChargingStatusCard() {
             setBalanceMode(result.data.ems_mode);
             
             // 同步更新本地設置狀態
-            setSiteSettings(prev => {
+            setSiteSettingsState(prev => {
               if (!prev || prev.length === 0) return prev;
               const copy = [...prev];
               copy[0] = { 
@@ -191,17 +189,17 @@ export default function ChargingStatusCard() {
         } else {
           console.error('Failed to update ems_mode:', result.error);
           alert('更新負載平衡模式失敗: ' + result.error);
-          // 恢復到之前的模式 - 這裡需要重新獲取當前值
-          loadSiteSettings();
+          // 恢復到之前的模式 - 這裡需要重新處理當前的 props
+          processSiteSettings();
         }
       } catch (error) {
         console.error('Failed to update ems_mode:', error);
         alert('更新負載平衡模式失敗: ' + error.message);
-        // 恢復到之前的模式 - 這裡需要重新獲取當前值
-        loadSiteSettings();
+        // 恢復到之前的模式 - 這裡需要重新處理當前的 props
+        processSiteSettings();
       }
     });
-  }, [loadSiteSettings]); // 添加 loadSiteSettings 依賴
+  }, [processSiteSettings]); // 添加 processSiteSettings 依賴
 
   // 更新場域總功率 - 使用 server action
   const handleUpdateMaxPower = useCallback(async () => {
@@ -223,7 +221,7 @@ export default function ChargingStatusCard() {
           setTotalWatts(Number(updated.max_power_kw));
 
           // 更新本地設置
-          setSiteSettings(prev => {
+          setSiteSettingsState(prev => {
             if (!prev || prev.length === 0) return prev;
             const copy = [...prev];
             copy[0] = { ...copy[0], max_power_kw: updated.max_power_kw };
@@ -238,6 +236,57 @@ export default function ChargingStatusCard() {
       }
     });
   }, [totalWatts]);
+
+  // 手動觸發全站功率重新分配
+  const handleTriggerPowerReallocation = useCallback(async () => {
+    startReallocationTransition(async () => {
+      try {
+        console.log('開始手動觸發全站功率重新分配...');
+        
+        const response = await fetch('/api/trigger-power-reallocation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            source: 'charging-status-card',
+            trigger_time: new Date().toISOString()
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('功率重新分配觸發結果:', result);
+        
+        if (result.success) {
+          // 顯示成功訊息，包含詳細資訊
+          const data = result.data || {};
+          const message = `✅ 已成功觸發全站功率重新分配！\n\n` +
+                         `📊 線上充電樁: ${data.onlineStations || 0} 個\n` +
+                         `⚡ 排程更新: ${data.scheduledUpdates || 0} 個\n` +
+                         `⏱️ 預計完成: ${data.estimatedCompletionTime || '未知'}`;
+          
+          alert(message);
+          
+          // 通知使用者頁面需要刷新才能反映最新的功率分配
+          setTimeout(() => {
+            alert('請刷新頁面以查看最新的功率分配結果');
+          }, 3000);
+          
+        } else {
+          console.error('功率重新分配觸發失敗:', result);
+          alert(`❌ 觸發失敗: ${result.message || '未知錯誤'}`);
+        }
+        
+      } catch (error) {
+        console.error('手動觸發功率重新分配時發生錯誤:', error);
+        alert(`❌ 觸發功率重新分配失敗:\n${error.message}`);
+      }
+    });
+  }, []);
 
   // 批量操作處理函數
   const handleRestartAll = useCallback(() => {
@@ -257,34 +306,9 @@ export default function ChargingStatusCard() {
 
   // 初始化數據
   useEffect(() => {
-    const initializeData = async () => {
-      await Promise.all([
-        loadChargingStatus(),
-        loadSiteSettings()
-      ]);
-      // loading placeholder removed -- no stopLoading()
-    };
-    
-    initializeData();
-  }, [loadChargingStatus, loadSiteSettings]);
-
-  // 提供一個重新載入充電狀態的方法給外部組件使用
-  useEffect(() => {
-    // 將重新載入方法暴露到 window 對象，供其他組件使用
-    if (typeof window !== 'undefined') {
-      window.refreshChargingStatus = async () => {
-        console.log('Refreshing charging status...');
-        loadChargingStatus();
-      };
-    }
-    
-    // 清理函數
-    return () => {
-      if (typeof window !== 'undefined') {
-        delete window.refreshChargingStatus;
-      }
-    };
-  }, [loadChargingStatus]);
+    processSiteSettings();
+    processChargingStatus();
+  }, [processSiteSettings, processChargingStatus]);
 
   return (
     <Card sx={{
@@ -388,7 +412,35 @@ export default function ChargingStatusCard() {
 
             {/* 批量操作按鈕 */}
             <Box>
-              <Stack direction="row" spacing={1.5}>
+              {/* 第一排：手動觸發調整負載 */}
+              <Box sx={{ mb: 1.5 }}>
+                <Tooltip title="手動觸發全站功率重新分配" arrow>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleTriggerPowerReallocation}
+                    disabled={isPendingReallocation}
+                    startIcon={<TuneIcon sx={{ fontSize: '1rem' }} />}
+                    fullWidth
+                    sx={{
+                      fontSize: '0.75rem',
+                      py: 0.8,
+                      backgroundColor: 'primary.main',
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                      },
+                      '&:disabled': {
+                        backgroundColor: 'action.disabled',
+                      }
+                    }}
+                  >
+                    {isPendingReallocation ? '調整中...' : '手動下發調整'}
+                  </Button>
+                </Tooltip>
+              </Box>
+              
+              {/* 第二排：其他操作按鈕 */}
+              <Stack direction="row" spacing={1}>
                 <Tooltip title="全部重啟" arrow>
                   <Button
                     variant="outlined"
@@ -396,10 +448,10 @@ export default function ChargingStatusCard() {
                     onClick={handleRestartAll}
                     startIcon={<RestartAltIcon sx={{ fontSize: '1rem' }} />}
                     sx={{
-                      fontSize: '0.75rem',
+                      fontSize: '0.7rem',
                       minWidth: 'auto',
-                      px: 1.5,
-                      py: 0.8,
+                      px: 1,
+                      py: 0.6,
                       borderColor: 'warning.main',
                       color: 'warning.main',
                       '&:hover': {
@@ -420,10 +472,10 @@ export default function ChargingStatusCard() {
                     onClick={handlePowerOffAll}
                     startIcon={<PowerSettingsNewIcon sx={{ fontSize: '1rem' }} />}
                     sx={{
-                      fontSize: '0.75rem',
+                      fontSize: '0.7rem',
                       minWidth: 'auto',
-                      px: 1.5,
-                      py: 0.8,
+                      px: 1,
+                      py: 0.6,
                       borderColor: 'error.main',
                       color: 'error.main',
                       '&:hover': {
@@ -444,10 +496,10 @@ export default function ChargingStatusCard() {
                     onClick={handleStartAll}
                     startIcon={<PlayArrowIcon sx={{ fontSize: '1rem' }} />}
                     sx={{
-                      fontSize: '0.75rem',
+                      fontSize: '0.7rem',
                       minWidth: 'auto',
-                      px: 1.5,
-                      py: 0.8,
+                      px: 1,
+                      py: 0.6,
                       borderColor: 'success.main',
                       color: 'success.main',
                       '&:hover': {

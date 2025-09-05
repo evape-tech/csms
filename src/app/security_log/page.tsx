@@ -1,23 +1,41 @@
 "use client";
 import React, { useState } from 'react';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import MenuItem from '@mui/material/MenuItem';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Chip from '@mui/material/Chip';
-import { DisclaimerFooter } from '@/components/layout';
+import {
+  Typography,
+  Paper,
+  Box,
+  Card,
+  CardContent,
+  Stack,
+  Button,
+  TextField,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Container,
+  Chip,
+  Avatar,
+  InputAdornment,
+  useTheme,
+  alpha
+} from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import SecurityIcon from '@mui/icons-material/Security';
+import WarningIcon from '@mui/icons-material/Warning';
+import LoginIcon from '@mui/icons-material/Login';
+import LogoutIcon from '@mui/icons-material/Logout';
+import ErrorIcon from '@mui/icons-material/Error';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import PersonIcon from '@mui/icons-material/Person';
+import RouterIcon from '@mui/icons-material/Router';
+import InfoIcon from '@mui/icons-material/Info';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 
 const typeOptions = [
   { label: '全部類型', value: '' },
@@ -42,109 +60,474 @@ const logRows = [
 ];
 
 export default function SecurityLog() {
+  const theme = useTheme();
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState('');
+
+  // 過濾數據
+  const filteredRows = logRows.filter((row) => {
+    const matchesKeyword = !keyword ||
+      row.code?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.user?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.ip?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.desc?.toLowerCase().includes(keyword.toLowerCase());
+
+    const matchesType = !type || row.type === type;
+    const matchesStatus = !status || row.status === status;
+
+    return matchesKeyword && matchesType && matchesStatus;
+  });
+
   return (
-    <Box>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box display="flex" gap={1}>
-          <Button variant="outlined" size="small">匯出 Excel</Button>
-          <Button variant="outlined" size="small">匯出 CSV</Button>
-          <Button variant="outlined" size="small">匯出 PDF</Button>
+    <Container
+      maxWidth={false}
+      sx={{
+        maxWidth: '1400px',
+        px: { xs: 2, sm: 3, md: 4 },
+        py: 4
+      }}
+    >
+      {/* 頁面標題 */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          sx={{
+            fontWeight: 700,
+            color: theme.palette.primary.main,
+            mb: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <SecurityIcon sx={{ fontSize: '2rem' }} />
+          安全日誌管理
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          監控系統安全事件和用戶活動記錄
+        </Typography>
+      </Box>
+
+      {/* 匯出按鈕區 */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 2,
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+            資料匯出
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              size="medium"
+              startIcon={<FileDownloadIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 500,
+                px: 3
+              }}
+            >
+              匯出 Excel
+            </Button>
+            <Button
+              variant="outlined"
+              size="medium"
+              startIcon={<FileDownloadIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 500,
+                px: 3
+              }}
+            >
+              匯出 CSV
+            </Button>
+            <Button
+              variant="outlined"
+              size="medium"
+              startIcon={<FileDownloadIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 500,
+                px: 3
+              }}
+            >
+              匯出 PDF
+            </Button>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* 統計概覽 */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: theme.palette.text.primary }}>
+          統計概覽
+        </Typography>
+        <Box sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 3,
+          '& > *': { flex: '1 1 280px', minWidth: 240 }
+        }}>
+          <Card
+            elevation={2}
+            sx={{
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.primary.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{
+                  bgcolor: theme.palette.primary.main,
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <SecurityIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    總事件數
+                  </Typography>
+                  <Typography variant="h4" sx={{
+                    fontWeight: 700,
+                    color: theme.palette.primary.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.total}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card
+            elevation={2}
+            sx={{
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.error.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.error.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{
+                  bgcolor: theme.palette.error.main,
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <ErrorIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    異常事件
+                  </Typography>
+                  <Typography variant="h4" sx={{
+                    fontWeight: 700,
+                    color: theme.palette.error.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.abnormal}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card
+            elevation={2}
+            sx={{
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.warning.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{
+                  bgcolor: theme.palette.warning.main,
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <WarningIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    警告事件
+                  </Typography>
+                  <Typography variant="h4" sx={{
+                    fontWeight: 700,
+                    color: theme.palette.warning.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.warning}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card
+            elevation={2}
+            sx={{
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.success.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.success.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{
+                  bgcolor: theme.palette.success.main,
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <LoginIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    登入事件
+                  </Typography>
+                  <Typography variant="h4" sx={{
+                    fontWeight: 700,
+                    color: theme.palette.success.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.login}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card
+            elevation={2}
+            sx={{
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.info.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{
+                  bgcolor: theme.palette.info.main,
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <LogoutIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    登出事件
+                  </Typography>
+                  <Typography variant="h4" sx={{
+                    fontWeight: 700,
+                    color: theme.palette.info.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.logout}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
         </Box>
       </Box>
       {/* 查詢/篩選區 */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+      <Paper
+        elevation={2}
+        sx={{
+          p: 3,
+          mb: 4,
+          borderRadius: 3,
+          bgcolor: alpha(theme.palette.background.paper, 0.8),
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: theme.palette.text.primary }}>
+          搜尋與篩選
+        </Typography>
+        <Box sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 3,
+          alignItems: 'center'
+        }}>
           <TextField
             label="關鍵字搜尋"
             size="small"
             value={keyword}
-            onChange={e => setKeyword(e.target.value)}
-            sx={{ minWidth: 160 }}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜尋事件編號、用戶、IP或描述..."
+            sx={{
+              minWidth: 250,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.background.default, 0.5)
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: theme.palette.text.secondary }} />
+                </InputAdornment>
+              ),
+            }}
           />
+
           <TextField
             select
             label="事件類型"
             size="small"
             value={type}
-            onChange={e => setType(e.target.value)}
-            sx={{ minWidth: 120 }}
+            onChange={(e) => setType(e.target.value)}
+            sx={{
+              minWidth: 150,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.background.default, 0.5)
+              }
+            }}
           >
-            {typeOptions.map(opt => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            {typeOptions.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
             ))}
           </TextField>
+
           <TextField
             select
-            label="狀態"
+            label="狀態篩選"
             size="small"
             value={status}
-            onChange={e => setStatus(e.target.value)}
-            sx={{ minWidth: 120 }}
+            onChange={(e) => setStatus(e.target.value)}
+            sx={{
+              minWidth: 150,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                bgcolor: alpha(theme.palette.background.default, 0.5)
+              }
+            }}
           >
-            {statusOptions.map(opt => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            {statusOptions.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
             ))}
           </TextField>
-          <Button variant="contained">查詢</Button>
-        </Stack>
+
+          <Button
+            variant="contained"
+            size="medium"
+            sx={{
+              px: 4,
+              py: 1,
+              borderRadius: 2,
+              fontWeight: 600,
+              textTransform: 'none',
+              boxShadow: theme.shadows[4],
+              '&:hover': {
+                boxShadow: theme.shadows[8],
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            查詢
+          </Button>
+        </Box>
       </Paper>
-      {/* 統計概覽（使用 MUI Grid v2） */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary">總事件數</Typography>
-              <Typography variant="h6" fontWeight="bold">{summary.total}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary">異常事件</Typography>
-              <Typography variant="h6" fontWeight="bold">{summary.abnormal}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary">警告事件</Typography>
-              <Typography variant="h6" fontWeight="bold">{summary.warning}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary">登入事件</Typography>
-              <Typography variant="h6" fontWeight="bold">{summary.login}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary">登出事件</Typography>
-              <Typography variant="h6" fontWeight="bold">{summary.logout}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-      {/* 安全日誌表格 */}
-      <Paper sx={{ p: 2 }}>
-        <Typography fontWeight="bold" mb={1}>安全日誌列表</Typography>
+
+      {/* 安全日誌列表 */}
+      <Paper
+        elevation={2}
+        sx={{
+          borderRadius: 3,
+          overflow: 'hidden',
+          bgcolor: alpha(theme.palette.background.paper, 0.8),
+          backdropFilter: 'blur(10px)'
+        }}
+      >
+        <Box sx={{
+          p: 3,
+          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <TableChartIcon sx={{ color: theme.palette.primary.main, fontSize: '1.5rem' }} />
+            <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+              安全日誌列表
+            </Typography>
+            <Chip
+              label={`${filteredRows.length} 筆記錄`}
+              size="small"
+              sx={{
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
+                fontWeight: 500
+              }}
+            />
+          </Box>
+        </Box>
+
         <TableContainer>
-          <Table size="small">
-            <TableHead>
+          <Table>
+            <TableHead sx={{
+              bgcolor: alpha(theme.palette.primary.main, 0.02),
+              '& .MuiTableCell-head': {
+                fontWeight: 600,
+                color: theme.palette.text.primary,
+                borderBottom: `2px solid ${alpha(theme.palette.primary.main, 0.1)}`
+              }
+            }}>
               <TableRow>
                 <TableCell>事件編號</TableCell>
                 <TableCell>時間</TableCell>
                 <TableCell>用戶</TableCell>
-                <TableCell>IP</TableCell>
+                <TableCell>IP 位址</TableCell>
                 <TableCell>事件類型</TableCell>
                 <TableCell>狀態</TableCell>
                 <TableCell>描述</TableCell>
@@ -152,34 +535,123 @@ export default function SecurityLog() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {logRows.map(row => (
-                <TableRow key={row.id} sx={row.status === 'fail' || row.status === 'warning' ? { bgcolor: 'warning.lighter' } : {}}>
-                  <TableCell>{row.code}</TableCell>
-                  <TableCell>{row.time}</TableCell>
-                  <TableCell>{row.user}</TableCell>
-                  <TableCell>{row.ip}</TableCell>
+              {filteredRows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  sx={{
+                    '&:hover': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.02)
+                    },
+                    '& .MuiTableCell-root': {
+                      borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`
+                    },
+                    ...(row.status === 'fail' || row.status === 'warning') && {
+                      bgcolor: alpha(theme.palette.warning.main, 0.02),
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.warning.main, 0.05)
+                      }
+                    }
+                  }}
+                >
                   <TableCell>
-                    {row.type === 'login' ? '登入' : row.type === 'logout' ? '登出' : row.type === 'abnormal' ? '異常' : row.type === 'role' ? '權限變更' : '資料操作'}
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
+                      {row.code}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ScheduleIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
+                      <Typography variant="body2">{row.time}</Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PersonIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
+                      <Typography variant="body2">{row.user}</Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <RouterIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{row.ip}</Typography>
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={row.status === 'success' ? '成功' : row.status === 'fail' ? '失敗' : row.status === 'warning' ? '警告' : ''}
-                      color={row.status === 'success' ? 'success' : row.status === 'fail' ? 'error' : row.status === 'warning' ? 'warning' : 'default'}
+                      label={
+                        row.type === 'login' ? '登入' :
+                        row.type === 'logout' ? '登出' :
+                        row.type === 'abnormal' ? '異常' :
+                        row.type === 'role' ? '權限變更' : '資料操作'
+                      }
                       size="small"
+                      color={
+                        row.type === 'login' ? 'success' :
+                        row.type === 'logout' ? 'info' :
+                        row.type === 'abnormal' ? 'error' :
+                        row.type === 'role' ? 'warning' : 'default'
+                      }
+                      variant="outlined"
                     />
                   </TableCell>
-                  <TableCell>{row.desc}</TableCell>
                   <TableCell>
-                    <Button size="small" variant="outlined">詳情</Button>
+                    <Chip
+                      label={
+                        row.status === 'success' ? '成功' :
+                        row.status === 'fail' ? '失敗' :
+                        row.status === 'warning' ? '警告' : ''
+                      }
+                      size="small"
+                      color={
+                        row.status === 'success' ? 'success' :
+                        row.status === 'fail' ? 'error' :
+                        row.status === 'warning' ? 'warning' : 'default'
+                      }
+                      variant={row.status === 'success' ? 'filled' : 'outlined'}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {row.desc}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        minWidth: 'auto',
+                        px: 2,
+                        textTransform: 'none',
+                        borderRadius: 2
+                      }}
+                    >
+                      <InfoIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+                      詳情
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
+
+        {filteredRows.length === 0 && (
+          <Box sx={{
+            p: 6,
+            textAlign: 'center',
+            color: theme.palette.text.secondary
+          }}>
+            <SecurityIcon sx={{ fontSize: '3rem', mb: 2, opacity: 0.5 }} />
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              沒有找到符合條件的記錄
+            </Typography>
+            <Typography variant="body2">
+              請調整搜尋條件或檢查拼寫
+            </Typography>
+          </Box>
+        )}
       </Paper>
-      
-      <DisclaimerFooter />
-    </Box>
+    </Container>
   );
 }

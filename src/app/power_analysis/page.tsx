@@ -1,7 +1,6 @@
 'use client';
 import React from 'react';
 import Box from '@mui/material/Box';
-import { DisclaimerFooter } from '@/components/layout';
 import {
   PowerOverviewCard,
   ChargerContributionCard,
@@ -31,9 +30,6 @@ export default function PowerQuery() {
       <Box sx={{ mb: 2 }}>
         <RevenueStatisticsCard />
       </Box>
-
-      {/* DisclaimerFooter 現在是固定定位，會自動顯示在底部 */}
-      <DisclaimerFooter />
     </Box>
   );
 } 

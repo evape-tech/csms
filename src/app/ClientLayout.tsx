@@ -12,6 +12,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { logoutAction } from '../actions/authActions';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Sidebar } from '../components/layout';
+import { SiteDialog } from '../components/dialog';
 import Drawer from '@mui/material/Drawer';
 import { LoadingSpinner } from '../components/ui';
 
@@ -210,6 +211,15 @@ export default function ClientLayout({
             {children}
           </React.Suspense>
         </Box>
+
+        {/* Site Selection Dialog */}
+        <SiteDialog
+          open={siteDialogOpen}
+          onClose={() => setSiteDialogOpen(false)}
+          sites={sites}
+          selectedSite={selectedSite}
+          onSiteSelect={handleSiteSelect}
+        />
       </Box>
     </ThemeProvider>
   );

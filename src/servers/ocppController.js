@@ -3,6 +3,9 @@ let DatabaseUtils;
 let databaseService;
 let createCpLog;
 
+// 引入 EMS 分配演算法
+const { calculateEmsAllocation } = require('../lib/emsAllocator');
+
 // 動態載入 ES6 modules
 const loadDatabaseModules = async () => {
   if (!DatabaseUtils) {
@@ -101,35 +104,6 @@ async function updateGun(whereClause, updateData) {
   return [guns.length]; // 返回更新數量
 }
 
-async function findGunByCpsn(cpsn) {
-  await ensureDbInitialized();
-  const { databaseService: dbService } = await loadDatabaseModules();
-  return await dbService.getGunByCpsn(cpsn);
-}
-
-// SiteSetting 相關操作
-async function getSiteSettings() {
-  await ensureDbInitialized();
-  const { databaseService: dbService } = await loadDatabaseModules();
-  const settings = await dbService.getSiteSettings();
-  return settings.length > 0 ? settings[0] : null;
-}
-
-async function updateSiteSettings(id, updateData) {
-  await ensureDbInitialized();
-  const { databaseService: dbService } = await loadDatabaseModules();
-  return await dbService.updateSiteSettings(id, updateData);
-}
-
-// 通用輔助函數
-async function executeRawQuery(query, params = []) {
-  await ensureDbInitialized();
-  const { databaseService: dbService } = await loadDatabaseModules();
-  return await dbService.executeRawQuery(query, ...params);
-}
-
-console.log('📦 Database helper functions loaded');
-
 // =================================
 // 原有的 OCPP 控制邏輯
 // =================================
@@ -161,7 +135,7 @@ setInterval(async () => {
         console.log(`[reconciliation] ⏰ 校正間隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
         
         // 獲取當前在線的充電樁清單
-        const onlineCpids = getOnlineCpids();
+        const onlineCpids = await getOnlineCpids();
         console.log(`[reconciliation] 📊 線上充電樁統計: ${onlineCpids.length} 個`);
         console.log(`[reconciliation] 📋 線上清單: [${onlineCpids.join(', ')}]`);
         
@@ -178,33 +152,15 @@ setInterval(async () => {
         console.log('[reconciliation] 🚀 開始批量排程功率配置更新...');
         
         for (let i = 0; i < onlineCpids.length; i++) {
-            const cpsn = onlineCpids[i];
-            console.log(`[reconciliation] 處理充電站 ${i+1}/${onlineCpids.length}: ${cpsn}`);
+            const cpid = onlineCpids[i];
+            console.log(`[reconciliation] 處理充電樁 ${i+1}/${onlineCpids.length}: CPID ${cpid}`);
             
-            // 透過 wsCpdatas 找到對應的 cpid 映射
-            const cpid1 = getCpidFromWsData(cpsn, 1);
-            const cpid2 = getCpidFromWsData(cpsn, 2);
-            
-            // 為 connector 1 排程更新
-            if (cpid1) {
-                // 使用隨機延遲避免同時下發，分散服務器負載
-                const delay = Math.random() * 5000;  // 0-5秒隨機延遲
-                console.log(`[reconciliation] ✅ 排程更新 ${cpid1} (connector 1)，延遲 ${Math.round(delay)}ms`);
-                scheduleProfileUpdate(cpid1, delay);
-                totalScheduledUpdates++;
-            } else {
-                console.log(`[reconciliation] ❌ ${cpsn} connector 1 無 cpid 映射`);
-            }
-            
-            // 為 connector 2 排程更新
-            if (cpid2) {
-                const delay = Math.random() * 5000;
-                console.log(`[reconciliation] ✅ 排程更新 ${cpid2} (connector 2)，延遲 ${Math.round(delay)}ms`);
-                scheduleProfileUpdate(cpid2, delay);
-                totalScheduledUpdates++;
-            } else {
-                console.log(`[reconciliation] ❌ ${cpsn} connector 2 無 cpid 映射`);
-            }
+            // 直接使用 CPID 排程更新，無需再查找映射
+            // 使用隨機延遲避免同時下發，分散服務器負載
+            const delay = Math.random() * 5000;  // 0-5秒隨機延遲
+            console.log(`[reconciliation] ✅ 排程更新 ${cpid}，延遲 ${Math.round(delay)}ms`);
+            scheduleProfileUpdate(cpid, delay);
+            totalScheduledUpdates++;
         }
         
         console.log(`[reconciliation] 📈 校正統計:`);
@@ -291,7 +247,7 @@ async function updateStationOnlineStatus(cpsn) {
         console.log(`[updateStationOnlineStatus] 🔋 充電站 ${cpsn} 上線，觸發功率重新分配`);
         
         // 延遲觸發功率配置更新，確保連線穩定
-        setTimeout(() => {
+        setTimeout(async () => {
             console.log(`[updateStationOnlineStatus] 🚀 為新上線充電站 ${cpsn} 配置功率`);
             
             // 為新上線充電站的所有 connector 排程功率配置
@@ -302,26 +258,21 @@ async function updateStationOnlineStatus(cpsn) {
             });
             
             // 同時觸發其他在線充電樁重新分配（因為總在線數量改變）
-            const onlineCpids = getOnlineCpids();
-            const otherOnlineStations = onlineCpids.filter(id => id !== cpsn);
+            const onlineCpids = await getOnlineCpids();
             
-            if (otherOnlineStations.length > 0) {
-                console.log(`[updateStationOnlineStatus] 🔄 同時更新其他 ${otherOnlineStations.length} 個在線充電站功率配置`);
+            // 獲取當前充電站的 CPID，以便從在線列表中排除
+            const currentStationCpids = guns.map(gun => gun.cpid);
+            const otherOnlineCpids = onlineCpids.filter(cpid => !currentStationCpids.includes(cpid));
+            
+            if (otherOnlineCpids.length > 0) {
+                console.log(`[updateStationOnlineStatus] 🔄 同時更新其他 ${otherOnlineCpids.length} 個在線充電樁功率配置`);
                 
-                otherOnlineStations.forEach((otherCpsn, index) => {
-                    const cpid1 = getCpidFromWsData(otherCpsn, 1);
-                    const cpid2 = getCpidFromWsData(otherCpsn, 2);
-                    
+                // 為其他在線充電樁排程功率配置更新
+                otherOnlineCpids.forEach((cpid, index) => {
                     const baseDelay = guns.length * 500 + 1000; // 等新充電站配置完成後
-                    const stationDelay = index * 1000; // 每個充電站間隔1秒
-                    
-                    if (cpid1) {
-                        scheduleProfileUpdate(cpid1, baseDelay + stationDelay);
-                    }
-                    
-                    if (cpid2) {
-                        scheduleProfileUpdate(cpid2, baseDelay + stationDelay + 500);
-                    }
+                    const delay = baseDelay + index * 500; // 每個充電樁間隔500ms
+                    console.log(`[updateStationOnlineStatus] ⚡ 排程其他充電樁 ${cpid} 功率配置，延遲 ${delay}ms`);
+                    scheduleProfileUpdate(cpid, delay);
                 });
             }
             
@@ -388,7 +339,7 @@ async function updateStationOfflineStatus(cpsn) {
         console.log(`[updateStationOfflineStatus] 🔋 充電站 ${cpsn} 離線，觸發其他在線充電樁功率重新分配`);
         
         // 獲取剩餘在線充電樁並觸發功率配置更新
-        const onlineCpids = getOnlineCpids();
+        const onlineCpids = await getOnlineCpids();
         console.log(`[updateStationOfflineStatus] 📊 剩餘在線充電站: ${onlineCpids.length} 個`);
         
         if (onlineCpids.length > 0) {
@@ -426,12 +377,52 @@ async function updateStationOfflineStatus(cpsn) {
 }
 
 // helper: 回傳目前在線的 cpid 陣列
-function getOnlineCpids() {
+async function getOnlineCpids() {
   try {
     console.log('[getOnlineCpids] 檢查在線充電樁...');
-    const onlineList = Object.keys(wsClients).filter(k => Array.isArray(wsClients[k]) && wsClients[k].length > 0);
-    console.log(`[getOnlineCpids] 找到 ${onlineList.length} 個在線充電樁: ${onlineList.join(', ')}`);
-    return onlineList;
+    console.log('[getOnlineCpids] wsClients 物件狀態:', Object.keys(wsClients).length > 0 ? Object.keys(wsClients) : '空物件');
+    
+    // 調試：顯示 wsClients 的詳細結構
+    Object.keys(wsClients).forEach(key => {
+      const clients = wsClients[key];
+      console.log(`[getOnlineCpids] wsClients[${key}]: ${Array.isArray(clients) ? clients.length : 'not array'} 個連接`);
+    });
+    
+    // 獲取在線的 CPSN（設備序號）
+    const onlineCSPNs = Object.keys(wsClients).filter(k => Array.isArray(wsClients[k]) && wsClients[k].length > 0);
+    console.log(`[getOnlineCpids] 找到 ${onlineCSPNs.length} 個在線設備序號 (CPSN): [${onlineCSPNs.join(', ')}]`);
+    
+    if (onlineCSPNs.length === 0) {
+      console.log('[getOnlineCpids] 沒有在線的充電站');
+      return [];
+    }
+    
+    // 收集所有在線 CPSN 對應的所有 CPID
+    const allOnlineCpids = [];
+    
+    for (const cpsn of onlineCSPNs) {
+      console.log(`[getOnlineCpids] 查詢 CPSN ${cpsn} 的所有 connector...`);
+      
+      // 查詢該 CPSN 下的所有充電樁（所有 connector）
+      const guns = await findAllGuns({ cpsn });
+      
+      console.log(`[getOnlineCpids] CPSN ${cpsn} 找到 ${guns.length} 個 connector:`);
+      guns.forEach(gun => {
+        console.log(`[getOnlineCpids]   - CPID: ${gun.cpid}, Connector: ${gun.connector}, 狀態: ${gun.guns_status}`);
+        allOnlineCpids.push(gun.cpid);
+      });
+      
+      if (guns.length === 0) {
+        console.log(`[getOnlineCpids] ⚠️ CPSN ${cpsn} 在資料庫中找不到對應記錄`);
+      }
+    }
+    
+    // 去除重複的 CPID（雖然通常不會重複）
+    const uniqueOnlineCpids = [...new Set(allOnlineCpids)];
+    
+    console.log(`[getOnlineCpids] 最終找到 ${uniqueOnlineCpids.length} 個在線 CPID: [${uniqueOnlineCpids.join(', ')}]`);
+    
+    return uniqueOnlineCpids;
   } catch (e) {
     console.error('[getOnlineCpids] 獲取在線充電樁清單時發生錯誤:', e);
     return [];
@@ -484,51 +475,165 @@ function detectChargingStatusChange(action, payload) {
 }
 
 /**
+ * 全站功率重新分配調度器
+ * 當系統狀態發生變化時，重新計算並分配所有在線充電樁的功率
+ * @param {string} eventType 觸發事件類型
+ * @param {object} eventDetails 事件詳細資訊
+ * @param {boolean} immediate 是否立即執行（手動觸發時為 true）
+ */
+async function scheduleGlobalPowerReallocation(eventType, eventDetails = {}, immediate = false) {
+    const reallocationId = `${eventType}_${Date.now()}`;
+    console.log(`[全站重分配] 🌐 開始全站功率重新分配 (ID: ${reallocationId})`);
+    console.log(`[全站重分配] 📋 觸發事件: ${eventType}`);
+    console.log(`[全站重分配] 📊 事件詳情:`, JSON.stringify(eventDetails));
+    
+    try {
+        // 1. 獲取當前所有在線充電樁
+        console.log(`[全站重分配] 🔍 獲取所有在線充電樁...`);
+        const onlineCpids = await getOnlineCpids();
+        
+        if (onlineCpids.length === 0) {
+            console.log(`[全站重分配] ⚠️  沒有在線充電樁，跳過重新分配`);
+            return;
+        }
+        
+        console.log(`[全站重分配] 📊 找到 ${onlineCpids.length} 個在線充電樁: [${onlineCpids.join(', ')}]`);
+        
+        // 2. 獲取場域設定
+        const siteSetting = await getSiteSetting();
+        console.log(`[全站重分配] ⚙️  場域設定: EMS模式=${siteSetting.ems_mode}, 最大功率=${siteSetting.max_power_kw}kW`);
+        
+        // 3. 清除所有現有的功率配置定時器，避免衝突
+        console.log(`[全站重分配] 🧹 清除現有功率配置定時器...`);
+        onlineCpids.forEach(cpid => {
+            if (profileUpdateTimers[cpid]) {
+                clearTimeout(profileUpdateTimers[cpid]);
+                console.log(`[全站重分配] 🗑️  清除 ${cpid} 的現有定時器`);
+            }
+        });
+        
+        // 4. 批量排程所有在線充電樁的功率配置更新
+        const executionMode = immediate ? '立即執行' : '延遲排程';
+        console.log(`[全站重分配] 🚀 開始批量${executionMode}功率配置更新...`);
+        
+        let scheduledCount = 0;
+        const baseDelay = immediate ? 0 : 1000; // 手動觸發時無延遲，自動觸發時基礎延遲 1 秒
+        const intervalDelay = immediate ? 100 : 500; // 手動觸發時間隔較短
+        
+        for (let i = 0; i < onlineCpids.length; i++) {
+            const cpid = onlineCpids[i];
+            const delay = baseDelay + (i * intervalDelay);
+            
+            if (immediate) {
+                console.log(`[全站重分配] ⚡ 立即執行 ${cpid} 功率配置更新，間隔 ${delay}ms`);
+            } else {
+                console.log(`[全站重分配] ⚡ 排程 ${cpid} 功率配置更新，延遲 ${delay}ms`);
+            }
+            
+            // 使用特殊標記表示這是全站重新分配
+            await scheduleProfileUpdate(cpid, delay, {
+                isGlobalReallocation: true,
+                isManualTrigger: immediate,
+                reallocationId: reallocationId,
+                triggerEvent: eventType,
+                triggerDetails: eventDetails
+            });
+            
+            scheduledCount++;
+        }
+        
+        console.log(`[全站重分配] 📈 重分配統計:`);
+        console.log(`[全站重分配]   - 執行模式: ${executionMode}`);
+        console.log(`[全站重分配]   - 觸發事件: ${eventType}`);
+        console.log(`[全站重分配]   - 在線充電樁: ${onlineCpids.length} 個`);
+        console.log(`[全站重分配]   - 排程更新: ${scheduledCount} 個`);
+        console.log(`[全站重分配]   - 預計完成: ${baseDelay + (scheduledCount * intervalDelay)}ms 後`);
+        console.log(`[全站重分配] ✅ 全站功率重新分配排程完成 (ID: ${reallocationId})`);
+        
+        // 5. 延遲顯示全站功率配置總覽
+        const totalDelay = baseDelay + (scheduledCount * intervalDelay) + (immediate ? 1000 : 2000); // 手動觸發較短等待時間
+        setTimeout(async () => {
+            try {
+                console.log(`[全站重分配] 📊 顯示重分配後的功率配置總覽...`);
+                await logCurrentPowerConfiguration(siteSetting.ems_mode, parseFloat(siteSetting.max_power_kw));
+                console.log(`[全站重分配] 🎯 全站重分配完全完成 (ID: ${reallocationId})`);
+            } catch (error) {
+                console.error(`[全站重分配] ❌ 顯示功率總覽失敗:`, error);
+            }
+        }, totalDelay);
+        
+    } catch (error) {
+        console.error(`[全站重分配] ❌ 全站功率重新分配失敗 (ID: ${reallocationId}):`);
+        console.error(`[全站重分配] 錯誤訊息:`, error.message);
+        console.error(`[全站重分配] 錯誤堆疊:`, error.stack);
+    }
+}
+
+/**
  * 防抖動的配置更新調度器
  * 使用防抖機制和最小間隔限制，避免過度頻繁的配置下發
  * @param {string} cpid 充電樁 ID
  * @param {number} delay 延遲時間(毫秒)，預設為防抖延遲時間
+ * @param {object} context 額外上下文資訊，可選
  */
-async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS) {
+async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS, context = {}) {
     if (!cpid) {
         console.warn('[scheduleProfileUpdate] cpid 為空，跳過排程');
         return;
     }
     
-    console.log(`[scheduleProfileUpdate] 排程 ${cpid} 功率配置更新，延遲 ${delay}ms`);
+    const isGlobalReallocation = context.isGlobalReallocation || false;
+    const logPrefix = isGlobalReallocation ? '[全站重分配→單樁]' : '[scheduleProfileUpdate]';
+    
+    if (isGlobalReallocation) {
+        console.log(`${logPrefix} 🔄 ${cpid} 功率配置更新 (重分配ID: ${context.reallocationId})，延遲 ${delay}ms`);
+    } else {
+        console.log(`${logPrefix} 排程 ${cpid} 功率配置更新，延遲 ${delay}ms`);
+    }
     
     // 清除現有的定時器，實現防抖效果
     if (profileUpdateTimers[cpid]) {
-        console.log(`[scheduleProfileUpdate] 清除 ${cpid} 的現有定時器`);
+        console.log(`${logPrefix} 清除 ${cpid} 的現有定時器`);
         clearTimeout(profileUpdateTimers[cpid]);
     }
     
     // 設置新的定時器
     profileUpdateTimers[cpid] = setTimeout(async () => {
         const now = Date.now();
+        const isManualTrigger = context.isManualTrigger || false;
         
-        // 檢查最小間隔限制，防止過度頻繁更新
-        if (lastProfileUpdateTime[cpid] && 
+        // 手動觸發時跳過最小間隔限制檢查
+        if (!isManualTrigger && lastProfileUpdateTime[cpid] && 
             now - lastProfileUpdateTime[cpid] < PROFILE_MIN_INTERVAL_MS) {
             const remainingTime = PROFILE_MIN_INTERVAL_MS - (now - lastProfileUpdateTime[cpid]);
-            console.log(`[scheduleProfileUpdate] ${cpid} 更新間隔過短(剩餘 ${Math.ceil(remainingTime/1000)}s)，跳過此次更新`);
+            console.log(`${logPrefix} ${cpid} 更新間隔過短(剩餘 ${Math.ceil(remainingTime/1000)}s)，跳過此次更新`);
             return;
         }
         
         // 記錄更新時間
         lastProfileUpdateTime[cpid] = now;
-        console.log(`[scheduleProfileUpdate] 開始執行 ${cpid} 功率配置更新`);
+        
+        if (isGlobalReallocation) {
+            const triggerMode = isManualTrigger ? '手動觸發' : '自動觸發';
+            console.log(`${logPrefix} ⚡ 開始執行 ${cpid} 功率配置更新 (${triggerMode}, 重分配ID: ${context.reallocationId})`);
+        } else {
+            console.log(`${logPrefix} 開始執行 ${cpid} 功率配置更新`);
+        }
         
         try {
             // 獲取場域設定
             const siteSetting = await getSiteSetting();
-            console.log(`[scheduleProfileUpdate] ${cpid} 使用場域設定:`, JSON.stringify(siteSetting));
+            console.log(`${logPrefix} ${cpid} 使用場域設定:`, JSON.stringify(siteSetting));
             
             // 觸發配置更新
-            console.log(`[scheduleProfileUpdate] 呼叫 ocpp_send_command 為 ${cpid} 下發配置`);
+            console.log(`${logPrefix} 呼叫 ocpp_send_command 為 ${cpid} 下發配置`);
             await ocpp_send_command(cpid, 'ocpp_set_charging_profile', { siteSetting });
             
-            console.log(`[scheduleProfileUpdate] ${cpid} 功率配置更新完成`);
+            if (isGlobalReallocation) {
+                console.log(`${logPrefix} ✅ ${cpid} 功率配置更新完成 (重分配ID: ${context.reallocationId})`);
+            } else {
+                console.log(`${logPrefix} ${cpid} 功率配置更新完成`);
+            }
             
             // 額外記錄當前充電樁配置概況（簡化版）
             try {
@@ -536,19 +641,24 @@ async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS) {
                 const guns = await dbService.getGuns({ cpid });
                 const gun = guns.length > 0 ? guns[0] : null;
                 if (gun) {
-                    console.log(`🔍 [單樁更新] ${cpid} -> 類型:${gun.acdc} | 規格:${gun.max_kw}kW | 狀態:${gun.guns_status} | EMS:${siteSetting.ems_mode}`);
+                    const emoji = isGlobalReallocation ? '🌐' : '🔍';
+                    console.log(`${emoji} [單樁更新] ${cpid} -> 類型:${gun.acdc} | 規格:${gun.max_kw}kW | 狀態:${gun.guns_status} | EMS:${siteSetting.ems_mode}`);
                 }
             } catch (e) {
-                console.log(`[scheduleProfileUpdate] 無法取得 ${cpid} 詳細資訊`);
+                console.log(`${logPrefix} 無法取得 ${cpid} 詳細資訊`);
             }
             
         } catch (error) {
-            console.error(`[scheduleProfileUpdate] ${cpid} 更新失敗:`, error.message);
-            console.error('[scheduleProfileUpdate] 詳細錯誤:', error);
+            console.error(`${logPrefix} ${cpid} 更新失敗:`, error.message);
+            console.error(`${logPrefix} 詳細錯誤:`, error);
         }
     }, delay);
     
-    console.log(`[scheduleProfileUpdate] ${cpid} 定時器已設置，將在 ${delay}ms 後執行`);
+    if (isGlobalReallocation) {
+        console.log(`${logPrefix} 🕐 ${cpid} 定時器已設置，將在 ${delay}ms 後執行 (重分配ID: ${context.reallocationId})`);
+    } else {
+        console.log(`${logPrefix} ${cpid} 定時器已設置，將在 ${delay}ms 後執行`);
+    }
 }
 
 /**
@@ -1019,196 +1129,51 @@ async function ocpp_send_command(cpid,cmd, payload) {
         // 取得所有充電樁資料
         const allGuns = await dbService.getGuns({});
         
+        // 調試：檢查數據結構
+        console.log(`[DEBUG] 查詢到 ${allGuns.length} 個充電樁`);
+        allGuns.forEach(g => {
+            console.log(`[DEBUG] CPID:${g.cpid}(${typeof g.cpid}) | CPSN:${g.cpsn} | AC/DC:${g.acdc} | 規格:${g.max_kw}kW | 狀態:${g.guns_status}`);
+        });
+        console.log(`[DEBUG] 目標gun.cpid:${gun.cpid}(${typeof gun.cpid})`);
+        
+        // 使用正確的 EMS 分配演算法
+        console.log(`[EMS計算] 使用 ${ems_mode} 模式計算功率分配`);
+        const siteSetting = { ems_mode, max_power_kw };
+        const emsResult = calculateEmsAllocation(siteSetting, allGuns, onlineCpids);
+        const allocation = emsResult.allocations;
+        
+        // 輸出 EMS 計算日誌
+        emsResult.logs.forEach(log => console.log(`[EMS] ${log}`));
+        
+        // 🔍 調試：檢查分配結果
+        console.log(`[DEBUG] EMS分配結果包含 ${allocation.length} 個充電樁`);
+        allocation.forEach(a => {
+            console.log(`[DEBUG] 分配 CPID:${a.cpid}(${typeof a.cpid}) | 功率:${a.allocated_kw}kW | 狀態:${a.charging ? '充電中' : '待機'} | 限制:${a.limit}${a.unit}`);
+        });
+        
+        // 查找當前充電樁的分配結果
+        const gunAllocation = allocation.find(a => a.cpid === gun.cpid);
+        console.log(`[DEBUG] 查找 gun.cpid=${gun.cpid} 的結果:`, gunAllocation ? '找到' : '未找到');
+        
         let unit, limit;
-
-        if (ems_mode === 'static') {
-            console.log('[static模式] 不管樁有無上線，按場域總功率限制分配');
+        
+        if (!gunAllocation) {
+            console.log(`[EMS警告] 找不到 CPID:${gun.cpid} 的分配結果，使用預設值`);
+            unit = gun.acdc === 'AC' ? 'A' : 'W';
+            limit = gun.acdc === 'AC' ? 6 : 1000; // 最小值
+        } else {
+            console.log(`[EMS結果] CPID:${gun.cpid} | 類型:${gun.acdc} | 狀態:${gunAllocation.charging ? '充電中' : '待機'} | 分配:${gunAllocation.allocated_kw}kW | 原規格:${gunAllocation.original_max_kw}kW`);
             
-            if (gun.acdc === 'AC') {
-                // AC充電樁：需考慮場域總功率限制
-                const acGuns = allGuns.filter(g => g.acdc === 'AC');
-                const dcGuns = allGuns.filter(g => g.acdc === 'DC');
-                
-                // 計算AC樁總需求功率
-                const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                console.log(`[static-AC] AC樁總需求: ${totalAcDemand}kW, 場域限制: ${max_power_kw}kW`);
-                
-                if (totalAcDemand <= max_power_kw) {
-                    // AC總需求不超過場域限制，按樁規格分配
-                    unit = "A";
-                    limit = Math.floor((gun.max_kw * 1000) / 220);
-                    console.log(`[static-AC] CPID:${gun.cpid} 按規格分配: ${limit}A (${gun.max_kw}kW)`);
-                } else {
-                    // AC總需求超過場域限制，需要按比例分配
-                    const acPowerRatio = max_power_kw / totalAcDemand;
-                    const allocatedPower = gun.max_kw * acPowerRatio;
-                    unit = "A";
-                    limit = Math.floor((allocatedPower * 1000) / 220);
-                    console.log(`[static-AC] CPID:${gun.cpid} 按比例分配: ${limit}A (${allocatedPower.toFixed(2)}kW, 比例:${acPowerRatio.toFixed(3)})`);
-                }
-            } 
-            else if (gun.acdc === 'DC') {
-                // DC充電樁：先扣除AC實際分配功率，再分配給DC
-                const acGuns = allGuns.filter(g => g.acdc === 'AC');
-                const dcGuns = allGuns.filter(g => g.acdc === 'DC');
-                
-                // 計算AC樁實際分配的總功率
-                const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                const actualAcPower = Math.min(totalAcDemand, max_power_kw);
-                
-                const availableDcPower = max_power_kw - actualAcPower;
-                const dcPowerPerGun = dcGuns.length > 0 ? availableDcPower / dcGuns.length : 0;
-                
-                unit = "W";
-                limit = Math.floor(dcPowerPerGun * 1000); // 轉為瓦特
-                console.log(`[static-DC] AC實際分配:${actualAcPower}kW, 可用DC功率:${availableDcPower}kW, 每台DC分配:${dcPowerPerGun.toFixed(2)}kW`);
-                console.log(`[static-DC] CPID:${gun.cpid} 設定瓦數: ${limit}W`);
-            }
-        } 
-        else if (ems_mode === 'dynamic') {
-            console.log('[dynamic模式] 依據正在充電的樁數量動態分配');
+            // 直接使用EMS演算法計算好的單位和限制值
+            unit = gunAllocation.unit;
+            limit = gunAllocation.limit;
             
-            // 檢查充電樁是否正在充電的輔助函數
-            const isCharging = (status) => {
-                if (!status) return false;
-                const statusLower = status.toString().toLowerCase();
-                return statusLower.includes('charg') || statusLower.includes('inuse') || statusLower === 'charging';
-            };
-            
-            // 檢查是否有任何充電樁正在充電
-            const onlineAcGuns = allGuns.filter(g => g.acdc === 'AC' && onlineCpids.includes(g.cpsn));
-            const onlineDcGuns = allGuns.filter(g => g.acdc === 'DC' && onlineCpids.includes(g.cpsn));
-            const chargingAcGuns = onlineAcGuns.filter(g => isCharging(g.guns_status));
-            const chargingDcGuns = onlineDcGuns.filter(g => isCharging(g.guns_status));
-            
-            const totalChargingGuns = chargingAcGuns.length + chargingDcGuns.length;
-            console.log(`[dynamic] 總充電樁統計: AC充電=${chargingAcGuns.length}, DC充電=${chargingDcGuns.length}, 總充電數=${totalChargingGuns}`);
-            
-            // 如果沒有任何充電樁在充電，回退到靜態分配模式
-            if (totalChargingGuns === 0) {
-                console.log(`[dynamic->static] 🔄 沒有充電樁在充電，回退到靜態分配模式`);
-                
-                if (gun.acdc === 'AC') {
-                    // AC充電樁：按靜態模式分配
-                    const acGuns = allGuns.filter(g => g.acdc === 'AC');
-                    const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                    console.log(`[dynamic->static-AC] AC樁總需求: ${totalAcDemand}kW, 場域限制: ${max_power_kw}kW`);
-                    
-                    if (totalAcDemand <= max_power_kw) {
-                        // AC總需求不超過場域限制，按樁規格分配
-                        unit = "A";
-                        limit = Math.floor((gun.max_kw * 1000) / 220);
-                        console.log(`[dynamic->static-AC] CPID:${gun.cpid} 按規格分配: ${limit}A (${gun.max_kw}kW)`);
-                    } else {
-                        // AC總需求超過場域限制，需要按比例分配
-                        const acPowerRatio = max_power_kw / totalAcDemand;
-                        const allocatedPower = gun.max_kw * acPowerRatio;
-                        unit = "A";
-                        limit = Math.floor((allocatedPower * 1000) / 220);
-                        console.log(`[dynamic->static-AC] CPID:${gun.cpid} 按比例分配: ${limit}A (${allocatedPower.toFixed(2)}kW, 比例:${acPowerRatio.toFixed(3)})`);
-                    }
-                } 
-                else if (gun.acdc === 'DC') {
-                    // DC充電樁：按靜態模式分配
-                    const acGuns = allGuns.filter(g => g.acdc === 'AC');
-                    const dcGuns = allGuns.filter(g => g.acdc === 'DC');
-                    
-                    // 計算AC樁實際分配的總功率
-                    const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                    const actualAcPower = Math.min(totalAcDemand, max_power_kw);
-                    
-                    const availableDcPower = max_power_kw - actualAcPower;
-                    const dcPowerPerGun = dcGuns.length > 0 ? availableDcPower / dcGuns.length : 0;
-                    
-                    unit = "W";
-                    limit = Math.floor(dcPowerPerGun * 1000); // 轉為瓦特
-                    console.log(`[dynamic->static-DC] AC實際分配:${actualAcPower}kW, 可用DC功率:${availableDcPower}kW, 每台DC分配:${dcPowerPerGun.toFixed(2)}kW`);
-                    console.log(`[dynamic->static-DC] CPID:${gun.cpid} 設定瓦數: ${limit}W`);
-                }
-            }
-            // 有充電樁在充電時，使用原本的 dynamic 邏輯
-            else {
-                console.log(`[dynamic] 🔋 有 ${totalChargingGuns} 個充電樁在充電，使用動態分配`);
-                
-                if (gun.acdc === 'AC') {
-                    console.log(`[dynamic-AC] 線上AC樁數量: ${onlineAcGuns.length}, 正在充電AC樁數量: ${chargingAcGuns.length}`);
-                    
-                    // 檢查當前樁是否正在充電
-                    const currentGunCharging = isCharging(gun.guns_status);
-                    console.log(`[dynamic-AC] CPID:${gun.cpid} 當前狀態: ${gun.guns_status}, 是否充電中: ${currentGunCharging}`);
-                    
-                    if (currentGunCharging) {
-                        // 只有正在充電的樁才需要分配功率
-                        // 計算正在充電AC樁總需求功率
-                        const totalChargingAcDemand = chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                        console.log(`[dynamic-AC] 正在充電AC樁總需求: ${totalChargingAcDemand}kW, 場域限制: ${max_power_kw}kW`);
-                        
-                        if (totalChargingAcDemand <= max_power_kw) {
-                            // 充電AC總需求不超過場域限制，按樁規格分配
-                            unit = "A";
-                            limit = Math.floor((gun.max_kw * 1000) / 220);
-                            console.log(`[dynamic-AC] CPID:${gun.cpid} 按規格分配: ${limit}A (${gun.max_kw}kW)`);
-                        } else {
-                            // 充電AC總需求超過場域限制，需要按比例分配
-                            const acPowerRatio = max_power_kw / totalChargingAcDemand;
-                            const allocatedPower = gun.max_kw * acPowerRatio;
-                            unit = "A";
-                            limit = Math.floor((allocatedPower * 1000) / 220);
-                            console.log(`[dynamic-AC] CPID:${gun.cpid} 按比例分配: ${limit}A (${allocatedPower.toFixed(2)}kW, 比例:${acPowerRatio.toFixed(3)})`);
-                        }
-                    } else {
-                        // 非充電狀態，設為最小功率
-                        unit = "A";
-                        limit = 6; // AC充電樁最小電流
-                        console.log(`[dynamic-AC] CPID:${gun.cpid} 非充電狀態，設為最小功率: ${limit}A`);
-                    }
-                } 
-                else if (gun.acdc === 'DC') {
-                    console.log(`[dynamic-DC] 線上AC數量:${onlineAcGuns.length}, 充電AC數量:${chargingAcGuns.length}`);
-                    console.log(`[dynamic-DC] 線上DC數量:${onlineDcGuns.length}, 充電DC數量:${chargingDcGuns.length}`);
-                    
-                    // 檢查當前樁是否正在充電
-                    const currentGunCharging = isCharging(gun.guns_status);
-                    console.log(`[dynamic-DC] CPID:${gun.cpid} 當前狀態: ${gun.guns_status}, 是否充電中: ${currentGunCharging}`);
-                    
-                    if (currentGunCharging) {
-                        // 計算正在充電AC樁實際分配的總功率（考慮場域限制）
-                        const totalChargingAcDemand = chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                        const actualChargingAcPower = Math.min(totalChargingAcDemand, max_power_kw);
-                        
-                        const availableDcPower = max_power_kw - actualChargingAcPower;
-                        const dcPowerPerGun = chargingDcGuns.length > 0 ? availableDcPower / chargingDcGuns.length : 0;
-                        
-                        unit = "W";
-                        limit = Math.floor(dcPowerPerGun * 1000); // 轉為瓦特
-                        console.log(`[dynamic-DC] 充電AC實際分配:${actualChargingAcPower}kW, 可用DC功率:${availableDcPower}kW`);
-                        console.log(`[dynamic-DC] CPID:${gun.cpid} 設定瓦數: ${limit}W`);
-                    } else {
-                        // 非充電狀態，設為最小功率
-                        unit = "W";
-                        limit = 1000; // DC最小1kW
-                        console.log(`[dynamic-DC] CPID:${gun.cpid} 非充電狀態，設為最小功率: ${limit}W`);
-                    }
-                }
-            }
+            console.log(`[EMS配置] CPID:${gun.cpid} 最終配置: ${limit}${unit} (相當於${gunAllocation.allocated_kw}kW)`);
         }
-
-        // 防止負值或過小值 - AC/DC 分別處理
-        if (gun.acdc === 'AC') {
-            // AC充電樁最小不能低於6A
-            if (limit < 6) {
-                limit = 6;
-                console.log(`[警告] CPID:${gun.cpid} AC充電樁電流過小，設為最小值: ${limit}A`);
-            }
-        } else if (gun.acdc === 'DC') {
-            // DC充電樁只檢查是否為負值
-            if (limit <= 0) {
-                limit = 1000; // DC最小1kW
-                console.log(`[警告] CPID:${gun.cpid} DC充電樁功率過小，設為最小值: ${limit}W`);
-            }
-        }
-
+        
         const ocpp_id_send = "667751518";
+        const networkDelayMs = 5000; // 5 秒
+        const startTime = new Date(Date.now() + networkDelayMs).toISOString();
         const tt_obj = [
             2,
             ocpp_id_send,
@@ -1222,6 +1187,7 @@ async function ocpp_send_command(cpid,cmd, payload) {
                     chargingProfileKind: "Absolute",
                     chargingSchedule: {
                         chargingRateUnit: unit,
+                        startSchedule: startTime,
                         chargingSchedulePeriod: [
                             {
                                 startPeriod: 0,
@@ -1266,6 +1232,11 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
         const allGuns = await dbService.getGuns({});
         const onlineCpids = Object.keys(wsClients).filter(cpid => wsClients[cpid] && wsClients[cpid].length > 0);
         
+        // 🚀 使用正確的 EMS 分配演算法
+        const siteSetting = { ems_mode: emsMode, max_power_kw: maxPowerKw };
+        const emsResult = calculateEmsAllocation(siteSetting, allGuns, onlineCpids);
+        const allocation = emsResult.allocations;
+        
         // 分類統計
         const acGuns = allGuns.filter(g => g.acdc === 'AC');
         const dcGuns = allGuns.filter(g => g.acdc === 'DC');
@@ -1297,40 +1268,18 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
                 const charging = isCharging(status) ? '⚡充電中' : '⏸️待機';
                 const maxKw = parseFloat(gun.max_kw || 0);
                 
-                // 根據 EMS 模式計算配置值
+                // 從EMS分配結果獲取配置值
+                const gunAllocation = allocation.find(a => a.cpid === gun.cpid);
                 let allocatedCurrentA, allocatedPowerKw;
                 
-                if (emsMode === 'static') {
-                    // Static 模式：按比例分配
-                    const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                    if (totalAcDemand <= maxPowerKw) {
-                        allocatedCurrentA = Math.floor((maxKw * 1000) / 220);
-                        allocatedPowerKw = maxKw;
-                    } else {
-                        const ratio = maxPowerKw / totalAcDemand;
-                        allocatedPowerKw = maxKw * ratio;
-                        allocatedCurrentA = Math.floor((allocatedPowerKw * 1000) / 220);
-                    }
+                if (gunAllocation) {
+                    allocatedCurrentA = gunAllocation.limit; // EMS已經計算好的A值
+                    allocatedPowerKw = gunAllocation.allocated_kw; // EMS已經計算好的kW值
                 } else {
-                    // Dynamic 模式：只有充電中的才分配
-                    if (isCharging(status)) {
-                        const totalChargingAcDemand = chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-                        if (totalChargingAcDemand <= maxPowerKw) {
-                            allocatedCurrentA = Math.floor((maxKw * 1000) / 220);
-                            allocatedPowerKw = maxKw;
-                        } else {
-                            const ratio = maxPowerKw / totalChargingAcDemand;
-                            allocatedPowerKw = maxKw * ratio;
-                            allocatedCurrentA = Math.floor((allocatedPowerKw * 1000) / 220);
-                        }
-                    } else {
-                        allocatedCurrentA = 6; // 最小電流
-                        allocatedPowerKw = (6 * 220) / 1000;
-                    }
+                    // 備用值
+                    allocatedCurrentA = 6;
+                    allocatedPowerKw = (6 * 220) / 1000;
                 }
-                
-                // 確保最小值
-                if (allocatedCurrentA < 6) allocatedCurrentA = 6;
                 
                 totalAcCurrentA += allocatedCurrentA;
                 totalAcPowerKw += allocatedPowerKw;
@@ -1348,38 +1297,20 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
             let totalDcPowerW = 0;
             let totalDcPowerKw = 0;
             
-            // 計算可用於DC的功率
-            const totalChargingAcDemand = chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-            const actualChargingAcPower = Math.min(totalChargingAcDemand, maxPowerKw);
-            const availableDcPower = maxPowerKw - actualChargingAcPower;
-            
             onlineDcGuns.forEach(gun => {
                 const status = gun.guns_status || 'Unknown';
                 const charging = isCharging(status) ? '⚡充電中' : '⏸️待機';
                 const maxKw = parseFloat(gun.max_kw || 0);
                 
-                // 根據 EMS 模式計算配置值
+                // 從EMS分配結果獲取配置值
+                const gunAllocation = allocation.find(a => a.cpid === gun.cpid);
                 let allocatedPowerW, allocatedPowerKw;
                 
-                if (emsMode === 'static') {
-                    // Static 模式：DC樁平均分配剩餘功率
-                    const dcPowerPerGun = dcGuns.length > 0 ? availableDcPower / dcGuns.length : 0;
-                    allocatedPowerW = Math.floor(dcPowerPerGun * 1000);
-                    allocatedPowerKw = dcPowerPerGun;
+                if (gunAllocation) {
+                    allocatedPowerW = gunAllocation.limit; // EMS已經計算好的W值
+                    allocatedPowerKw = gunAllocation.allocated_kw; // EMS已經計算好的kW值
                 } else {
-                    // Dynamic 模式：只有充電中的DC樁分配
-                    if (isCharging(status)) {
-                        const dcPowerPerGun = chargingDcGuns.length > 0 ? availableDcPower / chargingDcGuns.length : 0;
-                        allocatedPowerW = Math.floor(dcPowerPerGun * 1000);
-                        allocatedPowerKw = dcPowerPerGun;
-                    } else {
-                        allocatedPowerW = 1000; // 最小1kW
-                        allocatedPowerKw = 1;
-                    }
-                }
-                
-                // 確保最小值
-                if (allocatedPowerW <= 0) {
+                    // 備用值
                     allocatedPowerW = 1000;
                     allocatedPowerKw = 1;
                 }
@@ -1391,16 +1322,11 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
             });
             
             console.log(`  ⚡ DC總計: ${totalDcPowerW}W | ${totalDcPowerKw.toFixed(2)}kW`);
-            console.log(`  💡 DC可用功率: ${availableDcPower.toFixed(2)}kW (場域${maxPowerKw}kW - AC使用${actualChargingAcPower.toFixed(2)}kW)`);
             console.log('-'.repeat(80));
         }
         
-        // 功率使用統計
-        const totalUsedPower = (onlineAcGuns.length > 0 ? 
-            Math.min(chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0), maxPowerKw) : 0) +
-            (onlineDcGuns.length > 0 ? 
-            Math.max(0, maxPowerKw - Math.min(chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0), maxPowerKw)) : 0);
-        
+        // 功率使用統計 - 使用EMS分配結果
+        const totalUsedPower = emsResult.summary.total_allocated_kw;
         const powerUtilization = (totalUsedPower / maxPowerKw * 100).toFixed(1);
         
         console.log(`📊 功率使用統計:`);
@@ -1585,8 +1511,24 @@ const ocppController = {
             console.log(`[trigger_profile_update] 📅 觸發時間: ${new Date().toISOString()}`);
             console.log(`[trigger_profile_update] 🖥️  請求來源IP: ${req.ip || req.connection.remoteAddress}`);
             
-            // 獲取當前在線充電樁清單
-            const onlineCpids = getOnlineCpids();
+            // 解析請求體以獲取額外資訊
+            const requestData = req.body || {};
+            console.log(`[trigger_profile_update] 📊 請求資料:`, JSON.stringify(requestData));
+            
+            // 使用新的全站功率重新分配系統（立即執行模式）
+            console.log('[trigger_profile_update] 🔄 使用全站功率重新分配系統（立即執行模式）...');
+            
+            // 觸發全站重新分配（立即執行，非阻塞）
+            scheduleGlobalPowerReallocation('ManualTrigger', {
+                source: requestData.source || 'manual-api-trigger',
+                userAgent: requestData.userAgent || req.headers['user-agent'],
+                clientIP: requestData.clientIP || req.ip || req.connection.remoteAddress,
+                timestamp: requestData.timestamp || new Date().toISOString(),
+                triggerAPI: '/ocpp/api/trigger_profile_update'
+            }, true); // 第三個參數 immediate = true
+            
+            // 獲取當前在線充電樁清單以回傳統計資訊
+            const onlineCpids = await getOnlineCpids();
             console.log(`[trigger_profile_update] 📊 線上充電樁統計: ${onlineCpids.length} 個`);
             
             if (onlineCpids.length === 0) {
@@ -1596,80 +1538,29 @@ const ocppController = {
                     message: '目前無在線充電樁，無需進行功率配置更新',
                     onlineStations: 0,
                     scheduledUpdates: 0,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    method: 'global-reallocation-immediate'
                 });
             }
             
-            let updateCount = 0;
-            const updateDetails = [];  // 記錄更新詳情
-            
-            console.log('[trigger_profile_update] 🔄 開始批量排程功率配置更新...');
-            
-            // 逐一處理每個在線充電樁
-            for (let i = 0; i < onlineCpids.length; i++) {
-                const cpsn = onlineCpids[i];
-                console.log(`[trigger_profile_update] 處理進度: ${i+1}/${onlineCpids.length} - ${cpsn}`);
-                
-                // 查找 connector 1 的 cpid 映射
-                const cpid1 = getCpidFromWsData(cpsn, 1);
-                if (cpid1) {
-                    const delay = updateCount * 1000; // 每個更新間隔1秒，避免同時下發
-                    console.log(`[trigger_profile_update] ✅ 排程 ${cpid1} (connector 1)，延遲 ${delay}ms`);
-                    scheduleProfileUpdate(cpid1, delay);
-                    updateDetails.push({ cpsn, connector: 1, cpid: cpid1, delay });
-                    updateCount++;
-                } else {
-                    console.log(`[trigger_profile_update] ❌ ${cpsn} connector 1 無映射`);
-                }
-                
-                // 查找 connector 2 的 cpid 映射
-                const cpid2 = getCpidFromWsData(cpsn, 2);
-                if (cpid2) {
-                    const delay = updateCount * 1000;
-                    console.log(`[trigger_profile_update] ✅ 排程 ${cpid2} (connector 2)，延遲 ${delay}ms`);
-                    scheduleProfileUpdate(cpid2, delay);
-                    updateDetails.push({ cpsn, connector: 2, cpid: cpid2, delay });
-                    updateCount++;
-                } else {
-                    console.log(`[trigger_profile_update] ❌ ${cpsn} connector 2 無映射`);
-                }
-            }
-            
-            // 記錄完整的更新統計
-            console.log(`[trigger_profile_update] 📈 批量更新統計:`);
-            console.log(`[trigger_profile_update]   - 掃描充電站: ${onlineCpids.length} 個`);
-            console.log(`[trigger_profile_update]   - 成功排程: ${updateCount} 個`);
-            console.log(`[trigger_profile_update]   - 預計完成時間: ${updateCount} 秒後`);
-            console.log(`[trigger_profile_update] 📋 更新詳情:`, updateDetails);
-            
-            // 回傳成功回應
+            // 回傳成功回應（不等待實際完成）
             const response = {
                 success: true,
-                message: `已排程 ${updateCount} 個充電樁進行功率配置更新`,
+                message: `已立即觸發全站功率重新分配，涵蓋 ${onlineCpids.length} 個在線充電樁`,
                 onlineStations: onlineCpids.length,
-                scheduledUpdates: updateCount,
-                updateDetails: updateDetails,
-                estimatedCompletionTime: `${updateCount} 秒`,
-                timestamp: new Date().toISOString()
+                scheduledUpdates: onlineCpids.length, // 每個在線充電樁都會被更新
+                estimatedCompletionTime: `${Math.ceil((onlineCpids.length * 0.1) + 1)} 秒`, // 立即執行，完成時間較短
+                timestamp: new Date().toISOString(),
+                method: 'global-reallocation-immediate',
+                trigger: {
+                    source: requestData.source || 'manual-api-trigger',
+                    userAgent: requestData.userAgent || req.headers['user-agent'],
+                    clientIP: requestData.clientIP || req.ip
+                }
             };
             
             console.log(`[trigger_profile_update] ✅ 手動觸發完成，回傳結果:`, response);
             res.json(response);
-            
-            // 延遲顯示全站功率配置總覽，等待所有更新完成
-            if (updateCount > 0) {
-                const totalDelay = (updateCount + 2) * 1000; // 額外等待2秒確保更新完成
-                console.log(`[trigger_profile_update] 📊 將在 ${totalDelay}ms 後顯示全站功率配置總覽`);
-                
-                setTimeout(async () => {
-                    try {
-                        const siteSetting = await getSiteSetting();
-                        await logCurrentPowerConfiguration(siteSetting.ems_mode, parseFloat(siteSetting.max_power_kw));
-                    } catch (error) {
-                        console.error('❌ [trigger_profile_update] 顯示功率總覽時發生錯誤:', error);
-                    }
-                }, totalDelay);
-            }
             
         } catch (error) {
             console.error('❌ [trigger_profile_update] 手動觸發過程中發生錯誤:');
@@ -1681,20 +1572,10 @@ const ocppController = {
                 success: false,
                 message: '觸發功率配置更新失敗',
                 error: error.message,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                method: 'global-reallocation'
             });
         }
-    },
-    /*
-       功能: ocpp test
-       方法: get
-  
-    */
-    ocpp_test: async (req, res) => {
-        console.log("into ocpp_test")
-        var cpid = "benson_ocpp_csms"
-        return res.render('ocpp', {cpid})
-
     },
     /*
        功能: ocpp see connections
@@ -1796,25 +1677,6 @@ const ocppController = {
     },
 
     /*
-       功能: ocpp_send_test
-       方法: get
-  
-    */
-    ocpp_send_test: async (req, res) => {
-        console.log("into get_ocpp_send_test")
-        //    const id = req.params.id
-//console.log("req.params.cpid="+JSON.stringify(req.body))
-        // ocpp_send_command("1001","ocpp_stop_charging");
-//  ocpp_send_command("1001","ocpp_status");
-//  ocpp_send_command("1001","ocpp_stop_charging");
-//  ocpp_send_command("1001","ocpp_start_charging");
-        ocpp_send_command("1002","ocpp_meters");
-
-        res.json("ok");
-
-    },
-
-    /*
        功能: ocpp_send_cmd
        方法: POST
        參數: email, password
@@ -1838,16 +1700,6 @@ const ocppController = {
   
     */
     ocpp_ws: async (ws, req) => {
-        /*
-        setInterval(() => {
-            // 定时打印连接池数量
-            console.log('websocket connection counts:')
-            Object.keys(wsClients).forEach(key => {
-                console.log(key, ':', wsClients[key].length);
-            })
-            console.log('-----------------------------');
-        }, 5000);
-     */
         console.log('连接成功')
         
         const id = req.params.id;
@@ -1883,10 +1735,10 @@ const ocppController = {
         try {
             // 直接查詢資料庫取得所有 connector 的 cpid 映射
             const { databaseService: dbService } = await loadDatabaseModules();
-            const guns1 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 1 });
-            const guns2 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 2 });
-            const guns3 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 3 });
-            const guns4 = await dbService.getGuns({ cpsn: req.params.id, guns_connector: 4 });
+            const guns1 = await dbService.getGuns({ cpsn: req.params.id, connector: "1" });
+            const guns2 = await dbService.getGuns({ cpsn: req.params.id, connector: "2" });
+            const guns3 = await dbService.getGuns({ cpsn: req.params.id, connector: "3" });
+            const guns4 = await dbService.getGuns({ cpsn: req.params.id, connector: "4" });
             
             cpidMapping1 = guns1.length > 0 ? guns1[0].cpid : "";
             cpidMapping2 = guns2.length > 0 ? guns2[0].cpid : "";
@@ -2111,29 +1963,21 @@ const ocppController = {
                 update_guns_status(id,j_aa[3].connectorId,j_aa[3].status)
 
                 // 新增：事件驅動的功率配置更新機制
-                // 當充電樁狀態發生變化時，智能判斷是否需要重新分配功率
+                // 當充電樁狀態發生變化時，觸發全站功率重新分配
                 console.log('[事件驅動] 🔍 分析 StatusNotification 事件...');
                 const chargingChange = detectChargingStatusChange('StatusNotification', j_aa[3]);
                 
                 if (chargingChange !== null) {
                     console.log(`[事件驅動] 📋 檢測到充電狀態變化: ${chargingChange ? '開始充電' : '停止充電'}`);
+                    console.log(`[事件驅動-StatusNotification] ⚡ 充電站 ${id} connector ${thisconnector} 狀態變更為: ${j_aa[3].status}`);
                     
-                    // 根據 connector 編號查找對應的 cpid
-                    const targetCpid = getCpidFromWsData(id, thisconnector);
-                    
-                    if (targetCpid) {
-                        console.log(`[事件驅動-StatusNotification] ⚡ ${targetCpid} 充電狀態變更:`);
-                        console.log(`[事件驅動-StatusNotification]   - 充電站: ${id}`);
-                        console.log(`[事件驅動-StatusNotification]   - 連接器: ${thisconnector}`);
-                        console.log(`[事件驅動-StatusNotification]   - 新狀態: ${j_aa[3].status}`);
-                        console.log(`[事件驅動-StatusNotification]   - 目標 CPID: ${targetCpid}`);
-                        console.log(`[事件驅動-StatusNotification] 🚀 排程功率配置更新...`);
-                        
-                        // 排程功率配置更新（使用防抖機制）
-                        scheduleProfileUpdate(targetCpid);
-                    } else {
-                        console.warn(`[事件驅動-StatusNotification] ⚠️  無法找到 ${id}:${thisconnector} 對應的 CPID，跳過功率配置更新`);
-                    }
+                    // 觸發全站功率重新分配，而非單一充電樁
+                    console.log(`[事件驅動-StatusNotification] 🚀 觸發全站功率重新分配...`);
+                    scheduleGlobalPowerReallocation('StatusNotification', { 
+                        triggerCpsn: id, 
+                        triggerConnector: thisconnector,
+                        newStatus: j_aa[3].status 
+                    });
                 } else {
                     console.log(`[事件驅動] ℹ️  StatusNotification 狀態變化不需要功率重新分配: ${j_aa[3].status}`);
                 }
@@ -2217,7 +2061,7 @@ const ocppController = {
                 console.log('send_to_ev_charger_json:'+JSON.stringify(tt_obj))
 
                 // 新增：事件驅動的功率配置更新機制
-                // StartTransaction 是最明確的充電開始信號
+                // StartTransaction 是最明確的充電開始信號，觸發全站重新分配
                 console.log('[事件驅動] 🔍 處理 StartTransaction 事件...');
                 console.log(`[事件驅動] 📊 交易資訊:`);
                 console.log(`[事件驅動]   - 充電站: ${id}`);
@@ -2225,23 +2069,13 @@ const ocppController = {
                 console.log(`[事件驅動]   - 交易ID: ${trans_id}`);
                 console.log(`[事件驅動]   - ID標籤: ${j_aa[3].idTag}`);
                 
-                // 查找對應的 cpid 進行功率配置更新
-                const targetCpid = getCpidFromWsData(id, thisconnector);
-                
-                if (targetCpid) {
-                    console.log(`[事件驅動-StartTransaction] ⚡ 充電交易開始:`);
-                    console.log(`[事件驅動-StartTransaction]   - 目標 CPID: ${targetCpid}`);
-                    console.log(`[事件驅動-StartTransaction]   - 充電開始時間: ${now_time}`);
-                    console.log(`[事件驅動-StartTransaction] 🚀 立即排程功率重新分配...`);
-                    
-                    // 立即排程功率配置更新，因為開始充電需要重新計算功率分配
-                    scheduleProfileUpdate(targetCpid);
-                    
-                    console.log(`[事件驅動-StartTransaction] ✅ ${targetCpid} 功率配置更新已排程`);
-                } else {
-                    console.warn(`[事件驅動-StartTransaction] ⚠️  無法找到 ${id}:${thisconnector} 對應的 CPID`);
-                    console.warn(`[事件驅動-StartTransaction] 🔍 請檢查 cpid_mapping 是否正確設置`);
-                }
+                console.log(`[事件驅動-StartTransaction] ⚡ 充電交易開始，觸發全站功率重新分配`);
+                scheduleGlobalPowerReallocation('StartTransaction', { 
+                    triggerCpsn: id, 
+                    triggerConnector: thisconnector,
+                    transactionId: trans_id,
+                    idTag: j_aa[3].idTag 
+                });
 
                 // 為 StartTransaction 使用正確的 cpid
                 const startTxCpid = getCpidFromWsData(id, thisconnector) || id; // 確保有值
@@ -2286,7 +2120,7 @@ const ocppController = {
                 console.log("wsCpdatas_all="+JSON.stringify(wsCpdatas[req.params.id][0]));
 
                 // 新增：事件驅動的功率配置更新機制
-                // StopTransaction 是充電結束的明確信號，需要重新分配功率
+                // StopTransaction 是充電結束的明確信號，觸發全站重新分配
                 console.log('[事件驅動] 🔍 處理 StopTransaction 事件...');
                 
                 const transactionId = j_aa[3].transactionId;
@@ -2299,23 +2133,14 @@ const ocppController = {
                 console.log(`[事件驅動]   - 結束原因: ${j_aa[3].reason || '未指定'}`);
                 console.log(`[事件驅動]   - 最終電表讀數: ${j_aa[3].meterStop}`);
                 
-                // 查找對應的 cpid
-                const targetCpid = getCpidFromWsData(id, connector);
-                
-                if (targetCpid) {
-                    console.log(`[事件驅動-StopTransaction] ⚡ 充電交易結束:`);
-                    console.log(`[事件驅動-StopTransaction]   - 目標 CPID: ${targetCpid}`);
-                    console.log(`[事件驅動-StopTransaction]   - 停止時間: ${now_time}`);
-                    console.log(`[事件驅動-StopTransaction] 🚀 排程功率重新分配...`);
-                    
-                    // 排程功率配置更新，因為停止充電後需要重新分配剩餘功率
-                    scheduleProfileUpdate(targetCpid);
-                    
-                    console.log(`[事件驅動-StopTransaction] ✅ ${targetCpid} 功率配置更新已排程`);
-                } else {
-                    console.warn(`[事件驅動-StopTransaction] ⚠️  無法找到 ${id}:${connector} 對應的 CPID`);
-                    console.warn(`[事件驅動-StopTransaction] 🔍 交易ID: ${transactionId} 可能映射錯誤`);
-                }
+                console.log(`[事件驅動-StopTransaction] ⚡ 充電交易結束，觸發全站功率重新分配`);
+                scheduleGlobalPowerReallocation('StopTransaction', { 
+                    triggerCpsn: id, 
+                    triggerConnector: connector,
+                    transactionId: transactionId,
+                    reason: j_aa[3].reason,
+                    meterStop: j_aa[3].meterStop 
+                });
 
                 // 為 StopTransaction 使用正確的 cpid
                 const stopTxCpid = getCpidFromWsData(id, connector) || id; // 確保有值
@@ -2328,76 +2153,73 @@ const ocppController = {
                 })
             }
 
-            if(j_aa[2]=="DataTransfer"){
-                console.log('into "DataTransfer" proc')
-                //expiryDate=taipei time + 24h
-                exp_time=new Date(+new Date() + 8 * 3600 * 1000 * 24).toISOString()
-                var tt_obj=[3,6677543,{"status":"Accepted"}]
-                tt_obj[1]=j_aa[1]
-                ws.send(JSON.stringify(tt_obj))
-                console.log('send_to_ev_charger_json:'+JSON.stringify(tt_obj))
-                createCpLog({
-                    cpid: getStationPrimaryCpid(id), // 使用充電站的主要 cpid
-                    cpsn: id,
-                    log: JSON.stringify(tt_obj),
-                    time: new Date(),
-                    inout: "out",
-                })
+            if(j_aa[2] === "DataTransfer") {
+                console.log('into "DataTransfer" proc');
+
+                const payload = j_aa[3]; // 第四個元素是 JSON 物件
+
+                // 判斷 vendorId
+                if(payload.vendorId === "efaner") {
+                    console.log(`[DataTransfer] 收到 efaner 請求，尋找 CPSN=${id} 的對應 CPID`);
+                    
+                    // 尋找當前充電站的 CPID
+                    const findCpidForStation = async () => {
+                        try {
+                            // 使用資料庫服務查詢 CPID
+                            const { databaseService: dbService } = await loadDatabaseModules();
+                            // 使用 CPSN 查詢對應的 CPID
+                            const result = await dbService.getGuns({ cpsn: id });
+                            
+                            if (result && result.length > 0 && result[0].cpid) {
+                                return result[0].cpid; // 返回找到的 CPID
+                            } else {
+                                console.log(`[DataTransfer] ⚠️ 找不到 CPSN=${id} 的對應 CPID，使用 CPSN 作為回應`);
+                                return id; // 如果找不到 CPID，使用 CPSN 作為回應
+                            }
+                        } catch (error) {
+                            console.error(`[DataTransfer] ❌ 查詢 CPID 時發生錯誤:`, error);
+                            return id; // 發生錯誤時，使用 CPSN 作為 fallback
+                        }
+                    };
+                    
+                    // 查詢 CPID 並回應
+                    findCpidForStation().then(cpid => {
+                        console.log(`[DataTransfer] ✅ 為 CPSN=${id} 找到對應 CPID=${cpid}`);
+                        
+                        // 回傳找到的 CPID 作為 data
+                        const tt_obj = [3, j_aa[1], { status: "Accepted", data: cpid }];
+                        ws.send(JSON.stringify(tt_obj));
+                        console.log('send_to_ev_charger_json with efaner:', JSON.stringify(tt_obj));
+                        
+                        // 記錄 log
+                        createCpLog({
+                            cpid: cpid,
+                            cpsn: id,
+                            log: JSON.stringify(tt_obj),
+                            time: new Date(),
+                            inout: "out",
+                        });
+                    });
+                } else {
+                    // 原本的 DataTransfer 流程
+                    const exp_time = new Date(+new Date() + 8 * 3600 * 1000 * 24).toISOString();
+                    const tt_obj = [3, j_aa[1], { status: "Accepted" }];
+                    ws.send(JSON.stringify(tt_obj));
+                    console.log('send_to_ev_charger_json with default:', JSON.stringify(tt_obj));
+
+                    createCpLog({
+                        cpid: getStationPrimaryCpid(id),
+                        cpsn: id,
+                        log: JSON.stringify(tt_obj),
+                        time: new Date(),
+                        inout: "out",
+                    });
+                }
             }
+
             if(j_aa[2]=="MeterValues"){
                 console.log('into "MeterValues" proc')
-                /*
-                [2,"cb41ee88-af8b-749c-ec04-40d4ef4e802b","MeterValues",{"connectorId":2,"transactionId":0,"meterValue":[{"timestamp":"2023-12-26T22:27:56.001Z",
-                "sampledValue":[
-                  {"value":"2759.100","unit":"Wh","context":"Sample.Periodic","format":"Raw","measurand":"Energy.Active.Import.Register","location":"Outlet"}
-                  ]
-                }]
-                }]
-                
-                [2,"f8350340-162a-2b01-b1dd-d5050b750606","MeterValues",
-                {
-                "connectorId":2,
-                "transactionId":0,
-                "meterValue":[
-                 {"timestamp":"2023-12-26T15:01:56.001Z",
-                  "sampledValue":[
-                    {"value":"4.320","context":"Sample.Periodic","format":"Raw","measurand":"Current.Import","phase":"L1","location":"Outlet","unit":"A"},
-                    {"value":"1949.200","unit":"Wh","context":"Sample.Periodic","format":"Raw","measurand":"Energy.Active.Import.Register","location":"Outlet"},
-                    {"value":"0.979","context":"Sample.Periodic","format":"Raw","measurand":"Power.Active.Import","phase":"L1-N","location":"Outlet","unit":"kW"},
-                    {"value":"227.300","context":"Sample.Periodic","format":"Raw","measurand":"Voltage","phase":"L1-N","location":"Outlet","unit":"V"}               ]
-                 }
-                ]
-                }
-                ]
-                */
-                //need to catch all_message[3].meterValue[0].sampledValue[0]=data1,[1]=data2,[4]=data3
-                //if(j_aa[3].meterValue[0].sampledValue[0].value>0){cp_data1 = j_aa[3].meterValue[0].sampledValue[0].value;}
-                //if(j_aa[3].meterValue[0].sampledValue[1].value>0){cp_data2 = j_aa[3].meterValue[0].sampledValue[1].value;}
-                //if(j_aa[3].meterValue[0].sampledValue[4].value>0){cp_data3 = j_aa[3].meterValue[0].sampledValue[4].value;}
 
-//ABB meters messages:
-//[2, "2982648", "MeterValues", {"connectorId": 1, "transactionId": 1111, "meterValue": [{"timestamp": "2024-02-26T07:46:22.000Z",
-// "sampledValue": [
-//{"value": "228.90", "context": "Sample.Periodic", "format": "Raw", "measurand": "Voltage", "phase": "L1-L2", "unit": "V"},
-// {"value": "0.0", "context": "Sample.Periodic", "format": "Raw", "measurand": "Current.Import", "phase": "L1", "unit": "A"},
-// {"value": "0", "context": "Sample.Periodic", "format": "Raw", "measurand": "Power.Active.Import", "phase": "L1", "unit": "W"},
-// {"value": "0", "context": "Sample.Periodic", "format": "Raw", "measurand": "Energy.Active.Import.Register", "unit": "Wh"}]}]]
-//
-//[2,"f8350340-162a-2b01-b1dd-d5050b750606","MeterValues",
-//{
-// "connectorId":2,
-// "transactionId":0,
-// "meterValue":[
-//  {"timestamp":"2023-12-26T15:01:56.001Z",
-//   "sampledValue":[
-//     {"value":"4.320","context":"Sample.Periodic","format":"Raw","measurand":"Current.Import","phase":"L1","location":"Outlet","unit":"A"},
-//     {"value":"1949.200","unit":"Wh","context":"Sample.Periodic","format":"Raw","measurand":"Energy.Active.Import.Register","location":"Outlet"},
-//     {"value":"0.979","context":"Sample.Periodic","format":"Raw","measurand":"Power.Active.Import","phase":"L1-N","location":"Outlet","unit":"kW"},
-//     {"value":"227.300","context":"Sample.Periodic","format":"Raw","measurand":"Voltage","phase":"L1-N","location":"Outlet","unit":"V"}               ]
-//  }
-// ]
-//}
-//
                 console.log("now in metervalues id="+id);
 
                 if(id[0]=="T" && id[1]=="A" && id[2]=="C"){
@@ -2406,14 +2228,39 @@ const ocppController = {
                     var meter_transactionid= j_aa[3].transactionId
                     console.log('metervalue_connectorid:'+meter_connectorid);
                     console.log('metervalue_transactionid:'+meter_transactionid);
-                    cp_data1 =  j_aa[3].meterValue[0].sampledValue[3].value
-                    cp_data1 = cp_data1/1000
-                    cp_data2 =  j_aa[3].meterValue[0].sampledValue[1].value
-                    cp_data3 =  j_aa[3].meterValue[0].sampledValue[0].value
-                    cp_data1 = cp_data1.toFixed(3)
-                    cp_data4 = cp_data2*cp_data3;
-                    cp_data4 = cp_data4.toFixed(3)
-                    console.log('metervalue_In-charging khw_cp_data1:'+cp_data1);
+                    
+                    // 安全檢查 sampledValue 陣列長度
+                    const sampledValues = j_aa[3].meterValue[0].sampledValue;
+                    console.log(`[MeterValues] 收到 ${sampledValues.length} 個 sampledValue:`, JSON.stringify(sampledValues));
+                    
+                    // 初始化數據變數
+                    let cp_data1 = "0.00"; // kWh
+                    let cp_data2 = "0.00"; // Current (A)
+                    let cp_data3 = "0.00"; // Voltage (V)
+                    let cp_data4 = "0.00"; // Power (kW)
+                    
+                    // 根據實際收到的數據解析
+                    for (let i = 0; i < sampledValues.length; i++) {
+                        const sample = sampledValues[i];
+                        console.log(`[MeterValues] sampledValue[${i}]:`, JSON.stringify(sample));
+                        
+                        if (sample.measurand === "Energy.Active.Import.Register") {
+                            cp_data1 = (parseFloat(sample.value) / 1000).toFixed(3); // Wh -> kWh
+                        } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
+                            cp_data2 = parseFloat(sample.value).toFixed(2);
+                        } else if (sample.measurand === "Voltage") {
+                            cp_data3 = parseFloat(sample.value).toFixed(2);
+                        } else if (sample.measurand === "Power.Active.Import") {
+                            cp_data4 = parseFloat(sample.value).toFixed(3);
+                        }
+                    }
+                    
+                    // 如果沒有直接的功率讀數，計算功率 (V * A / 1000)
+                    if (cp_data4 === "0.00" && cp_data2 !== "0.00" && cp_data3 !== "0.00") {
+                        cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3) / 1000).toFixed(3);
+                    }
+                    
+                    console.log('metervalue_In-charging kWh_cp_data1:'+cp_data1);
                     console.log('metervalue_In-charging A_cp_data2:'+cp_data2);
                     console.log('metervalue_In-charging V_cp_data3:'+cp_data3);
                     console.log('metervalue_In-charging power_cp_data4:'+cp_data4);
@@ -2422,7 +2269,7 @@ const ocppController = {
                         wsCpdatas[req.params.id][0].connector_1_meter.data2 = cp_data2
                         wsCpdatas[req.params.id][0].connector_1_meter.data3 = cp_data3
                         wsCpdatas[req.params.id][0].connector_1_meter.data4 = cp_data4
-                        wsCpdatas[req.params.id][0].connector_1_meter.data5 = cp_data5
+                        wsCpdatas[req.params.id][0].connector_1_meter.data5 = "0.00" // 修復未定義的變數
                         console.log("wsCpdatas_all="+JSON.stringify(wsCpdatas[req.params.id][0]));
                     }
                     update_guns_meters(req.params.id,meter_connectorid,cp_data1,cp_data2,cp_data3,cp_data4)

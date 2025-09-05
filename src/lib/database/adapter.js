@@ -96,7 +96,7 @@ class DatabaseManager {
       console.error(`❌ [DatabaseManager] getClient() called but database not initialized`);
       throw new Error('Database not initialized. Call initialize() first.');
     }
-    console.log(`📊 [DatabaseManager] getClient() returning ${this.adapter.provider.toUpperCase()} client`);
+    // console.log(`📊 [DatabaseManager] getClient() returning ${this.adapter.provider.toUpperCase()} client`);
     return this.adapter.client;
   }
 

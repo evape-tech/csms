@@ -15,6 +15,17 @@ function isCharging(status) {
 }
 
 /**
+ * 安全解析浮點數
+ * @param {any} value 需要解析的值
+ * @returns {number} 解析後的數值，異常時返回0
+ */
+function safeParseFloat(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * 計算 EMS 分配結果
  * @param {object} siteSetting - 場域設定 {ems_mode, max_power_kw}
  * @param {array} allGuns - 所有充電槍資料 [{cpid, acdc, max_kw, guns_status, connector, cpsn}, ...]
@@ -23,7 +34,7 @@ function isCharging(status) {
  */
 function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
   const { ems_mode, max_power_kw } = siteSetting;
-  const maxPowerKw = parseFloat(max_power_kw);
+  const maxPowerKw = safeParseFloat(max_power_kw);
   
   const allocations = [];
   const logs = [];
@@ -39,7 +50,7 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
     logs.push('[static模式] 不管樁有無上線，按場域總功率限制分配');
     
     // Static 模式：AC 先分配，DC 取剩餘
-    const totalAcDemand = acGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
+    const totalAcDemand = acGuns.reduce((sum, g) => sum + safeParseFloat(g.max_kw), 0);
     const actualAcPower = Math.min(totalAcDemand, maxPowerKw);
     const availableDcPower = maxPowerKw - actualAcPower;
     
@@ -52,16 +63,16 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
       
       if (totalAcDemand <= maxPowerKw) {
         // AC總需求不超過場域限制，按樁規格分配
-        allocatedPower = parseFloat(gun.max_kw || 0);
+        allocatedPower = safeParseFloat(gun.max_kw);
         unit = "A";
-        limit = Math.floor((allocatedPower * 1000) / 220);
+        limit = Math.round((allocatedPower * 1000) / 220);
         logs.push(`[static-AC] ${gun.cpid} 按規格分配: ${limit}A (${allocatedPower}kW)`);
       } else {
         // AC總需求超過場域限制，按比例分配
         const ratio = maxPowerKw / totalAcDemand;
-        allocatedPower = parseFloat(gun.max_kw || 0) * ratio;
+        allocatedPower = safeParseFloat(gun.max_kw) * ratio;
         unit = "A";
-        limit = Math.floor((allocatedPower * 1000) / 220);
+        limit = Math.round((allocatedPower * 1000) / 220);
         logs.push(`[static-AC] ${gun.cpid} 按比例分配: ${limit}A (${allocatedPower.toFixed(2)}kW, 比例:${ratio.toFixed(3)})`);
       }
       
@@ -76,7 +87,8 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
         unit,
         limit,
         allocated_kw: (limit * 220) / 1000, // 反推分配功率
-        original_max_kw: parseFloat(gun.max_kw || 0)
+        original_max_kw: safeParseFloat(gun.max_kw),
+        charging: false // 靜態模式下設為false
       });
     }
     
@@ -84,7 +96,7 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
     const dcPowerPerGun = dcGuns.length > 0 ? availableDcPower / dcGuns.length : 0;
     for (const gun of dcGuns) {
       const unit = "W";
-      let limit = Math.floor(dcPowerPerGun * 1000); // 轉為瓦特
+      let limit = Math.round(dcPowerPerGun * 1000); // 轉為瓦特
       
       // 應用 DC 限制
       limit = applyDcLimits(gun, limit, logs);
@@ -99,7 +111,8 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
         unit,
         limit,
         allocated_kw: limit / 1000, // W 轉 kW
-        original_max_kw: parseFloat(gun.max_kw || 0)
+        original_max_kw: safeParseFloat(gun.max_kw),
+        charging: false // 靜態模式下設為false
       });
     }
   }
@@ -124,45 +137,111 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
       return calculateEmsAllocation({ ems_mode: 'static', max_power_kw: maxPowerKw }, allGuns, onlineCpids);
     }
     
-    // Dynamic 模式：只為充電中的槍分配功率
+    // Dynamic 模式：充電中的槍優先分配，待機槍最低功率
     logs.push(`[dynamic] 有 ${totalChargingGuns} 個充電樁在充電，使用動態分配`);
     
-    // 計算充電中 AC 槍的需求與分配
-    const totalChargingAcDemand = chargingAcGuns.reduce((sum, g) => sum + parseFloat(g.max_kw || 0), 0);
-    const actualChargingAcPower = Math.min(totalChargingAcDemand, maxPowerKw);
-    const availableDcPower = maxPowerKw - actualChargingAcPower;
+    // 第一步：所有在線槍都設置最小功率
+    const allocatedPowers = {};
+    let remainingPower = maxPowerKw;
     
-    logs.push(`[dynamic] 充電AC總需求: ${totalChargingAcDemand}kW, AC實際分配: ${actualChargingAcPower}kW`);
-    logs.push(`[dynamic] DC可用功率: ${availableDcPower}kW`);
+    // 為所有在線槍分配最小功率
+    [...onlineAcGuns, ...onlineDcGuns].forEach(gun => {
+      const minPower = gun.acdc === 'AC' ? 1.32 : 1.0; // AC: 6A = 1.32kW, DC: 1kW
+      allocatedPowers[gun.cpid] = minPower;
+      remainingPower -= minPower;
+      logs.push(`[dynamic-最小] ${gun.cpid} (${gun.acdc}) 分配最小功率: ${minPower}kW`);
+    });
     
-    // 分配所有 AC 充電槍（包含非充電的）
-    for (const gun of acGuns) {
-      const currentGunCharging = isCharging(gun.guns_status);
-      let allocatedPower, unit, limit;
+    logs.push(`[dynamic] 最小功率分配完成，剩餘功率: ${remainingPower.toFixed(2)}kW`);
+    
+    // 第二步：將剩餘功率分配給充電中的槍，按優先級：AC先於DC
+    if (remainingPower > 0) {
+      logs.push(`[dynamic] 開始第二步分配，剩餘功率: ${remainingPower.toFixed(2)}kW`);
       
-      if (currentGunCharging) {
-        // 正在充電的槍
-        if (totalChargingAcDemand <= maxPowerKw) {
-          // 充電AC總需求不超過場域限制，按樁規格分配
-          allocatedPower = parseFloat(gun.max_kw || 0);
-          unit = "A";
-          limit = Math.floor((allocatedPower * 1000) / 220);
-          logs.push(`[dynamic-AC] ${gun.cpid} 按規格分配: ${limit}A (${allocatedPower}kW)`);
-        } else {
-          // 充電AC總需求超過場域限制，按比例分配
-          const ratio = maxPowerKw / totalChargingAcDemand;
-          allocatedPower = parseFloat(gun.max_kw || 0) * ratio;
-          unit = "A";
-          limit = Math.floor((allocatedPower * 1000) / 220);
-          logs.push(`[dynamic-AC] ${gun.cpid} 按比例分配: ${limit}A (${allocatedPower.toFixed(2)}kW, 比例:${ratio.toFixed(3)})`);
-        }
-      } else {
-        // 非充電狀態，設為最小功率
-        unit = "A";
-        limit = 6; // AC充電樁最小電流
-        allocatedPower = (limit * 220) / 1000;
-        logs.push(`[dynamic-AC] ${gun.cpid} 非充電狀態，設為最小功率: ${limit}A`);
+      // 先給充電中的AC槍分配到滿額
+      logs.push(`[dynamic] 充電中AC槍數量: ${chargingAcGuns.length}`);
+      for (const gun of chargingAcGuns) {
+        const maxGunPower = safeParseFloat(gun.max_kw);
+        const currentPower = allocatedPowers[gun.cpid];
+        const additionalNeeded = maxGunPower - currentPower;
+        const additionalGiven = Math.min(additionalNeeded, remainingPower);
+        
+        logs.push(`[dynamic-AC分配前] ${gun.cpid}: 當前=${currentPower}kW, 需要額外=${additionalNeeded}kW, 剩餘=${remainingPower.toFixed(2)}kW`);
+        
+        allocatedPowers[gun.cpid] = currentPower + additionalGiven;
+        remainingPower -= additionalGiven;
+        
+        logs.push(`[dynamic-AC] ${gun.cpid} 充電中，分配: ${allocatedPowers[gun.cpid].toFixed(2)}kW (需求:${maxGunPower}kW, 獲得額外:${additionalGiven.toFixed(2)}kW)`);
+        logs.push(`[dynamic-AC分配後] 剩餘功率: ${remainingPower.toFixed(2)}kW`);
+        
+        if (remainingPower <= 0) break;
       }
+      
+      // 給充電中的DC槍分配剩餘功率，優先平均分配
+      if (remainingPower > 0 && chargingDcGuns.length > 0) {
+        logs.push(`[dynamic-DC開始] 剩餘功率: ${remainingPower.toFixed(2)}kW, 充電中DC槍數量: ${chargingDcGuns.length}`);
+        
+        // 計算每支DC槍可以獲得的平均額外功率
+        const dcPowerPerGun = remainingPower / chargingDcGuns.length;
+        logs.push(`[dynamic-DC] 每支DC槍平均可得: ${dcPowerPerGun.toFixed(2)}kW`);
+        
+        for (const gun of chargingDcGuns) {
+          const maxGunPower = safeParseFloat(gun.max_kw);
+          const currentPower = allocatedPowers[gun.cpid];
+          const additionalPower = Math.min(dcPowerPerGun, maxGunPower - currentPower);
+          
+          logs.push(`[dynamic-DC分配前] ${gun.cpid}: 當前=${currentPower}kW, 規格上限=${maxGunPower}kW, 可得額外=${dcPowerPerGun.toFixed(2)}kW`);
+          
+          allocatedPowers[gun.cpid] = currentPower + additionalPower;
+          remainingPower -= additionalPower;
+          
+          logs.push(`[dynamic-DC] ${gun.cpid} 充電中，分配: ${allocatedPowers[gun.cpid].toFixed(2)}kW (上限:${maxGunPower}kW, 額外:${additionalPower.toFixed(2)}kW)`);
+          logs.push(`[dynamic-DC分配後] 剩餘功率: ${remainingPower.toFixed(2)}kW`);
+        }
+        
+        // 如果還有剩餘功率（因為某些槍達到上限），再次平均分配給未滿額的槍
+        if (remainingPower > 0) {
+          const unsaturatedGuns = chargingDcGuns.filter(gun => {
+            const maxPower = safeParseFloat(gun.max_kw);
+            const currentPower = allocatedPowers[gun.cpid];
+            return currentPower < maxPower;
+          });
+          
+          if (unsaturatedGuns.length > 0) {
+            const extraPowerPerGun = remainingPower / unsaturatedGuns.length;
+            
+            for (const gun of unsaturatedGuns) {
+              const maxGunPower = safeParseFloat(gun.max_kw);
+              const currentPower = allocatedPowers[gun.cpid];
+              const additionalPower = Math.min(extraPowerPerGun, maxGunPower - currentPower);
+              
+              allocatedPowers[gun.cpid] = currentPower + additionalPower;
+              remainingPower -= additionalPower;
+              
+              logs.push(`[dynamic-DC額外] ${gun.cpid} 二次分配: ${additionalPower.toFixed(2)}kW (總計:${allocatedPowers[gun.cpid].toFixed(2)}kW)`);
+            }
+          }
+        }
+      }
+      
+      // 第三步：待機槍維持最低功率（動態模式的核心原則）
+      logs.push(`[dynamic-待機] 待機槍維持最低功率，不分配額外功率`);
+      logs.push(`[dynamic] 最終剩餘功率: ${remainingPower.toFixed(2)}kW 不分配（動態模式節能原則）`);
+    }
+    
+    logs.push(`[dynamic] 分配完成，最終剩餘功率: ${remainingPower.toFixed(2)}kW`);
+    
+    // 第四步：根據分配的功率生成allocations (處理所有槍)
+    for (const gun of acGuns) {
+      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpsn);
+      const isOnline = onlineCpids.includes(gun.cpsn);
+      const allocatedPower = isOnline ? (allocatedPowers[gun.cpid] || 1.32) : 1.32; // 離線槍給最低功率
+      
+      const unit = "A";
+      let limit = Math.round((allocatedPower * 1000) / 220);
+      
+      const status = currentGunCharging ? '充電中' : (isOnline ? '待機' : '離線');
+      logs.push(`[dynamic-AC] ${gun.cpid} ${status}，分配: ${limit}A (${allocatedPower.toFixed(2)}kW)`);
       
       // 應用 AC 限制
       limit = applyAcLimits(gun, limit, logs);
@@ -175,28 +254,21 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
         unit,
         limit,
         allocated_kw: (limit * 220) / 1000,
-        original_max_kw: parseFloat(gun.max_kw || 0),
+        original_max_kw: safeParseFloat(gun.max_kw),
         charging: currentGunCharging
       });
     }
     
-    // 分配所有 DC 充電槍
-    const dcPowerPerGun = chargingDcGuns.length > 0 ? availableDcPower / chargingDcGuns.length : 0;
     for (const gun of dcGuns) {
-      const currentGunCharging = isCharging(gun.guns_status);
-      let unit, limit;
+      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpsn);
+      const isOnline = onlineCpids.includes(gun.cpsn);
+      const allocatedPower = isOnline ? (allocatedPowers[gun.cpid] || 1.0) : 1.0; // 離線槍給最低功率
       
-      if (currentGunCharging) {
-        // 正在充電的 DC 槍
-        unit = "W";
-        limit = Math.floor(dcPowerPerGun * 1000);
-        logs.push(`[dynamic-DC] ${gun.cpid} 設定瓦數: ${limit}W`);
-      } else {
-        // 非充電狀態，設為最小功率
-        unit = "W";
-        limit = 1000; // DC最小1kW
-        logs.push(`[dynamic-DC] ${gun.cpid} 非充電狀態，設為最小功率: ${limit}W`);
-      }
+      const unit = "W";
+      let limit = Math.round(allocatedPower * 1000);
+      
+      const status = currentGunCharging ? '充電中' : (isOnline ? '待機' : '離線');
+      logs.push(`[dynamic-DC] ${gun.cpid} ${status}，分配: ${limit}W (${allocatedPower.toFixed(2)}kW)`);
       
       // 應用 DC 限制
       limit = applyDcLimits(gun, limit, logs);
@@ -209,15 +281,164 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
         unit,
         limit,
         allocated_kw: limit / 1000,
-        original_max_kw: parseFloat(gun.max_kw || 0),
+        original_max_kw: safeParseFloat(gun.max_kw),
         charging: currentGunCharging
       });
     }
   }
   
-  // 計算統計資訊
+  // 計算初始統計資訊
+  let totalAllocatedPower = allocations.reduce((sum, a) => sum + a.allocated_kw, 0);
+  
+  // 場域限制檢查和智能調整
+  if (totalAllocatedPower > maxPowerKw) {
+    logs.push(`[警告] 總分配功率 ${totalAllocatedPower.toFixed(2)}kW 超過場域限制 ${maxPowerKw}kW，進行智能調整`);
+    
+    // 分離AC和DC分配
+    const acAllocations = allocations.filter(a => a.acdc === 'AC');
+    const dcAllocations = allocations.filter(a => a.acdc === 'DC');
+    
+    // 計算最低保證需求
+    const acMinTotal = acAllocations.length * 1.32; // 6A = 1.32kW
+    const dcMinTotal = dcAllocations.length * 1.0;   // 1kW最低
+    const totalMinRequired = acMinTotal + dcMinTotal;
+    
+    logs.push(`[調整] 最低保證需求: AC=${acMinTotal.toFixed(2)}kW, DC=${dcMinTotal.toFixed(2)}kW, 總計=${totalMinRequired.toFixed(2)}kW`);
+    
+    if (totalMinRequired <= maxPowerKw) {
+      // 可分配的剩餘功率
+      const availablePower = maxPowerKw - totalMinRequired;
+      logs.push(`[調整] 可分配剩餘功率: ${availablePower.toFixed(2)}kW`);
+      
+      // 重新分配策略：先AC後DC，按比例分配剩餘功率
+      const chargingAllocations = allocations.filter(a => a.charging);
+      
+      // 1. 先給所有樁最低保證
+      allocations.forEach(allocation => {
+        const minPower = allocation.acdc === 'AC' ? 1.32 : 1.0;
+        const minLimit = allocation.acdc === 'AC' ? 6 : 1000;
+        
+        allocation.allocated_kw = minPower;
+        allocation.limit = minLimit;
+      });
+      
+      // 2. 計算所有槍的額外需求
+      let remainingPower = availablePower;
+      
+      if (ems_mode === 'dynamic' && chargingAllocations.length > 0) {
+        // 動態模式：優先滿足AC充電槍需求，剩餘功率全部給DC充電槍
+        logs.push(`[動態調整] 總共 ${chargingAllocations.length} 支充電槍需要額外功率分配`);
+        
+        // 先滿足AC充電槍的需求
+        const acChargingAllocations = chargingAllocations.filter(a => a.acdc === 'AC');
+        const dcChargingAllocations = chargingAllocations.filter(a => a.acdc === 'DC');
+        
+        logs.push(`[動態調整] AC充電槍: ${acChargingAllocations.length}支, DC充電槍: ${dcChargingAllocations.length}支`);
+        
+        // AC充電槍優先滿足到規格上限
+        acChargingAllocations.forEach(allocation => {
+          const minPower = 1.32;
+          const maxPossible = allocation.original_max_kw;
+          const additionalNeeded = maxPossible - minPower;
+          const additionalGiven = Math.min(additionalNeeded, remainingPower);
+          
+          if (additionalGiven > 0.01) {
+            allocation.allocated_kw = minPower + additionalGiven;
+            allocation.limit = Math.round(allocation.allocated_kw / 0.22 * 10) / 10;
+            allocation.limit = Math.max(6, Math.min(allocation.limit, 48));
+            remainingPower -= additionalGiven;
+            
+            logs.push(`[動態調整-AC] ${allocation.cpid} 分配: ${allocation.allocated_kw.toFixed(2)}kW (額外:${additionalGiven.toFixed(2)}kW)`);
+          }
+        });
+        
+        // DC充電槍獲得所有剩餘功率
+        if (remainingPower > 0 && dcChargingAllocations.length > 0) {
+          const powerPerDcGun = remainingPower / dcChargingAllocations.length;
+          logs.push(`[動態調整-DC] 剩餘功率 ${remainingPower.toFixed(2)}kW 分配給 ${dcChargingAllocations.length}支DC槍，每支: ${powerPerDcGun.toFixed(2)}kW`);
+          
+          dcChargingAllocations.forEach(allocation => {
+            const minPower = 1.0;
+            const maxPossible = allocation.original_max_kw;
+            const additionalPower = Math.min(powerPerDcGun, maxPossible - minPower);
+            
+            if (additionalPower > 0.01) {
+              allocation.allocated_kw = minPower + additionalPower;
+              allocation.limit = Math.round(allocation.allocated_kw * 1000);
+              remainingPower -= additionalPower;
+              
+              logs.push(`[動態調整-DC] ${allocation.cpid} 分配: ${allocation.allocated_kw.toFixed(2)}kW (額外:${additionalPower.toFixed(2)}kW)`);
+            }
+          });
+        }
+        
+        logs.push(`[動態模式] 非充電槍維持最低功率，剩餘功率: ${remainingPower.toFixed(2)}kW`);
+      } else {
+        // 靜態模式：AC優先，再分配DC，最大化場域使用率
+        const acAllocations = allocations.filter(a => a.acdc === 'AC');
+        const dcAllocations = allocations.filter(a => a.acdc === 'DC');
+        
+        // 先分配AC槍的剩餘需求
+        const acExtraDemand = acAllocations.reduce((sum, a) => {
+          return sum + Math.max(0, a.original_max_kw - 1.32);
+        }, 0);
+        
+        if (remainingPower > 0 && acExtraDemand > 0) {
+          const acAllocatedExtra = Math.min(remainingPower, acExtraDemand);
+          logs.push(`[靜態調整] AC槍額外分配: ${acAllocatedExtra.toFixed(2)}kW / ${acExtraDemand.toFixed(2)}kW`);
+          
+          acAllocations.forEach(allocation => {
+            const maxExtra = allocation.original_max_kw - 1.32;
+            const extraAllocated = maxExtra * (acAllocatedExtra / acExtraDemand);
+            
+            if (extraAllocated > 0.01) {
+              allocation.allocated_kw += extraAllocated;
+              allocation.limit = Math.round(allocation.allocated_kw / 0.22 * 10) / 10;
+              allocation.limit = Math.max(6, Math.min(allocation.limit, 48));
+            }
+          });
+          
+          remainingPower -= acAllocatedExtra;
+        }
+        
+        // 再分配DC槍的剩餘需求
+        const dcExtraDemand = dcAllocations.reduce((sum, a) => {
+          return sum + Math.max(0, a.original_max_kw - 1.0);
+        }, 0);
+        
+        if (remainingPower > 0 && dcExtraDemand > 0) {
+          const dcAllocatedExtra = Math.min(remainingPower, dcExtraDemand);
+          logs.push(`[靜態調整] DC槍額外分配: ${dcAllocatedExtra.toFixed(2)}kW / ${dcExtraDemand.toFixed(2)}kW`);
+          
+          dcAllocations.forEach(allocation => {
+            const maxExtra = allocation.original_max_kw - 1.0;
+            const extraAllocated = maxExtra * (dcAllocatedExtra / dcExtraDemand);
+            
+            if (extraAllocated > 0.01) {
+              allocation.allocated_kw += extraAllocated;
+              allocation.limit = Math.round(allocation.allocated_kw * 1000);
+              allocation.limit = Math.max(1000, allocation.limit);
+            }
+          });
+          
+          remainingPower -= dcAllocatedExtra;
+        }
+        
+        logs.push(`[靜態模式] 最大化使用率完成，剩餘功率: ${remainingPower.toFixed(2)}kW`);
+      }
+      
+      // 重新計算總功率
+      totalAllocatedPower = allocations.reduce((sum, a) => sum + a.allocated_kw, 0);
+      logs.push(`[調整完成] 調整後總功率: ${totalAllocatedPower.toFixed(2)}kW (限制: ${maxPowerKw}kW)`);
+    } else {
+      logs.push(`[錯誤] 最低保證需求 ${totalMinRequired.toFixed(2)}kW 超過場域限制 ${maxPowerKw}kW，需要減少充電樁數量`);
+    }
+  }
+  
+  // 計算最終統計資訊
   const summary = {
     ems_mode,
+    mode: ems_mode, // 添加mode字段
     max_power_kw: maxPowerKw,
     total_guns: allGuns.length,
     ac_guns: acGuns.length,
@@ -225,12 +446,16 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
     online_guns: onlineCpids.length,
     charging_guns: allocations.filter(a => a.charging).length,
     total_allocated_ac_kw: allocations.filter(a => a.acdc === 'AC').reduce((sum, a) => sum + a.allocated_kw, 0),
-    total_allocated_dc_kw: allocations.filter(a => a.acdc === 'DC').reduce((sum, a) => sum + a.allocated_kw, 0)
+    total_allocated_dc_kw: allocations.filter(a => a.acdc === 'DC').reduce((sum, a) => sum + a.allocated_kw, 0),
+    total_allocated_kw: totalAllocatedPower,
+    within_limit: totalAllocatedPower <= maxPowerKw + 0.01,
+    power_adjusted: totalAllocatedPower <= maxPowerKw + 0.01 && allocations.some(a => a.allocated_kw !== a.original_max_kw)
   };
   
   logs.push(`[EMS結果] AC分配總功率: ${summary.total_allocated_ac_kw.toFixed(2)}kW`);
   logs.push(`[EMS結果] DC分配總功率: ${summary.total_allocated_dc_kw.toFixed(2)}kW`);
-  logs.push(`[EMS結果] 總分配功率: ${(summary.total_allocated_ac_kw + summary.total_allocated_dc_kw).toFixed(2)}kW`);
+  logs.push(`[EMS結果] 總分配功率: ${summary.total_allocated_kw.toFixed(2)}kW`);
+  logs.push(`[EMS結果] 場域限制檢查: ${summary.within_limit ? '✅ 通過' : '❌ 超限'}`);
   
   return {
     allocations,
@@ -254,7 +479,7 @@ function applyAcLimits(gun, limit, logs) {
   }
   
   // 針對11kW AC充電樁設定最大電流限制為48A
-  if (parseFloat(gun.max_kw || 0) >= 11 && limit > 48) {
+  if (safeParseFloat(gun.max_kw) >= 11 && limit > 48) {
     limit = 48;
     logs.push(`[限制] ${gun.cpid} 11kW AC充電樁電流限制為最大值: ${limit}A`);
   }
@@ -270,10 +495,17 @@ function applyAcLimits(gun, limit, logs) {
  * @returns {number} 應用限制後的功率值
  */
 function applyDcLimits(gun, limit, logs) {
-  // DC充電樁只檢查是否為負值
-  if (limit <= 0) {
+  // DC充電樁最小不能低於1kW
+  if (limit < 1000) {
     limit = 1000; // DC最小1kW
     logs.push(`[警告] ${gun.cpid} DC充電樁功率過小，設為最小值: ${limit}W`);
+  }
+  
+  // DC充電樁不能超過規格功率
+  const maxPowerW = safeParseFloat(gun.max_kw) * 1000;
+  if (limit > maxPowerW) {
+    limit = maxPowerW;
+    logs.push(`[限制] ${gun.cpid} DC充電樁功率超過規格，限制為最大值: ${limit}W (規格:${gun.max_kw}kW)`);
   }
   
   return limit;
@@ -283,5 +515,6 @@ module.exports = {
   calculateEmsAllocation,
   isCharging,
   applyAcLimits,
-  applyDcLimits
+  applyDcLimits,
+  safeParseFloat
 };

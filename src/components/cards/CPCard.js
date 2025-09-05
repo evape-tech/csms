@@ -21,10 +21,6 @@ import {
   Tooltip,
   useTheme
 } from '@mui/material';
-import PowerIcon from '@mui/icons-material/Power';
-import PowerOffIcon from '@mui/icons-material/PowerOff';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import SettingsIcon from '@mui/icons-material/Settings';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import EditIcon from '@mui/icons-material/Edit';
