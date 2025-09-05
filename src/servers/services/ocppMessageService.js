@@ -403,15 +403,34 @@ async function handleStartTransaction(cpsn, messageBody) {
   logger.info(`处理充电站 ${cpsn} 的 StartTransaction: Connector ${connectorId}, IdTag: ${idTag}, MeterStart: ${meterStart}`);
   
   try {
+    // 开发模式：简化验证逻辑
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    
     // 获取CPID
-    const cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
+    let cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
     
     if (!cpid) {
-      logger.warn(`无法找到 ${cpsn}:${connectorId} 的CPID映射`);
-      return {
-        transactionId: -1,
-        idTagInfo: { status: "Invalid" }
-      };
+      if (isDevelopment) {
+        // 开发模式：尝试从数据库直接获取CPID
+        logger.warn(`[开发模式] 无法找到 ${cpsn}:${connectorId} 的CPID映射，尝试从数据库获取`);
+        try {
+          const guns = await chargePointRepository.getGuns({ cpsn: cpsn });
+          if (guns && guns.length > 0) {
+            cpid = guns[0].cpid;
+            logger.info(`[开发模式] 从数据库获取到 CPID: ${cpid}`);
+          }
+        } catch (dbError) {
+          logger.error(`[开发模式] 从数据库获取CPID失败:`, dbError);
+        }
+      }
+      
+      if (!cpid) {
+        logger.warn(`无法找到 ${cpsn}:${connectorId} 的CPID映射`);
+        return {
+          transactionId: -1,
+          idTagInfo: { status: "Invalid" }
+        };
+      }
     }
     
     // 验证idTag
@@ -425,8 +444,18 @@ async function handleStartTransaction(cpsn, messageBody) {
       };
     }
     
-    // 生成事务ID
-    const transactionId = Date.now();
+    // 生成事务ID - 根據 connectorId 設置固定值
+    let transactionId;
+    if (connectorId === 1) {
+      transactionId = 111;
+    } else if (connectorId === 2) {
+      transactionId = 222;
+    } else {
+      // 其他連接器使用時間戳
+      transactionId = Date.now();
+    }
+    
+    logger.info(`為 ${cpsn}:${connectorId} 分配 transactionId: ${transactionId}`);
     
     // 更新充电桩状态
     await chargePointRepository.updateConnectorStatus(cpid, "Charging");

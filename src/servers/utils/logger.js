@@ -52,7 +52,7 @@ function formatLog(level, message, details = null) {
   const timestamp = now.toISOString();
   const caller = getCallerInfo();
   
-  let logMessage = `[${timestamp}] [${level}] [${caller.file}:${caller.line}] ${message}`;
+  let logMessage = `[${timestamp}] [${level}] ${message}`;
   
   if (details) {
     if (typeof details === 'string') {

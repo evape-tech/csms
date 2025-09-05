@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
         console.log(`[API] 請求來源: IP=${ip}, UserAgent=${userAgent}`);
         
         // 呼叫 OCPP Server 的手動觸發 API
-        const ocppServerUrl = process.env.OCPP_SERVER_URL || 'http://localhost:8089';
+        const ocppServerUrl = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
         const triggerUrl = `${ocppServerUrl}/ocpp/api/trigger_profile_update`;
         
         console.log(`[API] 呼叫 OCPP Server: ${triggerUrl}`);

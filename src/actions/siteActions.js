@@ -7,73 +7,38 @@ import DatabaseUtils from '../lib/database/utils.js';
 import { databaseService } from '../lib/database/service.js';
 
 // OCPP 通知設定
-const OCPP_NOTIFY_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089/ocpp/api/spacepark_cp_api';
+const OCPP_BASE_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
 const OCPP_API_KEY = process.env.OCPP_API_KEY || '';
 
 async function notifyOcpp(payload) {
   console.log('[notifyOcpp] incoming payload:', JSON.stringify(payload));
 
-  const defaultApiKey = OCPP_API_KEY || 'cp_api_key16888';
-
-  // 構造 broadcastBody
-  let broadcastBody;
-  if (payload?.action === 'site_setting_changed' && payload.data) {
-    broadcastBody = {
-      apikey: defaultApiKey,
-      cmd: 'cmd_set_charging_profile',
-      payload: { siteSetting: payload.data },
-    };
-  } else if (payload && payload.cmd) {
-    broadcastBody = { apikey: defaultApiKey, ...payload };
-  } else {
-    broadcastBody = {
-      apikey: defaultApiKey,
-      cmd: 'cmd_set_charging_profile',
-      payload: { siteSetting: payload.data ?? payload },
-    };
-  }
-
-  console.log('[notifyOcpp] constructed broadcastBody:', JSON.stringify(broadcastBody));
-
   try {
-    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const guns = await databaseService.getGuns({});
-    const cpRows = guns.map((gun) => ({ cpid: gun.cpid }));
-    
-    console.log('[notifyOcpp] found cp rows count =', cpRows.length);
-    if (!cpRows || cpRows.length === 0) {
-      console.log('[notifyOcpp] no cpids found in database');
-      return;
-    }
+    // 使用新的API端點触发全站功率重新分配
+    const triggerPayload = {
+      source: payload?.action || 'site_setting_changed',
+      timestamp: new Date().toISOString(),
+      userAgent: 'NextJS-Server-Action',
+      clientIP: 'server'
+    };
 
-    const perCpPromises = cpRows
-      .filter((r) => typeof r.cpid === 'string' && r.cpid.length > 0)
-      .map((r) => {
-        const bodyPerCp = { ...broadcastBody, cp_id: r.cpid };
-        console.log('[notifyOcpp] sending to cp:', r.cpid, 'cmd:', bodyPerCp.cmd);
-        return fetch(OCPP_NOTIFY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPerCp),
-        })
-          .then(res => ({ cpid: r.cpid, ok: res.ok, status: res.status }))
-          .catch(err => ({ cpid: r.cpid, ok: false, error: String(err) }));
-      });
+    console.log('[notifyOcpp] triggering profile update with payload:', JSON.stringify(triggerPayload));
 
-    const results = await Promise.allSettled(perCpPromises);
-    const summary = { success: 0, fail: 0 };
-    results.forEach((r) => {
-      if (r.status === 'fulfilled') {
-        if (r.value.ok) summary.success += 1;
-        else summary.fail += 1;
-        console.log('[notifyOcpp] per-cp result:', r.value);
-      } else {
-        summary.fail += 1;
-        console.error('[notifyOcpp] per-cp promise rejected', r.reason);
-      }
+    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/trigger_profile_update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(triggerPayload),
     });
 
-    console.log('[notifyOcpp] summary:', JSON.stringify({ total: cpRows.length, success: summary.success, fail: summary.fail }));
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('[notifyOcpp] ✅ Profile update triggered successfully:', result);
+      console.log(`[notifyOcpp] 📊 Summary: ${result.onlineStations || 0} online stations, ${result.scheduledUpdates || 0} updates scheduled`);
+    } else {
+      console.error('[notifyOcpp] ❌ Profile update failed:', result);
+    }
+
   } catch (err) {
     console.error('[notifyOcpp] error:', err);
   }

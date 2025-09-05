@@ -8,93 +8,40 @@ import { databaseService } from '../../../lib/database/service.js';
 export const dynamic = 'force-dynamic';
 
 // notify configuration for ocpp server (used to inform ocpp service after DB changes)
-const OCPP_NOTIFY_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089/ocpp/api/spacepark_cp_api';
+const OCPP_BASE_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
 const OCPP_API_KEY = process.env.OCPP_API_KEY || '';
 
 async function notifyOcpp(payload: Record<string, unknown>) {
-  // notifyOcpp 註解與追蹤日誌：
-  // 1) 構造出 ocppController 預期的 body（broadcastBody）
-  // 2) 先嘗試一次對 OCPP_NOTIFY_URL 的「廣播呼叫」(若伺服器支援廣播)
-  // 3) 若廣播失敗或回傳非 2xx，則 fallback 去 DB 撈所有 cpid，逐一帶 cp_id 發送
-  // 4) 所有步驟均有詳細 console.log 以便追蹤
-
   console.log('[notifyOcpp] incoming payload:', JSON.stringify(payload));
 
-  const defaultApiKey = OCPP_API_KEY || 'cp_api_key16888';
-
-  // 構造 broadcastBody，使其符合 ocppController 的期待格式
-  let broadcastBody: Record<string, unknown>;
-  if (payload?.action === 'site_setting_changed' && payload.data) {
-    // site setting 被改變 — 使用 siteSetting 欄位包裹
-    broadcastBody = {
-      apikey: defaultApiKey,
-      cmd: 'cmd_set_charging_profile',
-      payload: { siteSetting: payload.data },
-    };
-  } else if (payload && payload.cmd) {
-    // payload 已經是 ocppController 預期的格式
-    broadcastBody = { apikey: defaultApiKey, ...payload };
-  } else {
-    // 通用 fallback 包裝
-    broadcastBody = {
-      apikey: defaultApiKey,
-      cmd: 'cmd_set_charging_profile',
-      payload: { siteSetting: payload.data ?? payload },
-    };
-  }
-
-  console.log('[notifyOcpp] constructed broadcastBody:', JSON.stringify(broadcastBody));
-
-  // broadcast disabled: proceed directly to per-CP loop
-  console.log('[notifyOcpp] broadcast attempt disabled; proceeding to per-CP sends');
-
-  // 逐台發送，並 log 每台結果
   try {
-    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const guns = await databaseService.getGuns({});
-    const cpRows = guns.map((gun: { cpid: unknown }) => ({ cpid: gun.cpid }));
-    
-    console.log('[notifyOcpp] fallback: found cp rows count =', cpRows.length);
-    if (!cpRows || cpRows.length === 0) {
-      console.log('[notifyOcpp] fallback: no cpids found in database');
-      return;
-    }
+    // 使用新的API端點触发全站功率重新分配
+    const triggerPayload = {
+      source: (payload?.action as string) || 'site_setting_changed',
+      timestamp: new Date().toISOString(),
+      userAgent: 'NextJS-API-Route',
+      clientIP: 'server'
+    };
 
-    // Filter out rows with null/empty cpid and map only confirmed string cpids
-    const perCpPromises = cpRows
-      .filter((r: { cpid: unknown }): r is { cpid: string } => typeof r.cpid === 'string' && r.cpid.length > 0)
-      .map((r: { cpid: string }) => {
-        const bodyPerCp = { ...broadcastBody, cp_id: r.cpid };
-        // log each outgoing body minimally (avoid huge logs)
-        console.log('[notifyOcpp] sending to cp:', r.cpid, 'cmd:', (broadcastBody as { cmd?: string }).cmd);
-        return fetch(OCPP_NOTIFY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPerCp),
-        })
-          .then(res => ({ cpid: r.cpid, ok: res.ok, status: res.status }))
-          .catch(err => ({ cpid: r.cpid, ok: false, error: String(err) }));
-      });
+    console.log('[notifyOcpp] triggering profile update with payload:', JSON.stringify(triggerPayload));
 
-    const results = await Promise.allSettled(perCpPromises);
-
-    // 簡短統計與每台結果 log
-    const summary = { success: 0, fail: 0, details: [] as Array<{ cpid: string; ok: boolean; status?: number; error?: string }> };
-    results.forEach((r: PromiseSettledResult<{ cpid: string; ok: boolean; status?: number; error?: string }>) => {
-      if (r.status === 'fulfilled') {
-        summary.details.push(r.value);
-        if (r.value.ok) summary.success += 1;
-        else summary.fail += 1;
-        console.log('[notifyOcpp] per-cp result:', r.value);
-      } else {
-        summary.fail += 1;
-        console.error('[notifyOcpp] per-cp promise rejected', r.reason);
-      }
+    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/trigger_profile_update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(triggerPayload),
     });
 
-    console.log('[notifyOcpp] per-cp summary:', JSON.stringify({ total: cpRows.length, success: summary.success, fail: summary.fail }));
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log('[notifyOcpp] ✅ Profile update triggered successfully:', result);
+      console.log(`[notifyOcpp] 📊 Summary: ${result.onlineStations || 0} online stations, ${result.scheduledUpdates || 0} updates scheduled`);
+    } else {
+      console.error('[notifyOcpp] ❌ Profile update failed:', result);
+    }
+
   } catch (err) {
-    console.error('[notifyOcpp] fallback error:', err);
+    console.error('[notifyOcpp] error:', err);
   }
 }
 

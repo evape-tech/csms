@@ -285,6 +285,136 @@ async function getSiteSettings() {
   }
 }
 
+/**
+ * 验证IdTag是否有效
+ * @param {string} idTag 用户标识标签
+ * @returns {Promise<boolean>} 是否有效
+ */
+async function validateIdTag(idTag) {
+  try {
+    // 開發階段：跳過所有驗證，直接返回 true
+    logger.debug(`[開發階段] 跳過 IdTag 驗證，直接接受: ${idTag}`);
+    return true;
+    
+    // 以下代碼暫時註解，等正式環境再啟用
+    /*
+    await ensureDbInitialized();
+    
+    // 開發模式：接受所有非空的 idTag
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    
+    // 基本验证逻辑：非空且长度合理
+    if (!idTag || typeof idTag !== 'string' || idTag.trim().length === 0) {
+      logger.warn(`IdTag 格式无效: ${idTag}`);
+      return false;
+    }
+    
+    // 開發模式下，接受所有有效格式的 idTag
+    if (isDevelopment) {
+      logger.debug(`[開發模式] 接受 IdTag: ${idTag}`);
+      return true;
+    }
+    
+    // 如果是来自web界面的标签，直接认为有效
+    if (idTag === 'web_interface_tag' || idTag.startsWith('web_')) {
+      logger.debug(`接受web界面标签: ${idTag}`);
+      return true;
+    }
+    
+    // 如果是测试标签，直接认为有效
+    if (idTag.startsWith('test_') || idTag === 'default_tag') {
+      logger.debug(`接受测试标签: ${idTag}`);
+      return true;
+    }
+    
+    // 对于其他标签，可以在这里添加更复杂的验证逻辑
+    // 例如：查询用户数据库、检查授权状态等
+    
+    logger.debug(`IdTag 验证通过: ${idTag}`);
+    return true;
+    */
+  } catch (error) {
+    logger.error(`验证IdTag失败: ${idTag}`, error);
+    return true; // 開發階段：即使出錯也返回 true
+  }
+}
+
+/**
+ * 创建交易记录
+ * @param {Object} transactionData 交易数据
+ * @returns {Promise<Object>} 创建的交易记录
+ */
+async function createTransactionRecord(transactionData) {
+  try {
+    await ensureDbInitialized();
+    const { databaseService: dbService } = await loadDatabaseModules();
+    
+    // 更新充电桩的交易ID
+    if (transactionData.cpid && transactionData.transactionId) {
+      await updateGun(
+        { cpid: transactionData.cpid },
+        { transactionid: String(transactionData.transactionId) }
+      );
+    }
+    
+    // 记录交易日志
+    const logData = {
+      cpid: transactionData.cpid,
+      cpsn: transactionData.cpsn || '',
+      log: `StartTransaction - 开始充电交易 ${transactionData.transactionId}`,
+      time: new Date(),
+      inout: 'transaction'
+    };
+    
+    await createCpLogEntry(logData);
+    logger.debug(`创建交易记录成功: ${transactionData.transactionId}`);
+    
+    return {
+      id: transactionData.transactionId,
+      ...transactionData,
+      createdAt: new Date()
+    };
+  } catch (error) {
+    logger.error(`创建交易记录失败`, error);
+    throw error;
+  }
+}
+
+/**
+ * 查找交易记录
+ * @param {string} transactionId 交易ID
+ * @returns {Promise<Object|null>} 交易记录
+ */
+async function findTransaction(transactionId) {
+  try {
+    await ensureDbInitialized();
+    const { databaseService: dbService } = await loadDatabaseModules();
+    
+    // 通过查找带有该交易ID的充电桩来找到交易
+    const guns = await dbService.getGuns({ transactionid: String(transactionId) });
+    
+    if (guns.length > 0) {
+      const gun = guns[0];
+      logger.debug(`找到交易记录: ${transactionId} 对应充电桩 ${gun.cpid}`);
+      
+      return {
+        id: transactionId,
+        cpid: gun.cpid,
+        cpsn: gun.cpsn,
+        connector: gun.connector || 1,
+        status: gun.guns_status,
+        startTime: gun.updatedAt
+      };
+    } else {
+      logger.warn(`未找到交易记录: ${transactionId}`);
+      return null;
+    }
+  } catch (error) {
+    logger.error(`查找交易记录失败: ${transactionId}`, error);
+    return null;
+  }
+}
+
 module.exports = {
   loadDatabaseModules,
   ensureDbInitialized,
@@ -296,5 +426,8 @@ module.exports = {
   updateConnectorStatus,
   updateGunMeterValues,
   createCpLogEntry,
-  getSiteSettings
+  getSiteSettings,
+  validateIdTag,
+  createTransactionRecord,
+  findTransaction
 };
