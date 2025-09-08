@@ -19,7 +19,8 @@
     "db:push:mssql": "npx prisma db push --schema=prisma/schema.mssql.prisma",
     "db:studio:mysql": "npx prisma studio --schema=prisma/schema.prisma",
     "db:studio:mssql": "npx prisma studio --schema=prisma/schema.mssql.prisma",
-    "db:init": "node scripts/init-database.js"
+    "db:init": "node scripts/init-database.js",
+    "db:init-tariffs": "node scripts/init-tariffs.js"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

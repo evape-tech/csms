@@ -4,7 +4,7 @@ export default (sequelize, DataTypes) => {
     ems_mode: { type: DataTypes.STRING, defaultValue: 'static' },
     max_power_kw: { type: DataTypes.DECIMAL(10,2), defaultValue: 480.00 }
   }, {
-    tableName: 'site_settings',
+    tableName: 'stations',
     timestamps: false
   });
 };

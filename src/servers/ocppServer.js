@@ -50,6 +50,9 @@ const emsEventConsumer = MQ_ENABLED ? require('./consumers/emsEventConsumer') : 
 const notificationService = MQ_ENABLED ? require('./services/notificationService') : null;
 const systemStatusService = MQ_ENABLED ? require('./services/systemStatusService') : null;
 
+// 引入孤兒交易監控服務
+const { orphanTransactionService } = require('./services/orphanTransactionService');
+
 /**
  * 发布充电桩连接状态事件到MQ
  * @param {string} id - 充电桩ID 
@@ -263,6 +266,28 @@ function initializeRoutes() {
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
+  
+  // 添加触发电表级功率重新分配的API
+  app.post('/ocpp/api/trigger_meter_reallocation', async (req, res) => {
+    try {
+      const emsController = require('./controllers/emsController');
+      await emsController.trigger_meter_reallocation(req, res);
+    } catch (err) {
+      logger.error('触发电表级功率重新分配失败', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+  
+  // 添加触发站点级功率重新分配的API
+  app.post('/ocpp/api/trigger_station_reallocation', async (req, res) => {
+    try {
+      const emsController = require('./controllers/emsController');
+      await emsController.trigger_station_reallocation(req, res);
+    } catch (err) {
+      logger.error('触发站点级功率重新分配失败', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
 }
 
 /**
@@ -422,6 +447,14 @@ async function gracefulShutdown(signal) {
   if (systemStatusService) {
     systemStatusService.updateServerStatus('stopping');
   }
+
+  // 停止孤兒交易監控服務
+  try {
+    orphanTransactionService.stop();
+    logger.info('🔍 孤兒交易監控服務已停止');
+  } catch (error) {
+    logger.error(`⚠️ 停止孤兒交易監控服務失败: ${error.message}`);
+  }
   
   // 尝试发送关闭通知
   if (MQ_ENABLED && mqServer && mqServer.isConnected() && systemStatusService) {
@@ -491,6 +524,18 @@ async function startServer() {
     logger.info('⚡ EMS能源管理系统初始化完成');
   } catch (error) {
     logger.error(`⚠️ EMS系统初始化失败: ${error.message}`);
+  }
+
+  // 啟動孤兒交易監控服務
+  try {
+    orphanTransactionService.start({
+      checkIntervalMinutes: 10,      // 每10分鐘檢查一次
+      transactionTimeoutMinutes: 30, // 30分鐘超時
+      meterUpdateTimeoutMinutes: 15  // 15分鐘電表更新超時
+    });
+    logger.info('🔍 孤兒交易監控服務已啟動');
+  } catch (error) {
+    logger.error(`⚠️ 孤兒交易監控服務啟動失败: ${error.message}`);
   }
   
   // 启动HTTP服务器

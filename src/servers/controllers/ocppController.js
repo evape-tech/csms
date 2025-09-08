@@ -386,11 +386,89 @@ async function trigger_profile_update(req, res) {
   }
 }
 
+/**
+ * 手動觸發特定電表功率重新分配
+ * @param {Object} req 请求对象
+ * @param {Object} res 响应对象
+ */
+async function trigger_meter_reallocation(req, res) {
+  try {
+    logger.info('🔄 收到手动触发电表功率重新分配请求');
+    logger.info(`📊 请求参数:`, JSON.stringify(req.body));
+    
+    const { meter_id, source = 'manual-api-trigger' } = req.body;
+    
+    if (!meter_id) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数: meter_id',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    logger.info(`🎯 针对电表 ${meter_id} 触发功率重新分配`);
+    
+    // 导入EMS控制器并调用其方法
+    const emsController = require('./emsController');
+    return await emsController.trigger_meter_reallocation(req, res);
+    
+  } catch (error) {
+    logger.error('❌ 触发电表功率重新分配过程中发生错误:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: '触发电表功率重新分配失败',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/**
+ * 手動觸發特定站點功率重新分配
+ * @param {Object} req 请求对象
+ * @param {Object} res 响应对象
+ */
+async function trigger_station_reallocation(req, res) {
+  try {
+    logger.info('🏢 收到手动触发站点功率重新分配请求');
+    logger.info(`📊 请求参数:`, JSON.stringify(req.body));
+    
+    const { station_id, source = 'manual-api-trigger' } = req.body;
+    
+    if (!station_id) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要参数: station_id',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    logger.info(`🎯 针对站点 ${station_id} 触发功率重新分配`);
+    
+    // 导入EMS控制器并调用其方法
+    const emsController = require('./emsController');
+    return await emsController.trigger_station_reallocation(req, res);
+    
+  } catch (error) {
+    logger.error('❌ 触发站点功率重新分配过程中发生错误:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: '触发站点功率重新分配失败',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
 module.exports = {
   handleConnection,
   startRemoteCharging,
   stopRemoteCharging,
   resetChargePoint,
   getOnlineChargePoints,
-  trigger_profile_update
+  trigger_profile_update,
+  trigger_meter_reallocation,
+  trigger_station_reallocation
 };

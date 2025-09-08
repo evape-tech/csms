@@ -51,14 +51,19 @@ interface GunData {
   [key: string]: unknown;
 }
 
-interface SiteSettingData {
+interface StationData {
+  [key: string]: unknown;
+}
+
+interface MeterData {
   [key: string]: unknown;
 }
 
 export default async function ChargingStatus() {
   // --- load Gun table directly via databaseService on the server ---
   let gunsFromDb: GunData[] = [];
-  let siteSettingsFromDb: SiteSettingData[] = [];
+  let stationsFromDb: StationData[] = [];
+  let metersFromDb: MeterData[] = [];
   
   try {
     console.log(`🔍 [Page /charging_status] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
@@ -66,28 +71,35 @@ export default async function ChargingStatus() {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     
-    // 並行獲取 guns 和 site_settings 數據
-    const [gunsRows, siteSettingsRows] = await Promise.all([
+    // 並行獲取 guns、stations 和 meters 數據
+    const [gunsRows, stationsRows, metersRows] = await Promise.all([
       databaseService.getGuns({}),
-      databaseService.getSiteSettings()
+      databaseService.getStations(),
+      databaseService.getMeters()
     ]);
     
     // 處理 guns 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
     gunsFromDb = gunsRows.map((r: Record<string, unknown>) => serializeData(r));
     
-    // 處理 site_settings 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
-    siteSettingsFromDb = siteSettingsRows.map((r: Record<string, unknown>) => serializeData(r));
+    // 處理 stations 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
+    stationsFromDb = stationsRows.map((r: Record<string, unknown>) => serializeData(r));
+    
+    // 處理 meters 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
+    metersFromDb = metersRows.map((r: Record<string, unknown>) => serializeData(r));
     
     console.log(`✅ [Page /charging_status] Loaded guns via databaseService:`, gunsFromDb.length);
-    console.log(`✅ [Page /charging_status] Loaded site settings via databaseService:`, siteSettingsFromDb.length);
+    console.log(`✅ [Page /charging_status] Loaded stations via databaseService:`, stationsFromDb.length);
+    console.log(`✅ [Page /charging_status] Loaded meters via databaseService:`, metersFromDb.length);
     
     // 最後一次驗證確保所有數據都被序列化為純 JavaScript 對象
     gunsFromDb = JSON.parse(JSON.stringify(gunsFromDb));
-    siteSettingsFromDb = JSON.parse(JSON.stringify(siteSettingsFromDb));
+    stationsFromDb = JSON.parse(JSON.stringify(stationsFromDb));
+    metersFromDb = JSON.parse(JSON.stringify(metersFromDb));
   } catch (err) {
     console.error('Failed to load data from DB:', err);
     gunsFromDb = [];
-    siteSettingsFromDb = [];
+    stationsFromDb = [];
+    metersFromDb = [];
   }
 
   return (
@@ -95,11 +107,11 @@ export default async function ChargingStatus() {
 
       {/* 充電樁狀態概覽卡片 */}
       <Box sx={{ mb: 2 }}>
-        <ChargingStatusCard siteSettings={siteSettingsFromDb} guns={gunsFromDb} />
+        <ChargingStatusCard stations={stationsFromDb} guns={gunsFromDb} />
       </Box>
 
       {/* 充電樁列表與控制區塊（全部交由CPCard處理） */}
-      <CPCard chargers={gunsFromDb} />
+      <CPCard chargers={gunsFromDb} stations={stationsFromDb} meters={metersFromDb} />
     </Box>
   );
 }

@@ -14,6 +14,9 @@ const ocppMessageService = require('./ocppMessageService');
 // 引入EMS分配算法
 const { calculateEmsAllocation, isCharging } = require('../../lib/emsAllocator');
 
+// 电表和充电枪相关辅助函数
+let databaseService;
+
 // 定义事件类型
 const EVENT_TYPES = {
   ALLOCATION_REQUEST: 'allocation.request',
@@ -74,7 +77,42 @@ async function handleAllocationRequest(data) {
   logger.info(`🔋 处理功率分配请求:`, data);
   
   try {
-    const { siteSetting, allGuns, onlineCpids } = data;
+    let { siteSetting, allGuns, onlineCpids } = data;
+    
+    // 设置默认值
+    let finalSiteSetting = {
+      ems_mode: 'static',
+      max_power_kw: 100,
+      station_id: 0,
+      station_name: 'Default Station'
+    };
+    
+    // 如果提供的是站点对象而不是电表级别的配置，进行转换
+    if (siteSetting) {
+      if (siteSetting.meters && Array.isArray(siteSetting.meters) && siteSetting.meters.length > 0) {
+        // 从站点中获取第一个电表的配置
+        const meter = siteSetting.meters[0];
+        finalSiteSetting = {
+          ems_mode: meter.ems_mode || 'static',
+          max_power_kw: meter.max_power_kw || 100,
+          station_id: siteSetting.id || 0,
+          station_name: siteSetting.name || 'Unknown Station'
+        };
+      } else if (siteSetting.ems_mode || siteSetting.max_power_kw) {
+        // 如果直接提供了ems_mode或max_power_kw
+        finalSiteSetting = {
+          ems_mode: siteSetting.ems_mode || 'static',
+          max_power_kw: siteSetting.max_power_kw || 100,
+          station_id: siteSetting.station_id || 0,
+          station_name: siteSetting.station_name || 'Unknown Station'
+        };
+      }
+    } else {
+      logger.warn('🔋 缺少场域设置，使用默认值');
+    }
+    
+    // 使用处理后的siteSetting
+    siteSetting = finalSiteSetting;
     
     // 执行EMS分配算法
     const result = calculateEmsAllocation(siteSetting, allGuns, onlineCpids);
@@ -111,74 +149,143 @@ async function handleAllocationRequest(data) {
  */
 async function handleGlobalReallocation(data) {
   const reallocationId = data.reallocationId || `auto_${Date.now()}`;
-  logger.info(`[全站重分配-MQ] 🔄 处理全站功率重新分配事件 (ID: ${reallocationId})`);
+  logger.info(`[全站重分配-MQ] 🔄 处理所有站點電表功率重新分配事件 (ID: ${reallocationId})`);
   
   try {
-    const { onlineCpids, siteSetting, immediate = false, eventType, eventDetails } = data;
+    let { immediate = false, eventType, eventDetails } = data;
     
-    if (!onlineCpids || !Array.isArray(onlineCpids) || onlineCpids.length === 0) {
-      logger.warn(`[全站重分配-MQ] ⚠️ 无在线充电桩数据或列表为空，跳过处理`);
+    // 獲取所有站點和電表，不依賴傳入的 onlineCpids 列表
+    const allStations = await chargePointRepository.getStations();
+    
+    if (!allStations || allStations.length === 0) {
+      logger.warn(`[全站重分配-MQ] ⚠️ 沒有找到任何站點，跳過處理`);
       return false;
     }
     
-    if (!siteSetting) {
-      logger.warn(`[全站重分配-MQ] ⚠️ 缺少场域设置数据，跳过处理`);
-      return false;
-    }
+    logger.info(`[全站重分配-MQ] 📋 處理 ${allStations.length} 個站點的所有電表`);
     
-    logger.info(`[全站重分配-MQ] 📋 处理 ${onlineCpids.length} 个在线充电桩`);
-    logger.info(`[全站重分配-MQ] 📊 场域设置: EMS模式=${siteSetting.ems_mode}, 最大功率=${siteSetting.max_power_kw}kW`);
-    
-    // 清除所有现有定时器
-    clearAllProfileUpdateTimers();
-    logger.info(`[全站重分配-MQ] 🧹 已清除所有现有功率配置定时器`);
-    
-    // 执行批量调度处理
-    let scheduledCount = 0;
-    const baseDelay = immediate ? 0 : 1000; 
-    const intervalDelay = immediate ? 100 : 500; 
+    let totalProcessedMeters = 0;
+    let totalScheduledUpdates = 0;
     const executionMode = immediate ? '立即执行' : '延迟排程';
     
-    logger.info(`[全站重分配-MQ] 🚀 开始批量${executionMode}功率配置更新...`);
-    
-    for (let i = 0; i < onlineCpids.length; i++) {
-      const cpid = onlineCpids[i];
-      const delay = baseDelay + (i * intervalDelay);
+    // 依序處理每個站點下的所有電表
+    for (const station of allStations) {
+      if (!station.meters || !Array.isArray(station.meters) || station.meters.length === 0) {
+        logger.info(`[全站重分配-MQ] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
+        continue;
+      }
       
-      // 使用特殊标记表示这是全站重新分配
-      await scheduleProfileUpdate(cpid, delay, {
-        isGlobalReallocation: true,
-        isManualTrigger: immediate,
-        reallocationId: reallocationId,
-        triggerEvent: eventType,
-        triggerDetails: eventDetails
-      });
+      logger.info(`[全站重分配-MQ] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
       
-      scheduledCount++;
+      // 依序處理每個電表
+      for (const meter of station.meters) {
+        try {
+          // 獲取該電表下的充電桩
+          const gunsForMeter = await chargePointRepository.getAllGuns({ meter_id: meter.id });
+          const meterCpids = gunsForMeter.map(gun => gun.cpid).filter(cpid => cpid);
+          
+          if (meterCpids.length === 0) {
+            logger.info(`[全站重分配-MQ] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
+            continue;
+          }
+          
+          // 過濾出在線的充電桩
+          const onlineCpids = await connectionService.getOnlineCpids();
+          const onlineMeterCpids = meterCpids.filter(cpid => onlineCpids.includes(cpid));
+          
+          if (onlineMeterCpids.length === 0) {
+            logger.info(`[全站重分配-MQ] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
+            continue;
+          }
+          
+          logger.info(`[全站重分配-MQ] ⚡ 處理電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
+          
+          // 為該電表配置功率分配
+          await configureStationPowerDistribution(onlineMeterCpids, {
+            immediate,
+            eventType: `${eventType || 'mq_event'}_MeterReallocation`,
+            eventDetails: {
+              ...(eventDetails || {}),
+              meter_id: meter.id,
+              station_id: station.id,
+              station_name: station.name,
+              meter_name: meter.meter_no,
+              reallocationId,
+              triggerEvent: eventType || 'mq_event'
+            }
+          });
+          
+          totalScheduledUpdates += onlineMeterCpids.length;
+          totalProcessedMeters++;
+          
+          // 加入小延遲避免過於頻繁的處理
+          if (!immediate) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+          
+        } catch (meterError) {
+          logger.error(`[全站重分配-MQ] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
+        }
+      }
     }
     
-    logger.info(`[全站重分配-MQ] � 重分配统计:`);
-    logger.info(`[全站重分配-MQ]   - 执行模式: ${executionMode} (事件驱动)`);
-    logger.info(`[全站重分配-MQ]   - 在线充电桩: ${onlineCpids.length} 个`);
-    logger.info(`[全站重分配-MQ]   - 排程更新: ${scheduledCount} 个`);
-    logger.info(`[全站重分配-MQ]   - 预计完成: ${baseDelay + (scheduledCount * intervalDelay)}ms 后`);
+    if (totalScheduledUpdates > 0) {
+      logger.info(`[全站重分配-MQ] 📈 重分配统计:`);
+      logger.info(`[全站重分配-MQ]   - 执行模式: ${executionMode} (事件驱动)`);
+      logger.info(`[全站重分配-MQ]   - 處理站點: ${allStations.length} 個`);
+      logger.info(`[全站重分配-MQ]   - 處理電表: ${totalProcessedMeters} 個`);
+      logger.info(`[全站重分配-MQ]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
+      
+      // 发送通知
+      await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
+        type: 'GLOBAL_REALLOCATION',
+        message: `所有站點電表功率重分配事件處理完成，共排程 ${totalScheduledUpdates} 個充電桩配置更新`,
+        data: {
+          reallocationId,
+          eventType: eventType || 'mq_event',
+          totalStations: allStations.length,
+          totalMeters: totalProcessedMeters,
+          scheduledCount: totalScheduledUpdates,
+          executionMode: `${executionMode} (事件驱动)`,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+      return true;
+    } else {
+      logger.warn(`[全站重分配-MQ] ⚠️ 沒有找到任何需要處理的在線充電桩`);
+      
+      // 发送通知
+      await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
+        type: 'GLOBAL_REALLOCATION_SKIP',
+        message: `所有站點電表功率重分配事件跳過，沒有找到在線充電桩`,
+        data: {
+          reallocationId,
+          eventType: eventType || 'mq_event',
+          totalStations: allStations.length,
+          totalMeters: totalProcessedMeters,
+          scheduledCount: 0,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+      return false;
+    }
     
-    // 发送通知
+  } catch (error) {
+    logger.error(`[全站重分配-MQ] ❌ 處理過程發生錯誤: ${error.message}`, error);
+    
+    // 发送错误通知
     await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
-      type: 'GLOBAL_REALLOCATION',
-      message: `全站功率重分配事件处理完成，共排程 ${scheduledCount} 个充电桩配置更新`,
+      type: 'GLOBAL_REALLOCATION_ERROR',
+      message: `所有站點電表功率重分配事件處理失敗: ${error.message}`,
       data: {
         reallocationId,
-        eventType,
-        scheduledCount,
-        executionMode: `${executionMode} (事件驱动)`,
+        error: error.message,
         timestamp: new Date().toISOString()
       }
     });
     
-    return true;
-  } catch (error) {
-    logger.error(`[全站重分配-MQ] ❌ 全站功率重新分配处理失败: ${error.message}`, error);
     return false;
   }
 }
@@ -265,66 +372,52 @@ async function scheduleGlobalPowerReallocation(eventType, eventDetails = {}, imm
     
     logger.info(`[全站重分配] 📊 找到 ${onlineCpids.length} 个在线充电桩: [${onlineCpids.join(', ')}]`);
     
-    // 2. 获取场域设置
-    const siteSetting = await chargePointRepository.getSiteSettings();
-    logger.info(`[全站重分配] ⚙️ 场域设置: EMS模式=${siteSetting.ems_mode}, 最大功率=${siteSetting.max_power_kw}kW`);
+    // 使用新函数配置站点功率分配，利用电表分组机制
+    const result = await configureStationPowerDistribution(onlineCpids, {
+      immediate: immediate,
+      eventType: eventType,
+      eventDetails: eventDetails
+    });
     
-    // 3. 清除所有现有的功率配置定时器，避免冲突
-    logger.debug(`[全站重分配] 🧹 清除现有功率配置定时器...`);
-    clearAllProfileUpdateTimers();
-    
-    // 4. 批量排程所有在线充电桩的功率配置更新
-    const executionMode = immediate ? '立即执行' : '延迟排程';
-    logger.info(`[全站重分配] 🚀 开始批量${executionMode}功率配置更新...`);
-    
-    let scheduledCount = 0;
-    const baseDelay = immediate ? 0 : 1000; // 手动触发时无延迟，自动触发时基础延迟 1 秒
-    const intervalDelay = immediate ? 100 : 500; // 手动触发时间隔较短
-    
-    for (let i = 0; i < onlineCpids.length; i++) {
-      const cpid = onlineCpids[i];
-      const delay = baseDelay + (i * intervalDelay);
+    if (result.success) {
+      logger.info(`[全站重分配] ✅ 站点功率配置成功 (ID: ${reallocationId})`);
+      logger.info(`[全站重分配] 📈 重分配统计:`);
+      logger.info(`[全站重分配]   - 执行模式: ${immediate ? '立即执行' : '延迟排程'}`);
+      logger.info(`[全站重分配]   - 触发事件: ${eventType}`);
+      logger.info(`[全站重分配]   - 电表总数: ${result.total_meters} 个`);
+      logger.info(`[全站重分配]   - 在线充电桩: ${onlineCpids.length} 个`);
+      logger.info(`[全站重分配]   - 排程更新: ${result.total_scheduled} 个`);
       
-      if (immediate) {
-        logger.debug(`[全站重分配] ⚡ 立即执行 ${cpid} 功率配置更新，间隔 ${delay}ms`);
-      } else {
-        logger.debug(`[全站重分配] ⚡ 排程 ${cpid} 功率配置更新，延迟 ${delay}ms`);
-      }
+      // 延迟显示全站功率配置总览
+      const totalDelay = (immediate ? 1000 : 2000) + (result.total_scheduled * (immediate ? 100 : 300));
+      setTimeout(async () => {
+        try {
+          logger.info(`[全站重分配] 📊 显示重分配后的功率配置总览...`);
+          
+          // 获取所有电表和充电枪信息
+          const allMeters = await getMetersAndGunsForStation();
+          if (allMeters.length > 0) {
+            const firstMeter = allMeters[0];
+            const emsMode = firstMeter.ems_mode || 'static';
+            const maxPower = firstMeter.max_power_kw ? parseFloat(firstMeter.max_power_kw) : 100;
+            const stationId = firstMeter.station_id;
+            
+            logger.info(`[全站重分配] 使用电表配置: 模式=${emsMode}, 最大功率=${maxPower}kW, 站点ID=${stationId}`);
+            await logCurrentPowerConfiguration(emsMode, maxPower, stationId);
+            logger.info(`[全站重分配] 🎯 全站重分配完全完成 (ID: ${reallocationId})`);
+          } else {
+            logger.warn(`[全站重分配] ⚠️ 无法获取电表信息，跳过功率配置总览`);
+          }
+        } catch (error) {
+          logger.error(`[全站重分配] ❌ 显示功率总览失败: ${error.message}`, error);
+        }
+      }, totalDelay);
       
-      // 使用特殊标记表示这是全站重新分配
-      await scheduleProfileUpdate(cpid, delay, {
-        isGlobalReallocation: true,
-        isManualTrigger: immediate,
-        reallocationId: reallocationId,
-        triggerEvent: eventType,
-        triggerDetails: eventDetails
-      });
-      
-      scheduledCount++;
+      return true;
+    } else {
+      logger.error(`[全站重分配] ❌ 站点功率配置失败: ${result.message}`);
+      return false;
     }
-    
-    logger.info(`[全站重分配] 📈 重分配统计:`);
-    logger.info(`[全站重分配]   - 执行模式: ${executionMode}`);
-    logger.info(`[全站重分配]   - 触发事件: ${eventType}`);
-    logger.info(`[全站重分配]   - 在线充电桩: ${onlineCpids.length} 个`);
-    logger.info(`[全站重分配]   - 排程更新: ${scheduledCount} 个`);
-    logger.info(`[全站重分配]   - 预计完成: ${baseDelay + (scheduledCount * intervalDelay)}ms 后`);
-    logger.info(`[全站重分配] ✅ 全站功率重新分配排程完成 (ID: ${reallocationId})`);
-    
-    // 5. 延迟显示全站功率配置总览
-    const totalDelay = baseDelay + (scheduledCount * intervalDelay) + (immediate ? 1000 : 2000); // 手动触发较短等待时间
-    setTimeout(async () => {
-      try {
-        logger.info(`[全站重分配] 📊 显示重分配后的功率配置总览...`);
-        await logCurrentPowerConfiguration(siteSetting.ems_mode, parseFloat(siteSetting.max_power_kw));
-        logger.info(`[全站重分配] 🎯 全站重分配完全完成 (ID: ${reallocationId})`);
-      } catch (error) {
-        logger.error(`[全站重分配] ❌ 显示功率总览失败: ${error.message}`, error);
-      }
-    }, totalDelay);
-    
-    return true;
-    
   } catch (error) {
     logger.error(`[全站重分配] ❌ 全站功率重新分配失败 (ID: ${reallocationId}): ${error.message}`, error);
     return false;
@@ -387,8 +480,58 @@ async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS, c
     }
     
     try {
-      // 获取场域设置
-      const siteSetting = await chargePointRepository.getSiteSettings();
+      // 设置默认值
+      let siteSetting = {
+        station_id: 0,
+        station_name: 'Default Station',
+        ems_mode: 'static',
+        max_power_kw: 100
+      };
+      
+      // 如果上下文中有传递siteSetting，则优先使用
+      if (context.siteSetting) {
+        siteSetting = {
+          ...siteSetting,
+          ...context.siteSetting
+        };
+        logger.debug(`${logPrefix} ${cpid} 使用上下文中的场域设置`);
+      } else {
+        // 获取充电枪信息
+        const guns = await chargePointRepository.getAllGuns({ cpid });
+        
+        if (guns.length === 0) {
+          logger.warn(`${logPrefix} 找不到充电桩 ${cpid} 的信息，无法下发配置`);
+          return;
+        }
+        
+        const gun = guns[0];
+        
+        // 获取该充电枪对应电表的配置
+        const meter = await getMeterForGun(gun);
+        
+        if (meter) {
+          logger.debug(`${logPrefix} ${cpid} 找到关联电表: ID=${meter.id}`);
+          
+          // 获取电表所属的站点信息
+          const stations = await chargePointRepository.getStations();
+          let station = null;
+          
+          if (stations && Array.isArray(stations)) {
+            station = stations.find(s => s.meters && s.meters.some(m => m.id === meter.id));
+          }
+          
+          siteSetting = {
+            station_id: station ? station.id : 0,
+            station_name: station ? station.name : 'Unknown Station',
+            ems_mode: meter.ems_mode || 'static',
+            max_power_kw: meter.max_power_kw || 100,
+            meter_id: meter.id
+          };
+        } else {
+          logger.warn(`${logPrefix} ${cpid} 未找到关联电表，使用默认值`);
+        }
+      }
+      
       logger.debug(`${logPrefix} ${cpid} 使用场域设置: ${JSON.stringify(siteSetting)}`);
       
       // 触发配置更新 - 使用 ocppMessageService
@@ -413,7 +556,7 @@ async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS, c
         }
         
         // 直接调用sendChargingProfile避开循环依赖
-        logger.info(`${logPrefix} 为 ${cpid} (${cpsn}:${connectorId}) 下发配置`);
+        logger.info(`${logPrefix} 为 ${cpid} (${cpsn}:${connectorId}) 下发配置，电表ID: ${siteSetting.meter_id || '未知'}`);
         await ocppMessageService.sendChargingProfile(cpsn, connectorId, siteSetting);
       } catch (err) {
         logger.error(`${logPrefix} 下发配置失败: ${err.message}`);
@@ -431,12 +574,12 @@ async function scheduleProfileUpdate(cpid, delay = PROFILE_UPDATE_DEBOUNCE_MS, c
         const gun = guns.length > 0 ? guns[0] : null;
         if (gun) {
           const emoji = isGlobalReallocation ? '🌐' : '🔍';
-          logger.info(`${emoji} [单桩更新] ${cpid} -> 类型:${gun.acdc} | 规格:${gun.max_kw}kW | 状态:${gun.guns_status} | EMS:${siteSetting.ems_mode}`);
+          const emsMode = siteSetting.ems_mode || 'UNKNOWN';
+          logger.info(`${emoji} [单桩更新] ${cpid} -> 类型:${gun.acdc} | 规格:${gun.max_kw}kW | 状态:${gun.guns_status} | EMS:${emsMode} | 电表ID:${siteSetting.meter_id || gun.meter_id || '未知'}`);
         }
       } catch (e) {
         logger.warn(`${logPrefix} 无法获取 ${cpid} 详细信息: ${e.message}`);
       }
-      
     } catch (error) {
       logger.error(`${logPrefix} ${cpid} 更新失败: ${error.message}`, error);
     }
@@ -474,15 +617,19 @@ function clearAllProfileUpdateTimers() {
  * 显示所有充电桩的功率分配状况，包含 A 和 W 的详细记录
  * 
  * 从旧版 ocppController.js 的 logCurrentPowerConfiguration 迁移
+ * 已适配新的数据库结构（stations - meters - guns）
  * 
  * @param {string} emsMode EMS 模式 (static/dynamic)
  * @param {number} maxPowerKw 场域总功率限制
+ * @param {number} stationId 站点ID，用于筛选特定站点的充电桩
  */
-async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
+async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = null) {
   try {
     logger.info('\n' + '='.repeat(80));
     logger.info('📊 【全站功率配置总览】');
-    logger.info(`🔧 EMS模式: ${emsMode.toUpperCase()} | 💡 场域总功率: ${maxPowerKw}kW`);
+    const formattedEmsMode = emsMode ? emsMode.toUpperCase() : 'UNKNOWN';
+    const formattedMaxPower = maxPowerKw ? parseFloat(maxPowerKw) : 0;
+    logger.info(`🔧 EMS模式: ${formattedEmsMode} | 💡 场域总功率: ${formattedMaxPower}kW`);
     logger.info('='.repeat(80));
     
     // 获取所有充电桩数据
@@ -576,11 +723,12 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
     }
     
     // 功率使用统计 - 使用EMS分配结果
-    const totalUsedPower = emsResult.summary.total_allocated_kw;
-    const powerUtilization = (totalUsedPower / maxPowerKw * 100).toFixed(1);
+    const totalUsedPower = emsResult.summary.total_allocated_kw || 0;
+    const maxPowerKwNum = isNaN(maxPowerKw) ? 0 : parseFloat(maxPowerKw) || 0;
+    const powerUtilization = maxPowerKwNum > 0 ? ((totalUsedPower / maxPowerKwNum) * 100).toFixed(1) : '0.0';
     
     logger.info(`📊 功率使用统计:`);
-    logger.info(`  💡 场域总功率: ${maxPowerKw}kW`);
+    logger.info(`  💡 场域总功率: ${maxPowerKwNum}kW`);
     logger.info(`  ⚡ 实际使用功率: ${totalUsedPower.toFixed(2)}kW`);
     logger.info(`  📈 功率使用率: ${powerUtilization}%`);
     logger.info(`  ⏰ 更新时间: ${new Date().toLocaleString('zh-TW')}`);
@@ -607,57 +755,113 @@ function initReconciliationInterval() {
     clearInterval(reconciliationIntervalId);
   }
   
-  logger.info(`[EMS] 初始化定时功率校正机制，间隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
+  logger.info(`[EMS] 初始化定时功率校正机制（按電表分組），间隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
   
   reconciliationIntervalId = setInterval(async () => {
     try {
       logger.info('='.repeat(60));
-      logger.info('[reconciliation] 🔄 开始定时功率配置校正');
+      logger.info('[reconciliation] 🔄 开始定时功率配置校正（按電表分組）');
       logger.info(`[reconciliation] ⏰ 校正间隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
       
-      // 获取当前在线的充电桩清单
-      const onlineCpids = await connectionService.getOnlineCpids();
-      logger.info(`[reconciliation] 📊 在线充电桩统计: ${onlineCpids.length} 个`);
-      logger.info(`[reconciliation] 📋 在线清单: [${onlineCpids.join(', ')}]`);
+      // 獲取所有站點和電表
+      const allStations = await chargePointRepository.getStations();
       
-      // 如果没有在线充电桩，跳过校正
-      if (onlineCpids.length === 0) {
-        logger.info('[reconciliation] ⚠️ 无在线充电桩，跳过此次校正');
+      if (!allStations || allStations.length === 0) {
+        logger.info('[reconciliation] ⚠️ 沒有找到任何站點，跳過此次校正');
         logger.info('='.repeat(60));
         return;
       }
       
+      logger.info(`[reconciliation] � 找到 ${allStations.length} 個站點`);
+      
+      let totalProcessedMeters = 0;
       let totalScheduledUpdates = 0;
       
-      // 批量处理每个在线充电桩的配置更新
-      logger.info('[reconciliation] 🚀 开始批量排程功率配置更新...');
-      
-      for (let i = 0; i < onlineCpids.length; i++) {
-        const cpid = onlineCpids[i];
-        logger.debug(`[reconciliation] 处理充电桩 ${i+1}/${onlineCpids.length}: CPID ${cpid}`);
+      // 依序處理每個站點下的所有電表
+      for (const station of allStations) {
+        if (!station.meters || !Array.isArray(station.meters) || station.meters.length === 0) {
+          logger.info(`[reconciliation] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
+          continue;
+        }
         
-        // 使用随机延迟避免同时下发，分散服务器负载
-        const delay = Math.random() * 5000;  // 0-5秒随机延迟
-        logger.debug(`[reconciliation] ✅ 排程更新 ${cpid}，延迟 ${Math.round(delay)}ms`);
-        scheduleProfileUpdate(cpid, delay);
-        totalScheduledUpdates++;
+        logger.info(`[reconciliation] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
+        
+        // 依序處理每個電表
+        for (const meter of station.meters) {
+          try {
+            // 獲取該電表下的充電桩
+            const gunsForMeter = await chargePointRepository.getAllGuns({ meter_id: meter.id });
+            const meterCpids = gunsForMeter.map(gun => gun.cpid).filter(cpid => cpid);
+            
+            if (meterCpids.length === 0) {
+              logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
+              continue;
+            }
+            
+            // 過濾出在線的充電桩
+            const onlineCpids = await connectionService.getOnlineCpids();
+            const onlineMeterCpids = meterCpids.filter(cpid => onlineCpids.includes(cpid));
+            
+            if (onlineMeterCpids.length === 0) {
+              logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
+              continue;
+            }
+            
+            logger.info(`[reconciliation] ⚡ 校正電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
+            
+            // 為該電表下的每個充電桩排程更新，使用隨機延遲
+            for (let i = 0; i < onlineMeterCpids.length; i++) {
+              const cpid = onlineMeterCpids[i];
+              // 使用随机延迟避免同时下发，分散服务器负载
+              const delay = Math.random() * 5000 + (i * 200);  // 0-5秒随机延迟 + 序列延迟
+              
+              scheduleProfileUpdate(cpid, delay, {
+                isReconciliation: true,
+                meter_id: meter.id,
+                station_id: station.id,
+                reconciliationTime: new Date().toISOString()
+              });
+              
+              logger.debug(`[reconciliation] ✅ 排程更新 ${cpid} (電表 ${meter.id})，延迟 ${Math.round(delay)}ms`);
+              totalScheduledUpdates++;
+            }
+            
+            totalProcessedMeters++;
+            
+            // 加入小延遲避免過於頻繁的處理
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+          } catch (meterError) {
+            logger.error(`[reconciliation] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
+          }
+        }
       }
       
       logger.info(`[reconciliation] 📈 校正统计:`);
-      logger.info(`[reconciliation]   - 扫描充电站: ${onlineCpids.length} 个`);
-      logger.info(`[reconciliation]   - 排程更新: ${totalScheduledUpdates} 个`);
+      logger.info(`[reconciliation]   - 掃描站點: ${allStations.length} 個`);
+      logger.info(`[reconciliation]   - 處理電表: ${totalProcessedMeters} 個`);
+      logger.info(`[reconciliation]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
       logger.info(`[reconciliation] ✨ 定时校正完成，下次校正将在 ${RECONCILE_INTERVAL_MS/1000} 秒后执行`);
       logger.info('='.repeat(60));
       
       // 如果有排程更新，延迟显示全站功率配置总览
       if (totalScheduledUpdates > 0) {
-        const totalDelay = Math.max(5000, totalScheduledUpdates * 500); // 至少等待5秒，或按更新数量计算
+        const totalDelay = Math.max(5000, totalScheduledUpdates * 300); // 至少等待5秒
         logger.debug(`[reconciliation] 📊 将在 ${totalDelay}ms 后显示全站功率配置总览`);
         
         setTimeout(async () => {
           try {
-            const siteSetting = await chargePointRepository.getSiteSettings();
-            await logCurrentPowerConfiguration(siteSetting.ems_mode, parseFloat(siteSetting.max_power_kw));
+            // 使用第一個電表的配置作為參考
+            const firstStation = allStations.find(s => s.meters && s.meters.length > 0);
+            if (firstStation && firstStation.meters[0]) {
+              const firstMeter = firstStation.meters[0];
+              const emsMode = firstMeter.ems_mode || 'static';
+              const maxPower = firstMeter.max_power_kw ? parseFloat(firstMeter.max_power_kw) : 100;
+              await logCurrentPowerConfiguration(emsMode, maxPower, firstStation.id);
+            } else {
+              logger.warn('❌ [reconciliation] 未找到可用的電表配置，使用默認值');
+              await logCurrentPowerConfiguration('static', 100, null);
+            }
           } catch (error) {
             logger.error('❌ [reconciliation] 显示功率总览时发生错误:', error);
           }
@@ -677,6 +881,322 @@ function initReconciliationInterval() {
   return reconciliationIntervalId;
 }
 
+/**
+ * 根据充电枪获取对应的电表信息
+ * @param {Object} gun 充电枪对象
+ * @returns {Promise<Object|null>} 电表信息
+ */
+async function getMeterForGun(gun) {
+  try {
+    if (!gun) {
+      logger.warn(`无法获取电表: 缺少充电枪数据`);
+      return null;
+    }
+
+    // 懒加载数据库服务
+    if (!databaseService) {
+      const { loadDatabaseModules } = require('../repositories/chargePointRepository');
+      const modules = await loadDatabaseModules();
+      databaseService = modules.databaseService;
+    }
+
+    // 直接通过充电枪的meter_id关系获取电表
+    if (gun.meter_id) {
+      try {
+        const meter = await databaseService.getMeterById(gun.meter_id);
+        if (meter) {
+          logger.debug(`成功获取充电枪 ${gun.cpid || '未知'} 对应的电表: ID=${meter.id}`);
+          return meter;
+        } else {
+          logger.warn(`未找到电表ID ${gun.meter_id} 的信息，尝试通过其他方式查找`);
+        }
+      } catch (err) {
+        logger.warn(`获取电表ID ${gun.meter_id} 失败: ${err.message}，尝试其他方式查找`);
+      }
+    } else {
+      logger.warn(`充电枪 ${gun.cpid || '未知'} 没有关联电表ID，尝试通过站点关系查找`);
+    }
+    
+    // 如果直接获取失败或没有meter_id，尝试通过站点->电表->充电枪关系查找
+    try {
+      const stations = await chargePointRepository.getStations();
+      if (!stations || !Array.isArray(stations) || stations.length === 0) {
+        logger.warn(`未找到任何站点信息`);
+        return null;
+      }
+      
+      // 遍历所有站点
+      for (const station of stations) {
+        if (!station.meters || !Array.isArray(station.meters)) continue;
+        
+        // 遍历站点下所有电表
+        for (const meter of station.meters) {
+          // 检查该电表是否关联了此充电枪
+          if (meter.guns && Array.isArray(meter.guns)) {
+            const matchedGun = meter.guns.find(g => g.cpid === gun.cpid || g.id === gun.id);
+            if (matchedGun) {
+              logger.info(`通过关系查找到充电枪 ${gun.cpid || gun.id || '未知'} 对应的电表: ID=${meter.id}`);
+              return meter;
+            }
+          }
+        }
+      }
+      
+      // 如果还没找到，使用第一个站点的第一个电表作为默认
+      if (stations[0] && stations[0].meters && stations[0].meters.length > 0) {
+        logger.warn(`未找到充电枪 ${gun.cpid || '未知'} 关联的电表，使用默认电表`);
+        return stations[0].meters[0];
+      }
+    } catch (err) {
+      logger.error(`通过关系查找电表失败: ${err.message}`);
+    }
+    
+    logger.error(`无法为充电枪 ${gun.cpid || '未知'} 找到任何关联电表`);
+    return null;
+  } catch (error) {
+    logger.error(`获取电表信息失败: ${error.message}`, error);
+    return null;
+  }
+}
+
+/**
+ * 获取站点下所有电表及其关联的充电枪
+ * @param {number|string|null} stationId 可选的站点ID，不提供则获取所有站点
+ * @returns {Promise<Array>} 包含电表和充电枪信息的数组
+ */
+async function getMetersAndGunsForStation(stationId = null) {
+  try {
+    // 获取所有站点信息
+    let stations = await chargePointRepository.getStations();
+    if (!stations || !Array.isArray(stations) || stations.length === 0) {
+      logger.warn(`未找到任何站点信息，尝试创建默认站点`);
+      // 由于chargePointRepository.getStations已内置创建默认站点的逻辑，重新获取站点信息
+      const newStations = await chargePointRepository.getStations();
+      if (!newStations || !Array.isArray(newStations) || newStations.length === 0) {
+        logger.error(`尝试创建默认站点后仍无法获取站点信息`);
+        return [];
+      }
+      logger.info(`成功创建默认站点，共 ${newStations.length} 个站点`);
+      // 使用新创建的站点继续处理
+      stations = newStations;
+    }
+    
+    // 过滤指定站点或使用所有站点
+    let targetStations = stations;
+    if (stationId) {
+      targetStations = stations.filter(station => station.id === parseInt(stationId));
+      if (targetStations.length === 0) {
+        logger.warn(`未找到ID为${stationId}的站点`);
+        return [];
+      }
+    }
+    
+    // 收集所有电表及其关联的充电枪
+    let result = [];
+    for (const station of targetStations) {
+      if (!station.meters || !Array.isArray(station.meters)) continue;
+      
+      for (const meter of station.meters) {
+        // 复制电表信息，添加站点信息
+        const meterInfo = {
+          ...meter,
+          station_id: station.id,
+          station_name: station.name,
+          station_code: station.station_code,
+          guns: []
+        };
+        
+        // 获取电表关联的充电枪
+        if (meter.guns && Array.isArray(meter.guns)) {
+          meterInfo.guns = meter.guns;
+        } else {
+          // 如果电表没有预加载的充电枪信息，则查询数据库
+          try {
+            if (!databaseService) {
+              const { loadDatabaseModules } = require('../repositories/chargePointRepository');
+              const modules = await loadDatabaseModules();
+              databaseService = modules.databaseService;
+            }
+            
+            const gunsForMeter = await chargePointRepository.getAllGuns({ meter_id: meter.id });
+            meterInfo.guns = gunsForMeter || [];
+            logger.debug(`为电表ID=${meter.id}查询到${meterInfo.guns.length}个充电枪`);
+          } catch (err) {
+            logger.error(`查询电表ID=${meter.id}的充电枪失败: ${err.message}`);
+            meterInfo.guns = [];
+          }
+        }
+        
+        result.push(meterInfo);
+      }
+    }
+    
+    logger.info(`共获取${result.length}个电表信息，包含充电枪${result.reduce((sum, meter) => sum + meter.guns.length, 0)}个`);
+    return result;
+  } catch (error) {
+    logger.error(`获取站点电表及充电枪失败: ${error.message}`, error);
+    return [];
+  }
+}
+
+/**
+ * 基于站点->电表->充电枪关系进行功率配置下发
+ * @param {Array} cpids 充电桩ID列表
+ * @param {Object} options 配置选项
+ * @returns {Promise<Object>} 处理结果
+ */
+async function configureStationPowerDistribution(cpids, options = {}) {
+  const { immediate = false, eventType = 'manual', eventDetails = {} } = options;
+  const operationId = `${eventType}_${Date.now()}`;
+  logger.info(`[站点功率配置] 🌐 开始站点功率配置 (ID: ${operationId})`);
+  
+  try {
+    // 1. 验证输入
+    if (!cpids || !Array.isArray(cpids) || cpids.length === 0) {
+      logger.warn(`[站点功率配置] ⚠️ 没有提供充电桩ID列表`);
+      return { success: false, message: '没有提供充电桩ID列表' };
+    }
+    
+    // 2. 获取所有站点的电表和充电枪信息
+    const allMetersWithGuns = await getMetersAndGunsForStation();
+    if (allMetersWithGuns.length === 0) {
+      logger.warn(`[站点功率配置] ⚠️ 未找到任何电表信息`);
+      return { success: false, message: '未找到任何电表信息' };
+    }
+    
+    // 3. 为每个电表分组充电桩
+    const meterGroups = new Map(); // 电表ID -> 关联的充电桩IDs
+    
+    // 先创建所有电表分组
+    allMetersWithGuns.forEach(meter => {
+      meterGroups.set(meter.id, {
+        meter,
+        cpids: []
+      });
+    });
+    
+    // 遍历所有请求的充电桩，找到它们所属的电表
+    for (const cpid of cpids) {
+      // 获取充电桩信息
+      const guns = await chargePointRepository.getAllGuns({ cpid });
+      if (guns.length === 0) {
+        logger.warn(`[站点功率配置] ⚠️ 未找到充电桩 ${cpid} 的信息`);
+        continue;
+      }
+      
+      const gun = guns[0];
+      
+      // 如果充电枪有明确的meter_id关联
+      if (gun.meter_id) {
+        if (meterGroups.has(gun.meter_id)) {
+          meterGroups.get(gun.meter_id).cpids.push(cpid);
+          logger.debug(`[站点功率配置] 充电桩 ${cpid} 分配给电表 ${gun.meter_id}`);
+        } else {
+          logger.warn(`[站点功率配置] ⚠️ 充电桩 ${cpid} 关联的电表ID ${gun.meter_id} 不存在`);
+        }
+        continue;
+      }
+      
+      // 如果没有明确关联，通过关系查找
+      let meterFound = false;
+      for (const [meterId, group] of meterGroups.entries()) {
+        const gunInMeter = group.meter.guns?.find(g => g.cpid === cpid);
+        if (gunInMeter) {
+          group.cpids.push(cpid);
+          logger.debug(`[站点功率配置] 充电桩 ${cpid} 通过关系查找分配给电表 ${meterId}`);
+          meterFound = true;
+          break;
+        }
+      }
+      
+      if (!meterFound) {
+        // 如果没找到关联电表，使用第一个电表
+        const firstMeterId = meterGroups.keys().next().value;
+        if (firstMeterId) {
+          meterGroups.get(firstMeterId).cpids.push(cpid);
+          logger.warn(`[站点功率配置] ⚠️ 充电桩 ${cpid} 没有明确关联电表，分配给默认电表 ${firstMeterId}`);
+        } else {
+          logger.error(`[站点功率配置] ❌ 无法为充电桩 ${cpid} 分配电表`);
+        }
+      }
+    }
+    
+    // 4. 对每个电表分组执行功率配置
+    const results = [];
+    for (const [meterId, group] of meterGroups.entries()) {
+      if (group.cpids.length === 0) continue; // 跳过没有关联充电桩的电表
+      
+      const meter = group.meter;
+      const meterCpids = group.cpids;
+      
+      logger.info(`[站点功率配置] 🔌 电表 ${meterId} (${meter.station_name || '未知站点'}) 配置 ${meterCpids.length} 个充电桩`);
+      
+      // 为该电表下的充电桩创建单独的siteSetting
+      const siteSetting = {
+        station_id: meter.station_id,
+        station_name: meter.station_name,
+        ems_mode: meter.ems_mode || 'static',
+        max_power_kw: meter.max_power_kw || 100,
+        meter_id: meterId
+      };
+      
+      // 批量排程所有充电桩的配置更新
+      const baseDelay = immediate ? 0 : 1000;
+      const intervalDelay = immediate ? 100 : 500;
+      
+      let scheduledCount = 0;
+      for (let i = 0; i < meterCpids.length; i++) {
+        const cpid = meterCpids[i];
+        const delay = baseDelay + (i * intervalDelay);
+        
+        await scheduleProfileUpdate(cpid, delay, {
+          isGlobalReallocation: true,
+          isManualTrigger: immediate,
+          reallocationId: operationId,
+          triggerEvent: eventType,
+          triggerDetails: {
+            ...eventDetails,
+            meter_id: meterId,
+            station_id: meter.station_id
+          },
+          siteSetting // 传递特定电表的配置
+        });
+        
+        scheduledCount++;
+      }
+      
+      results.push({
+        meter_id: meterId,
+        station_id: meter.station_id,
+        station_name: meter.station_name,
+        ems_mode: meter.ems_mode,
+        max_power_kw: meter.max_power_kw,
+        cpids: meterCpids,
+        scheduled: scheduledCount
+      });
+    }
+    
+    // 5. 总结结果
+    const totalScheduled = results.reduce((sum, r) => sum + r.scheduled, 0);
+    logger.info(`[站点功率配置] ✅ 完成配置: ${results.length}个电表, ${totalScheduled}个充电桩`);
+    
+    return {
+      success: true,
+      operation_id: operationId,
+      total_meters: results.length,
+      total_scheduled: totalScheduled,
+      details: results
+    };
+  } catch (error) {
+    logger.error(`[站点功率配置] ❌ 处理失败: ${error.message}`, error);
+    return {
+      success: false,
+      message: error.message,
+      operation_id: operationId
+    };
+  }
+}
+
 module.exports = {
   EVENT_TYPES,
   PROFILE_UPDATE_DEBOUNCE_MS,
@@ -693,5 +1213,8 @@ module.exports = {
   scheduleProfileUpdate,
   clearAllProfileUpdateTimers,
   logCurrentPowerConfiguration,
-  initReconciliationInterval
+  initReconciliationInterval,
+  getMeterForGun,
+  getMetersAndGunsForStation,
+  configureStationPowerDistribution
 };

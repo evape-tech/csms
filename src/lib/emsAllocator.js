@@ -119,9 +119,9 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
   else if (ems_mode === 'dynamic') {
     logs.push('[dynamic模式] 依據正在充電的樁數量動態分配');
     
-    // 在線充電槍
-    const onlineAcGuns = acGuns.filter(g => onlineCpids.includes(g.cpsn));
-    const onlineDcGuns = dcGuns.filter(g => onlineCpids.includes(g.cpsn));
+    // 在線充電槍 (使用cpid而非cpsn來匹配)
+    const onlineAcGuns = acGuns.filter(g => onlineCpids.includes(g.cpid));
+    const onlineDcGuns = dcGuns.filter(g => onlineCpids.includes(g.cpid));
     
     // 正在充電的槍
     const chargingAcGuns = onlineAcGuns.filter(g => isCharging(g.guns_status));
@@ -233,8 +233,8 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
     
     // 第四步：根據分配的功率生成allocations (處理所有槍)
     for (const gun of acGuns) {
-      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpsn);
-      const isOnline = onlineCpids.includes(gun.cpsn);
+      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpid);
+      const isOnline = onlineCpids.includes(gun.cpid);
       const allocatedPower = isOnline ? (allocatedPowers[gun.cpid] || 1.32) : 1.32; // 離線槍給最低功率
       
       const unit = "A";
@@ -260,8 +260,8 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
     }
     
     for (const gun of dcGuns) {
-      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpsn);
-      const isOnline = onlineCpids.includes(gun.cpsn);
+      const currentGunCharging = isCharging(gun.guns_status) && onlineCpids.includes(gun.cpid);
+      const isOnline = onlineCpids.includes(gun.cpid);
       const allocatedPower = isOnline ? (allocatedPowers[gun.cpid] || 1.0) : 1.0; // 離線槍給最低功率
       
       const unit = "W";
@@ -511,7 +511,7 @@ function applyDcLimits(gun, limit, logs) {
   return limit;
 }
 
-module.exports = {
+export {
   calculateEmsAllocation,
   isCharging,
   applyAcLimits,

@@ -57,31 +57,31 @@ interface GunData {
   [key: string]: unknown;
 }
 
-interface SiteSettingData {
+interface StationData {
   [key: string]: unknown;
 }
 
 export default async function Dashboard() {
   // --- load Gun table directly via databaseService on the server ---
   let gunsData: GunData[] = [];
-  let siteSettings: SiteSettingData[] = [];
+  let stations: StationData[] = [];
   
   try {
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     
-    // 並行獲取 guns 和 site_settings 數據
+    // 並行獲取 guns 和 stations 數據
     const [gunsRows, siteSettingsRows] = await Promise.all([
       databaseService.getGuns({}),
-      databaseService.getSiteSettings()
+      databaseService.getStations()
     ]);
     
     // 處理 guns 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
     gunsData = gunsRows.map((r: Record<string, unknown>) => serializeData(r));
     
-    // 處理 site_settings 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
-    siteSettings = siteSettingsRows.map((r: Record<string, unknown>) => serializeData(r));
+    // 處理 stations 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
+    stations = siteSettingsRows.map((r: Record<string, unknown>) => serializeData(r));
 
     
     // 打印 guns 數據的詳細信息以便調試
@@ -103,18 +103,18 @@ export default async function Dashboard() {
     
     // 最後一次驗證確保所有數據都被序列化為純 JavaScript 對象
     gunsData = JSON.parse(JSON.stringify(gunsData));
-    siteSettings = JSON.parse(JSON.stringify(siteSettings));
+    stations = JSON.parse(JSON.stringify(stations));
   } catch (err) {
     console.error('Failed to load data from DB:', err);
     gunsData = [];
-    siteSettings = [];
+    stations = [];
   }
 
   return (
     <Box sx={{ p: 2, pb: 8 }}> {/* 添加底部邊距為固定定位的 DisclaimerFooter 留出空間 */}
       {/* 充電樁狀態區塊 */}
       <Box sx={{ mb: 2 }}>
-        <ChargingStatusCard siteSettings={siteSettings} guns={gunsData} />
+        <ChargingStatusCard stations={stations} guns={gunsData} />
       </Box>
       
       {/* 即時功率監控 + 即時異常監控區塊 */}
@@ -133,7 +133,7 @@ export default async function Dashboard() {
       
       {/* CP列表區塊 */}
       <Box sx={{ mb: 2 }}>
-        <CPListCard chargers={gunsData} siteSettings={siteSettings} />
+        <CPListCard chargers={gunsData} stations={stations} />
       </Box>
     </Box>
   );

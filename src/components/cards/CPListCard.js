@@ -23,9 +23,9 @@ import { calculateEmsAllocation, isCharging } from '../../lib/emsAllocator';
  * 充電樁列表卡片組件
  * @param {Object} props
  * @param {Array} props.chargers - 充電樁數據
- * @param {Array} props.siteSettings - 站點設定數據
+ * @param {Array} props.stations - 站點設定數據
  */
-export default function CPListCard({ chargers = [], siteSettings = [] }) {
+export default function CPListCard({ chargers = [], stations = [] }) {
   // 重啟狀態管理
   const [restartingIds, setRestartingIds] = useState(new Set());
 
@@ -66,13 +66,13 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
   };
   // 計算整個場域的 EMS 分配
   const emsResult = useMemo(() => {
-    if (!chargers || chargers.length === 0 || !siteSettings || siteSettings.length === 0) {
+    if (!chargers || chargers.length === 0 || !stations || stations.length === 0) {
       return null;
     }
     
     try {
       // 準備 siteSetting 數據
-      const siteSetting = siteSettings[0]; // 使用第一個設定
+      const siteSetting = stations[0]; // 使用第一個設定
       
       // 準備所有充電槍的數據
       const gunsForAllocation = chargers.map((gun, index) => {
@@ -100,7 +100,7 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
       console.error('整體 EMS 計算失敗:', error);
       return null;
     }
-  }, [chargers, siteSettings]);
+  }, [chargers, stations]);
   
   // 處理充電樁數據
   const cpList = useMemo(() => {
@@ -212,8 +212,8 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
       }
       
       // 直接從站點設定中獲取 EMS 模式，而不是從計算結果中獲取
-      const emsMode = siteSettings && siteSettings[0] && siteSettings[0].ems_mode 
-        ? siteSettings[0].ems_mode === 'dynamic' ? 'dynamic' : 'static'
+      const emsMode = stations && stations[0] && stations[0].ems_mode 
+        ? stations[0].ems_mode === 'dynamic' ? 'dynamic' : 'static'
         : '靜態模式'; // 默認為靜態模式
       
       return { 
@@ -228,7 +228,7 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
         emsMode // 記錄 EMS 模式
       };
     });
-  }, [chargers, siteSettings]);
+  }, [chargers, stations]);
   return (
     <Card sx={{ width: '100%', height: '100%' }}>
       <CardContent sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -245,10 +245,10 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
             <EvStationIcon sx={{ color: 'primary.main', fontSize: '1.5rem' }} />
           </Box>
           <Typography variant="h6">充電樁狀態</Typography>
-          {siteSettings && siteSettings[0] && (
+          {stations && stations[0] && (
             <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
               <Chip 
-                label={`EMS模式: ${siteSettings[0].ems_mode === 'dynamic' ? '動態' : '靜態'}`} 
+                label={`EMS模式: ${stations[0].ems_mode === 'dynamic' ? '動態' : '靜態'}`} 
                 size="small" 
                 color="info"
                 sx={{ mr: 1 }}
@@ -260,9 +260,9 @@ export default function CPListCard({ chargers = [], siteSettings = [] }) {
                   color={emsResult.summary.within_limit ? "success" : "error"}
                 />
               )}
-              {(!emsResult || !emsResult.summary) && siteSettings[0].max_power_kw && (
+              {(!emsResult || !emsResult.summary) && stations[0].max_power_kw && (
                 <Chip 
-                  label={`場域限制: ${siteSettings[0].max_power_kw}kW`}
+                  label={`場域限制: ${stations[0].max_power_kw}kW`}
                   size="small" 
                   color="secondary"
                 />

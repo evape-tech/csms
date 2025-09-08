@@ -3,7 +3,7 @@ import React, { useState, useTransition } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, MenuItem, Stack, Alert, CircularProgress } from '@mui/material';
 import { createGunAction } from '../../actions/gunActions';
 
-export default function AddChargerDialog({ open, onClose, onAdd }) {
+export default function AddChargerDialog({ open, onClose, onAdd, stations, meters }) {
   // 狀態管理
   const [cpid, setCpid] = useState('');
   const [connector, setConnector] = useState('');
@@ -11,6 +11,7 @@ export default function AddChargerDialog({ open, onClose, onAdd }) {
   const [type, setType] = useState('');
   const [maxPower, setMaxPower] = useState('');
   const [desc, setDesc] = useState('');
+  const [selectedMeterId, setSelectedMeterId] = useState('');
   const [saveError, setSaveError] = useState(null);
   
   // 使用 useTransition 來處理 server action
@@ -18,13 +19,19 @@ export default function AddChargerDialog({ open, onClose, onAdd }) {
 
   const handleCancel = () => {
     // reset
-    setCpid(''); setConnector(''); setCpsn(''); setType(''); setMaxPower(''); setDesc('');
+    setCpid(''); setConnector(''); setCpsn(''); setType(''); setMaxPower(''); setDesc(''); setSelectedMeterId('');
     setSaveError(null);
     onClose && onClose();
   };
 
   const handleConfirm = async () => {
     setSaveError(null);
+    
+    // 驗證必填字段
+    if (!selectedMeterId) {
+      setSaveError('請選擇電表');
+      return;
+    }
     
     startTransition(async () => {
       try {
@@ -36,6 +43,7 @@ export default function AddChargerDialog({ open, onClose, onAdd }) {
         if (type) formData.append('acdc', type);
         if (maxPower) formData.append('max_kw', maxPower);
         if (desc) formData.append('guns_memo1', desc);
+        if (selectedMeterId) formData.append('meter_id', selectedMeterId);
         
         // 呼叫 server action
         const result = await createGunAction(formData);
@@ -71,6 +79,14 @@ export default function AddChargerDialog({ open, onClose, onAdd }) {
             <MenuItem value="">請選擇</MenuItem>
             <MenuItem value="AC">AC</MenuItem>
             <MenuItem value="DC">DC</MenuItem>
+          </TextField>
+          <TextField select label="關聯電表" value={selectedMeterId} onChange={(e) => setSelectedMeterId(e.target.value)} fullWidth required>
+            <MenuItem value="">請選擇電表</MenuItem>
+            {meters && meters.map((meter) => (
+              <MenuItem key={meter.id} value={meter.id}>
+                {meter.meter_no} (站點: {meter.station?.name || meter.station?.station_code || '未知'})
+              </MenuItem>
+            ))}
           </TextField>
           <TextField label="最大功率 (kW)" type="number" value={maxPower} onChange={(e) => setMaxPower(e.target.value)} fullWidth />
           <TextField label="描述(desc)" value={desc} onChange={(e) => setDesc(e.target.value)} multiline rows={4} fullWidth />

@@ -3,8 +3,6 @@ import React, { useState, useEffect, useTransition } from 'react';
 import Grid from '@mui/material/Grid';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import Button from '@mui/material/Button';
@@ -19,14 +17,24 @@ import {
   Chip, 
   IconButton, 
   Tooltip,
-  useTheme
+  useTheme,
+  Paper,
+  CircularProgress,
+  Alert,
+  Divider,
+  Slider,
+  Select,
+  MenuItem
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SettingsIcon from '@mui/icons-material/Settings';
+import BoltIcon from '@mui/icons-material/Bolt';
 import { AddChargerDialog, ChargerSettingsDialog } from '../dialog';
 import { deleteGunAction } from '../../actions/gunActions';
+import { updateBalanceMode, updateMaxPower } from '../../actions/stationActions';
 
 // OCPP 狀態顏色映射
 const getOcppStatusColor = (status) => {
@@ -60,7 +68,7 @@ const getOcppStatusText = (status) => {
   return statusTexts[status] || status;
 };
 
-export default function CPCard({ chargers }) {
+export default function CPCard({ chargers, stations, meters }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sortBy, setSortBy] = useState('id');
@@ -70,28 +78,89 @@ export default function CPCard({ chargers }) {
   
   // 使用 useTransition 來處理 server action
   const [isPendingDelete, startDeleteTransition] = useTransition();
+  
+  // 從 stations 組織電表和充電樁的群組結構
+  const organizeByMeters = () => {
+    if (!stations || stations.length === 0) return [];
+    
+    const meterGroups = [];
+    
+    // 遍歷所有站點
+    stations.forEach(station => {
+      if (!station.meters || !Array.isArray(station.meters)) return;
+      
+      // 遍歷站點下的所有電表
+      station.meters.forEach(meter => {
+        // 從stations.meters.guns 獲取充電樁資料，如果沒有則從 chargers 參數中根據 meter_id 篩選
+        let gunsForMeter = meter.guns || [];
+        
+        // 如果電表中沒有 guns 資料，則從外部 chargers 參數中篩選
+        if ((!gunsForMeter || gunsForMeter.length === 0) && chargers && chargers.length > 0) {
+          gunsForMeter = chargers.filter(gun => gun.meter_id === meter.id);
+        }
+        
+        // 標準化充電樁資料
+        const normalizedGuns = gunsForMeter.map(gun => normalizeCharger(gun, meter, station));
+        
+        meterGroups.push({
+          meter: {
+            id: meter.id,
+            name: meter.meter_no || `電表 #${meter.id}`,
+            meter_no: meter.meter_no,
+            ems_mode: meter.ems_mode,
+            max_power_kw: meter.max_power_kw,
+            billing_mode: meter.billing_mode,
+            station_id: station.id,
+            station_name: station.name,
+            station_code: station.station_code
+          },
+          guns: normalizedGuns,
+          totalGuns: normalizedGuns.length,
+          onlineGuns: normalizedGuns.filter(gun => gun.status === 'Available' || gun.status === 'Charging').length,
+          chargingGuns: normalizedGuns.filter(gun => gun.status === 'Charging').length
+        });
+      });
+    });
+    
+    return meterGroups;
+  };
+  
   // normalize incoming charger objects to consistent shape used by this component
-  const normalizeCharger = (c) => ({
-    id: c.id,
-    cpid: c.cpid ?? c.CPID ?? null,
-    cpsn: c.cpsn ?? c.CPSN ?? null,
-    // status field in DB is `guns_status`
-    status: c.guns_status ?? c.status ?? c.gunsStatus ?? null,
-    // AC/DC field
-    type: (c.type ?? c.acdc ?? c.ACDC ?? null),
-    // max power in kW
-    max_kw: c.max_kw ?? c.maxPower ?? (c.power ? Math.round(c.power / 1000) : null),
-    // description mapping: guns_memo1 is 備註/描述
-    desc: c.guns_memo1 ?? c.desc ?? c.memo ?? null,
-    // keep original values available
-    ...c
-  });
+  const normalizeCharger = (gun, meter, station) => {
+    return {
+      id: gun.id,
+      cpid: gun.cpid ?? gun.CPID ?? null,
+      cpsn: gun.cpsn ?? gun.CPSN ?? null,
+      // status field in DB is `guns_status`
+      status: gun.guns_status ?? gun.status ?? gun.gunsStatus ?? 'Available',
+      // AC/DC field
+      type: (gun.type ?? gun.acdc ?? gun.ACDC ?? null),
+      // max power in kW
+      max_kw: gun.max_kw ?? gun.maxPower ?? (gun.power ? Math.round(gun.power / 1000) : null),
+      // description mapping: guns_memo1 is 備註/描述
+      desc: gun.guns_memo1 ?? gun.desc ?? gun.memo ?? null,
+      // meter information
+      meter_id: meter.id,
+      meter: {
+        id: meter.id,
+        name: meter.meter_no,
+        meter_no: meter.meter_no,
+        ems_mode: meter.ems_mode,
+        max_power_kw: meter.max_power_kw,
+        billing_mode: meter.billing_mode
+      },
+      station_id: station.id,
+      station: station,
+      // keep original values available
+      ...gun
+    };
+  };
 
-  const [localChargers, setLocalChargers] = useState((chargers || []).map(normalizeCharger));
+  const [meterGroups, setMeterGroups] = useState(organizeByMeters());
 
   useEffect(() => {
-    setLocalChargers((chargers || []).map(normalizeCharger));
-  }, [chargers]);
+    setMeterGroups(organizeByMeters());
+  }, [chargers, stations, meters]);
 
   // track in-flight actions per charger id
   const [actionLoading, setActionLoading] = useState({});
@@ -111,11 +180,41 @@ export default function CPCard({ chargers }) {
     }
   };
 
-  // 操作處理函數（直接傳給CPCardItem）
+  // 操作處理函數 - 更新 local state
+  const updateLocalCharger = (gunnerId, updates) => {
+    setMeterGroups(prevGroups => 
+      prevGroups.map(group => ({
+        ...group,
+        guns: group.guns.map(gun => 
+          gun.id === gunnerId ? { ...gun, ...updates } : gun
+        )
+      }))
+    );
+  };
+
+  const removeLocalCharger = (gunnerId) => {
+    setMeterGroups(prevGroups => 
+      prevGroups.map(group => ({
+        ...group,
+        guns: group.guns.filter(gun => gun.id !== gunnerId),
+        totalGuns: group.guns.filter(gun => gun.id !== gunnerId).length
+      }))
+    );
+  };
+
   const handleStartCharging = async (id) => {
-    const charger = localChargers.find(c => c.id === id);
-    if (!charger) return alert('找不到充電樁資料');
-    if (!charger.cpid) return alert('此充電樁沒有 CPID，無法發送 OCPP 指令');
+    // 找到充電樁
+    let targetCharger = null;
+    for (const group of meterGroups) {
+      const charger = group.guns.find(gun => gun.id === id);
+      if (charger) {
+        targetCharger = charger;
+        break;
+      }
+    }
+
+    if (!targetCharger) return alert('找不到充電樁資料');
+    if (!targetCharger.cpid) return alert('此充電樁沒有 CPID，無法發送 OCPP 指令');
 
     setActionLoading(s => ({ ...s, [id]: true }));
     try {
@@ -123,12 +222,12 @@ export default function CPCard({ chargers }) {
       const body = {
         apikey: undefined,
         cmd: 'cmd_start_charging',
-        cp_id: charger.cpid,
+        cp_id: targetCharger.cpid,
       };
       await callOcppEndpoint(id, body);
 
       // optimistic update: set status to Charging
-      setLocalChargers(prev => prev.map(c => (c.id === id ? { ...c, status: 'Charging' } : c)));
+      updateLocalCharger(id, { status: 'Charging' });
     } catch (err) {
       console.error('Start charging failed', err);
       alert('啟動指令失敗: ' + (err?.message || err));
@@ -138,21 +237,30 @@ export default function CPCard({ chargers }) {
   };
 
   const handleStopCharging = async (id) => {
-    const charger = localChargers.find(c => c.id === id);
-    if (!charger) return alert('找不到充電樁資料');
-    if (!charger.cpid) return alert('此充電樁沒有 CPID，無法發送 OCPP 指令');
+    // 找到充電樁
+    let targetCharger = null;
+    for (const group of meterGroups) {
+      const charger = group.guns.find(gun => gun.id === id);
+      if (charger) {
+        targetCharger = charger;
+        break;
+      }
+    }
+
+    if (!targetCharger) return alert('找不到充電樁資料');
+    if (!targetCharger.cpid) return alert('此充電樁沒有 CPID，無法發送 OCPP 指令');
 
     setActionLoading(s => ({ ...s, [id]: true }));
     try {
       const body = {
         apikey: undefined,
         cmd: 'cmd_stop_charging',
-        cp_id: charger.cpid,
+        cp_id: targetCharger.cpid,
       };
       await callOcppEndpoint(id, body);
 
       // optimistic update: set status to Available
-      setLocalChargers(prev => prev.map(c => (c.id === id ? { ...c, status: 'Available' } : c)));
+      updateLocalCharger(id, { status: 'Available' });
     } catch (err) {
       console.error('Stop charging failed', err);
       alert('停止指令失敗: ' + (err?.message || err));
@@ -174,7 +282,7 @@ export default function CPCard({ chargers }) {
         
         if (result.success) {
           // 成功：從本地列表中移除，UI 立即更新
-          setLocalChargers(prev => prev.filter(c => c.id !== id));
+          removeLocalCharger(id);
         } else {
           console.error('Failed to delete charger:', result.error);
           alert('刪除失敗: ' + result.error);
@@ -188,26 +296,40 @@ export default function CPCard({ chargers }) {
 
   // save/update handler from edit dialog
   const handleSaveCharger = (updated) => {
-    setLocalChargers(prev => prev.map(c => (c.id === updated.id ? { ...c, ...updated } : c)));
+    updateLocalCharger(updated.id, updated);
   };
 
   const handleRestart = id => console.log('重啟充電樁:', id);
   const handleSettings = id => console.log('設定充電樁:', id);
 
-  // 篩選充電樁
-  const filteredChargers = (localChargers || []).filter(charger => {
-    const matchesStatus = statusFilter === 'all' || charger.status === statusFilter;
-    const matchesType = typeFilter === 'all' || charger.type === typeFilter;
-    const matchesSearch = searchTerm === '' || 
-      `CP-${String(charger.id).padStart(2, '0')}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (charger.user && charger.user.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesStatus && matchesType && matchesSearch;
-  }).sort((a, b) => {
-    if (sortBy === 'id') return a.id - b.id;
-    if (sortBy === 'status') return a.status.localeCompare(b.status);
-    if (sortBy === 'power') return b.power - a.power;
-    return 0;
-  });
+  // 篩選功能 - 從 meterGroups 中篩選
+  const getFilteredMeterGroups = () => {
+    return meterGroups.map(group => {
+      const filteredGuns = group.guns.filter(gun => {
+        const matchesStatus = statusFilter === 'all' || gun.status === statusFilter;
+        const matchesType = typeFilter === 'all' || gun.type === typeFilter;
+        const matchesSearch = searchTerm === '' || 
+          `CP-${String(gun.id).padStart(2, '0')}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (gun.cpid && String(gun.cpid).toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (gun.cpsn && String(gun.cpsn).toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (gun.meter && gun.meter.meter_no && String(gun.meter.meter_no).toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (gun.meter && gun.meter.name && gun.meter.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        return matchesStatus && matchesType && matchesSearch;
+      });
+
+      return {
+        ...group,
+        guns: filteredGuns.sort((a, b) => {
+          if (sortBy === 'id') return a.id - b.id;
+          if (sortBy === 'status') return a.status.localeCompare(b.status);
+          if (sortBy === 'power') return (b.max_kw || 0) - (a.max_kw || 0);
+          return 0;
+        })
+      };
+    }).filter(group => group.guns.length > 0); // 只顯示有充電樁的電表群組
+  };
+
+  const filteredMeterGroups = getFilteredMeterGroups();
 
   // 篩選欄位資料
   const filterFields = [
@@ -264,7 +386,7 @@ export default function CPCard({ chargers }) {
               <TextField
                 fullWidth
                 size="small"
-                placeholder="搜尋充電樁編號"
+                placeholder="搜尋充電樁編號、CPID、CPSN 或電表編號"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 InputProps={{
@@ -304,49 +426,330 @@ export default function CPCard({ chargers }) {
           </Grid>
         </CardContent>
       </Card>
-      <AddChargerDialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} />
-      {/* 充電樁列表 */}
+      <AddChargerDialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} stations={stations} meters={meters} onAdd={handleSaveCharger} />
+      {/* 充電樁列表 - 按電表群組顯示 */}
       <Box>
-        <Box sx={{
-          display: 'flex',
-          flexDirection: viewMode === 'card' ? 'row' : 'column',
-          flexWrap: viewMode === 'card' ? 'wrap' : 'nowrap',
-          gap: 2,
-          justifyContent: viewMode === 'card' ? 'flex-start' : undefined
-        }}>
-          {filteredChargers.map(charger => (
-            <Box
-              key={charger.id}
-              sx={
-                viewMode === 'card'
-                  ? { width: { xs: '100%', sm: '48%', md: '33.3333%', lg: '24%' }, minWidth: 240, display: 'flex' }
-                  : { width: '100%' }
-              }
-            >
-              <CPCardItem
-                charger={charger}
-                layout={viewMode === 'card' ? 'grid' : 'linear'}
-                onStartCharging={handleStartCharging}
-                onStopCharging={handleStopCharging}
-                onRestart={handleRestart}
-                onSettings={handleSettings}
-                onDelete={handleDeleteCharger}
-                onSave={handleSaveCharger}
-                loadingMap={actionLoading}
-                isPendingDelete={isPendingDelete}
-              />
-            </Box>
-          ))}
+        {/* 添加一個小提示顯示總數據 */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            共 {filteredMeterGroups.length} 個電表群組，
+            {filteredMeterGroups.reduce((sum, group) => sum + group.guns.length, 0)} 個充電樁
+          </Typography>
         </Box>
-        {filteredChargers.length === 0 && (
+        
+        {filteredMeterGroups.length === 0 ? (
           <Box display="flex" justifyContent="center" alignItems="center" sx={{ py: 6 }}>
             <Typography variant="h6" color="text.secondary">
               沒有找到符合條件的充電樁
             </Typography>
           </Box>
+        ) : (
+          filteredMeterGroups.map(group => (
+            <MeterGroupCard 
+              key={`meter-${group.meter.id}`}
+              meterGroup={group}
+              viewMode={viewMode}
+              onStartCharging={handleStartCharging}
+              onStopCharging={handleStopCharging}
+              onRestart={handleRestart}
+              onSettings={handleSettings}
+              onDelete={handleDeleteCharger}
+              onSave={handleSaveCharger}
+              loadingMap={actionLoading}
+              isPendingDelete={isPendingDelete}
+            />
+          ))
         )}
       </Box>
     </Box>
+  );
+}
+
+// 電表群組卡片組件
+function MeterGroupCard({ 
+  meterGroup, 
+  viewMode, 
+  onStartCharging, 
+  onStopCharging, 
+  onRestart, 
+  onSettings, 
+  onDelete, 
+  onSave, 
+  loadingMap, 
+  isPendingDelete 
+}) {
+  const theme = useTheme();
+  const [expanded, setExpanded] = useState(true);
+  
+  // EMS設置相關狀態
+  const [emsMode, setEmsMode] = useState(meterGroup.meter.ems_mode || 'static');
+  const [maxPowerKw, setMaxPowerKw] = useState(meterGroup.meter.max_power_kw || 0);
+  const [isPendingEms, startEmsTransition] = useTransition();
+  const [emsError, setEmsError] = useState(null);
+  const [emsSuccess, setEmsSuccess] = useState(null);
+
+  const { meter, guns, totalGuns, onlineGuns, chargingGuns } = meterGroup;
+  
+  // 更新EMS模式
+  const handleUpdateEmsMode = () => {
+    setEmsError(null);
+    startEmsTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append('ems_mode', emsMode);
+        formData.append('meter_id', meter.id);
+        
+        const result = await updateBalanceMode(formData);
+        
+        if (result.success) {
+          setEmsSuccess('EMS模式更新成功!');
+          setTimeout(() => setEmsSuccess(null), 3000);
+        } else {
+          setEmsError(`更新EMS模式失敗: ${result.error}`);
+        }
+      } catch (err) {
+        setEmsError(`更新EMS模式發生錯誤: ${err.message}`);
+      }
+    });
+  };
+  
+  // 更新最大功率
+  const handleUpdateMaxPower = () => {
+    setEmsError(null);
+    startEmsTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append('max_power_kw', maxPowerKw);
+        formData.append('meter_id', meter.id);
+        
+        const result = await updateMaxPower(formData);
+        
+        if (result.success) {
+          setEmsSuccess('最大功率更新成功!');
+          setTimeout(() => setEmsSuccess(null), 3000);
+        } else {
+          setEmsError(`更新最大功率失敗: ${result.error}`);
+        }
+      } catch (err) {
+        setEmsError(`更新最大功率發生錯誤: ${err.message}`);
+      }
+    });
+  };
+
+  // 手動調整負載
+  const handleManualLoadAdjustment = async () => {
+    setEmsError(null);
+    startEmsTransition(async () => {
+      try {
+        console.log(`🔄 [電表級負載調整] 觸發電表 ${meter.id} (${meter.name}) 的功率重新分配`);
+        console.log(`📊 [電表級負載調整] 電表資訊: ID=${meter.id}, 名稱=${meter.name}, 編號=${meter.meter_no}, 站點=${meter.station_name}`);
+        
+        const response = await fetch('/api/trigger-power-reallocation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            meter_id: meter.id,
+            station_id: meter.station_id,
+            source: 'frontend-meter-manual-trigger',
+            timestamp: new Date().toISOString()
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API 請求失敗: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          setEmsSuccess(`電表 ${meter.name} 負載調整成功!`);
+          console.log(`✅ [電表級負載調整] 成功: ${result.message}`);
+          console.log(`📊 [電表級負載調整] 目標類型: ${result.data?.targetType || 'meter'}`);
+          console.log(`📊 [電表級負載調整] 目標ID: ${result.data?.targetId || meter.id}`);
+          console.log(`📊 [電表級負載調整] 影響充電桩: ${result.data?.scheduledUpdates || 0} 個`);
+          setTimeout(() => setEmsSuccess(null), 3000);
+        } else {
+          throw new Error(result.message || '電表負載調整失敗');
+        }
+      } catch (err) {
+        console.error(`❌ [電表級負載調整] 失敗:`, err);
+        setEmsError(`電表 ${meter.name} 負載調整失敗: ${err.message}`);
+      }
+    });
+  };
+
+  return (
+    <Card sx={{ mb: 3, borderRadius: 4, overflow: 'hidden' }}>
+      {/* 電表資訊標題 */}
+      <Box 
+        sx={{ 
+          background: `linear-gradient(135deg, ${theme.palette.primary.main}20 0%, ${theme.palette.secondary.main}20 100%)`,
+          p: 3,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          '&:hover': {
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}30 0%, ${theme.palette.secondary.main}30 100%)`,
+          }
+        }}
+      >
+        {/* 所有內容放在一行 */}
+        <Box display="flex" alignItems="center" justifyContent="space-between">
+          <Box display="flex" alignItems="center" gap={2} sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' }, flex: 1 }}>
+            {/* 電表基本資訊 */}
+            <Box display="flex" alignItems="center" sx={{ cursor: 'pointer', minWidth: 'fit-content' }} onClick={() => setExpanded(!expanded)}>
+              <Typography variant="h6" fontWeight="bold" color="primary" sx={{ whiteSpace: 'nowrap' }}>
+                📊 {meter.name}
+              </Typography>
+              <Chip 
+                label={`編號: ${meter.meter_no || meter.id}`} 
+                size="small" 
+                variant="filled" 
+                color="secondary" 
+                sx={{ fontWeight: 'bold', fontSize: '0.75rem', ml: 1 }}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ ml: 1, whiteSpace: 'nowrap' }}>
+                站點: {meter.station_name} ({meter.station_code})
+              </Typography>
+            </Box>
+            
+            {/* 分隔線 */}
+            <Divider orientation="vertical" flexItem sx={{ mx: 1, display: { xs: 'none', md: 'block' } }} />
+            
+            {/* EMS控制 */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1 }}>
+              {/* EMS模式選擇 */}
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>EMS模式:</Typography>
+                <Select
+                  value={emsMode}
+                  onChange={(e) => setEmsMode(e.target.value)}
+                  size="small"
+                  sx={{ ml: 1, minWidth: '100px', height: '36px' }}
+                >
+                  <MenuItem value="static">靜態</MenuItem>
+                  <MenuItem value="dynamic">動態</MenuItem>
+                </Select>
+                <Button 
+                  variant="outlined" 
+                  color="primary"
+                  size="small"
+                  disabled={isPendingEms || emsMode === meter.ems_mode}
+                  onClick={handleUpdateEmsMode}
+                  sx={{ fontSize: '0.75rem', ml: 1, minWidth: '60px', height: '30px' }}
+                >
+                  {isPendingEms ? <CircularProgress size={14} color="inherit" /> : '更新'}
+                </Button>
+              </Box>
+              
+              {/* 最大功率設定 */}
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>最大功率:</Typography>
+                <TextField
+                  variant="outlined"
+                  type="number"
+                  size="small"
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">kW</InputAdornment>,
+                  }}
+                  value={maxPowerKw}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || !isNaN(Number(value))) {
+                      setMaxPowerKw(value === '' ? '' : Number(value));
+                    }
+                  }}
+                  sx={{ width: '120px', mx: 1, '& .MuiOutlinedInput-root': { height: '36px' } }}
+                />
+                <Button 
+                  variant="outlined" 
+                  color="primary"
+                  size="small"
+                  disabled={isPendingEms || maxPowerKw === Number(meter.max_power_kw)}
+                  onClick={handleUpdateMaxPower}
+                  sx={{ fontSize: '0.75rem', minWidth: '60px', height: '30px' }}
+                >
+                  {isPendingEms ? <CircularProgress size={14} color="inherit" /> : '更新'}
+                </Button>
+              </Box>
+              
+              {/* 手動電表負載調整 */}
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Button 
+                  variant="contained" 
+                  color="secondary"
+                  size="small"
+                  disabled={isPendingEms}
+                  onClick={handleManualLoadAdjustment}
+                  startIcon={isPendingEms ? <CircularProgress size={14} color="inherit" /> : <BoltIcon fontSize="small" />}
+                  sx={{ fontSize: '0.75rem', minWidth: '120px', height: '30px' }}
+                >
+                  {isPendingEms ? '調整中...' : '電表負載調整'}
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+          
+          {/* 展開/收合充電樁列表圖示 */}
+          <IconButton size="small" onClick={() => setExpanded(!expanded)} sx={{ ml: 1 }}>
+            {expanded ? <Typography>🔽</Typography> : <Typography>▶️</Typography>}
+          </IconButton>
+        </Box>
+        
+        {/* 錯誤和成功訊息 */}
+        {(emsError || emsSuccess) && (
+          <Box sx={{ mt: 2 }}>
+            {emsError && <Alert severity="error" sx={{ mb: 1 }}>{emsError}</Alert>}
+            {emsSuccess && <Alert severity="success">{emsSuccess}</Alert>}
+          </Box>
+        )}
+      </Box>
+
+      {/* 充電樁列表 */}
+      {expanded && (
+        <CardContent sx={{ p: 3 }}>
+          {guns.length === 0 ? (
+            <Box display="flex" justifyContent="center" alignItems="center" sx={{ py: 4 }}>
+              <Typography variant="body1" color="text.secondary">
+                此電表下沒有充電樁
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{
+              display: 'flex',
+              flexDirection: viewMode === 'card' ? 'row' : 'column',
+              flexWrap: viewMode === 'card' ? 'wrap' : 'nowrap',
+              gap: 2,
+              justifyContent: viewMode === 'card' ? 'flex-start' : undefined
+            }}>
+              {guns.map(gun => (
+                <Box
+                  key={`gun-${gun.id}`}
+                  sx={
+                    viewMode === 'card'
+                      ? { width: { xs: '100%', sm: '48%', md: '33.3333%', lg: '24%' }, minWidth: 240, display: 'flex' }
+                      : { width: '100%' }
+                  }
+                >
+                  <CPCardItem
+                    charger={gun}
+                    layout={viewMode === 'card' ? 'grid' : 'linear'}
+                    onStartCharging={onStartCharging}
+                    onStopCharging={onStopCharging}
+                    onRestart={onRestart}
+                    onSettings={onSettings}
+                    onDelete={onDelete}
+                    onSave={onSave}
+                    loadingMap={loadingMap}
+                    isPendingDelete={isPendingDelete}
+                  />
+                </Box>
+              ))}
+            </Box>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
@@ -444,6 +847,23 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
             <Typography variant="body2" fontWeight="bold" color={charger.maxPower || charger.max_kw || charger.power ? 'primary.main' : 'text.secondary'} sx={{ fontSize: '1rem', ml: 1 }}>
               {charger.maxPower ? `${charger.maxPower} kW` : charger.max_kw ? `${charger.max_kw} kW` : (charger.power ? `${(charger.power/1000).toFixed(1)} kW` : '—')}
             </Typography>
+          </Box>
+          
+          {/* Show 所屬電表 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
+            <Typography variant="body2" color="text.secondary">所屬電表</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip 
+                label={charger.meter ? (charger.meter.meter_no || `ID:${charger.meter.id}`) : '—'} 
+                size="small" 
+                variant="outlined" 
+                color="info" 
+                sx={{ fontSize: '0.7rem', height: 24 }}
+              />
+              <Typography variant="body2" fontWeight="bold" color="info.main" sx={{ fontSize: '1rem' }}>
+                {charger.meter ? (charger.meter.name || `電表 #${charger.meter.id}`) : '—'}
+              </Typography>
+            </Box>
           </Box>
         </Box>
 

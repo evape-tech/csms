@@ -474,12 +474,9 @@ function detectChargingStatusChange(action, payload) {
     }
 }
 
+
 /**
- * 全站功率重新分配調度器
- * 當系統狀態發生變化時，重新計算並分配所有在線充電樁的功率
- * @param {string} eventType 觸發事件類型
- * @param {object} eventDetails 事件詳細資訊
- * @param {boolean} immediate 是否立即執行（手動觸發時為 true）
+ * @deprecated 
  */
 async function scheduleGlobalPowerReallocation(eventType, eventDetails = {}, immediate = false) {
     const reallocationId = `${eventType}_${Date.now()}`;
@@ -671,7 +668,7 @@ async function getSiteSetting() {
     
     try {
         const { databaseService: dbService } = await loadDatabaseModules();
-        const settings = await dbService.getSiteSettings();
+        const settings = await dbService.getStations();
         const setting = settings.length > 0 ? settings[0] : null;
         
         if (setting) {
@@ -2484,4 +2481,7 @@ async function update_guns_status(gun_cpsn, gun_connector, new_status) {
         return 0;
     }
 }
+/**
+ * @deprecated 
+ */
 module.exports = ocppController

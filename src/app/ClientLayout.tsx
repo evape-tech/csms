@@ -17,13 +17,20 @@ import Drawer from '@mui/material/Drawer';
 import { LoadingSpinner } from '../components/ui';
 
 const drawerWidth = 240;
-const sites = [
-  { id: 1, name: '台北市信義區充電站', address: '台北市信義區信義路五段7號' },
-  { id: 2, name: '新北市板橋區充電站', address: '新北市板橋區文化路一段100號' },
-  { id: 3, name: '桃園市中壢區充電站', address: '桃園市中壢區中正路二段50號' },
-  { id: 4, name: '台中市西屯區充電站', address: '台中市西屯區台灣大道三段99號' },
-  { id: 5, name: '高雄市前金區充電站', address: '高雄市前金區中正路四段200號' },
-];
+
+// Site interface based on the new stations schema
+interface Site {
+  id: number;
+  station_code: string;
+  name: string | null;
+  address: string | null;
+  floor: string | null;
+  operator_id: string | null;
+  tariff_id: number | null;
+  updated_at: string;
+  meters?: any[];
+  tariff?: any;
+}
 
 // Stable sx objects to avoid recreating on every render
 const flexBoxSx = { display: 'flex' };
@@ -126,8 +133,41 @@ export default function ClientLayout({
 }) {
   const [drawerOpen, setDrawerOpen] = React.useState(true);
   const [siteDialogOpen, setSiteDialogOpen] = React.useState(false);
-  const [selectedSite, setSelectedSite] = React.useState(sites[0]);
+  const [sites, setSites] = React.useState<Site[]>([]);
+  const [selectedSite, setSelectedSite] = React.useState<Site | null>(null);
   const [darkMode, setDarkMode] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Fetch sites from API
+  React.useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/stations');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch sites: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setSites(data);
+        
+        // Set first site as selected if available
+        if (data.length > 0) {
+          setSelectedSite(data[0]);
+        }
+      } catch (err) {
+        console.error('Failed to fetch sites:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load sites');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSites();
+  }, []);
   
   const theme = React.useMemo(() => createTheme({
     palette: {
@@ -149,7 +189,7 @@ export default function ClientLayout({
     setDarkMode((prev) => !prev);
   }, []);
   
-  const handleSiteSelect = React.useCallback((site: typeof sites[0]) => {
+  const handleSiteSelect = React.useCallback((site: Site) => {
     setSelectedSite(site);
     setSiteDialogOpen(false);
   }, []);
@@ -192,7 +232,7 @@ export default function ClientLayout({
         
         <AppBarComponent
           onDrawerToggle={handleDrawerToggle}
-          selectedSiteName={selectedSite.name}
+          selectedSiteName={selectedSite?.name || '載入中...'}
           darkMode={darkMode}
           onThemeToggle={handleThemeToggle}
           onLogout={handleLogout}

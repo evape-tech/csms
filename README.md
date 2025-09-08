@@ -190,7 +190,7 @@ rabbitmq-server
 -   `/api/reports` - 報告生成
 -   `/api/security_log` - 安全日誌
 -   `/api/user_management` - 使用者管理
--   `/api/site_setting` - 場域設定管理
+-   `/api/stations` - 場域設定管理
 
 詳細的 API 文件請參考各個端點的實現或使用工具如 Postman 進行測試。
 

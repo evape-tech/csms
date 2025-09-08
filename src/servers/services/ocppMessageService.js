@@ -27,6 +27,53 @@ function registerOcppEventHandler(handler) {
   return false;
 }
 
+/**
+ * 查找充電樁所屬的電表
+ * @param {string} cpid 充電樁ID
+ * @returns {Promise<Object|null>} 電表信息或null
+ */
+async function findMeterForChargePoint(cpid) {
+  try {
+    // 先查找充電樁信息
+    const guns = await chargePointRepository.getAllGuns({ cpid });
+    if (guns.length === 0) {
+      logger.warn(`[findMeterForChargePoint] 找不到充電樁 ${cpid} 的信息`);
+      return null;
+    }
+    
+    const gun = guns[0];
+    const meterId = gun.meter_id;
+    
+    if (!meterId) {
+      logger.warn(`[findMeterForChargePoint] 充電樁 ${cpid} 沒有關聯的電表ID`);
+      return null;
+    }
+    
+    // 查找電表信息 - 需要從stations中獲取完整的電表數據
+    const stations = await chargePointRepository.getStations();
+    
+    for (const station of stations) {
+      if (station.meters && Array.isArray(station.meters)) {
+        const meter = station.meters.find(m => m.id === meterId);
+        if (meter) {
+          logger.debug(`[findMeterForChargePoint] 充電樁 ${cpid} 屬於電表 ${meter.id} (${meter.meter_no}), 站點 ${station.id} (${station.name})`);
+          return {
+            ...meter,
+            station_id: station.id,
+            station_name: station.name
+          };
+        }
+      }
+    }
+    
+    logger.warn(`[findMeterForChargePoint] 找不到電表ID ${meterId} 的詳細信息`);
+    return null;
+  } catch (error) {
+    logger.error(`[findMeterForChargePoint] 查找充電樁 ${cpid} 所屬電表時發生錯誤:`, error);
+    return null;
+  }
+}
+
 // OCPP 消息类型常量
 const CALL_MESSAGE = 2;        // 请求消息
 const CALLRESULT_MESSAGE = 3;  // 响应成功
@@ -144,14 +191,27 @@ async function handleStatusNotification(cpsn, messageBody) {
       // 更新WebSocket数据中的状态
       updateStatusInWsData(cpsn, connectorId, status);
       
-      // 【事件驱动】触发EMS控制器处理OCPP事件
-      logger.info(`[事件驱动] 处理 StatusNotification 事件: ${cpsn}:${connectorId}, 状态: ${status}`);
+      // 【事件驱动】找到充电樁所屬電表，觸發電表級功率重新分配
+      logger.info(`[事件驱动-电表级] 处理 StatusNotification 事件: ${cpsn}:${connectorId}, 状态: ${status}`);
       try {
-        // 使用事件发射器触发OCPP事件，避免循环依赖
-        ocppEventEmitter.emit('ocpp_event', 'StatusNotification', messageBody, cpsn, connectorId);
-        logger.debug(`[事件驱动] StatusNotification 事件已发送`);
+        // 查找該充電樁所屬的電表
+        const meter = await findMeterForChargePoint(cpid);
+        if (meter) {
+          logger.info(`[事件驱动-电表级] 充电桩 ${cpid} 属于电表 ${meter.id} (${meter.meter_no})`);
+          // 觸發電表級功率重新分配事件
+          ocppEventEmitter.emit('ocpp_event', 'StatusNotification', {
+            ...messageBody,
+            meter_id: meter.id,
+            meter_no: meter.meter_no,
+            station_id: meter.station_id,
+            cpid: cpid
+          }, cpsn, connectorId);
+          logger.debug(`[事件驱动-电表级] StatusNotification 事件已发送，目标电表: ${meter.id}`);
+        } else {
+          logger.warn(`[事件驱动-电表级] 无法找到充电桩 ${cpid} 所属的电表，跳过功率重分配`);
+        }
       } catch (emsError) {
-        logger.error(`[事件驱动] 处理 StatusNotification 事件失败: ${emsError.message}`);
+        logger.error(`[事件驱动-电表级] 处理 StatusNotification 事件失败: ${emsError.message}`);
         // 错误不影响正常响应流程
       }
     }
@@ -375,11 +435,50 @@ async function handleMeterValues(cpsn, messageBody) {
       guns_memo2: new Date().toISOString() // 更新时间
     });
     
+    // 如果有活躍的交易，同步更新 transactions 表格
+    if (transactionId && transactionId !== 0) {
+      try {
+        // 查找對應的交易記錄
+        const activeTransaction = await chargePointRepository.findTransactionById(transactionId);
+        
+        if (activeTransaction && activeTransaction.status === 'ACTIVE') {
+          // 計算累積電量（基於當前電表讀數）
+          const currentMeterReading = parseFloat(cp_data1);
+          const startMeterReading = parseFloat(activeTransaction.meter_start) || 0;
+          const energyConsumed = Math.max(0, currentMeterReading - startMeterReading);
+          
+          // 計算充電時長
+          const startTime = new Date(activeTransaction.start_time);
+          const currentTime = new Date();
+          const chargingDuration = Math.floor((currentTime - startTime) / 1000); // 秒
+          
+          // 更新交易記錄的即時數據
+          const updateTime = new Date();
+          await chargePointRepository.updateTransactionRecord(transactionId, {
+            // 不更新 meter_stop，保持為 null 直到交易結束
+            energy_consumed: energyConsumed,
+            charging_duration: chargingDuration,
+            // 更新即時充電數據
+            current_power: parseFloat(cp_data4),
+            current_voltage: parseFloat(cp_data3),
+            current_current: parseFloat(cp_data2),
+            last_meter_update: updateTime,
+            updatedAt: updateTime
+          });
+          
+          logger.debug(`更新交易 ${transactionId} 的即時數據: 累積電量=${energyConsumed.toFixed(3)}kWh, 時長=${chargingDuration}秒, 功率=${cp_data4}kW`);
+        }
+      } catch (transactionError) {
+        logger.error(`更新交易 ${transactionId} 的即時數據失敗: ${transactionError.message}`);
+        // 不拋出錯誤，避免影響正常的 MeterValues 處理流程
+      }
+    }
+    
     // 记录日志
     await chargePointRepository.createCpLogEntry({
       cpid: cpid,
       cpsn: cpsn,
-      log: `MeterValues - Energy: ${cp_data1} kWh, Current: ${cp_data2} A, Voltage: ${cp_data3} V, Power: ${cp_data4} kW`,
+      log: `MeterValues - Energy: ${cp_data1} kWh, Current: ${cp_data2} A, Voltage: ${cp_data3} V, Power: ${cp_data4} kW${transactionId ? `, TxID: ${transactionId}` : ''}`,
       time: Array.isArray(meterValue) && meterValue.length > 0 ? new Date(meterValue[0].timestamp) : new Date(),
       inout: "in",
     });
@@ -444,18 +543,20 @@ async function handleStartTransaction(cpsn, messageBody) {
       };
     }
     
-    // 生成事务ID - 根據 connectorId 設置固定值
-    let transactionId;
-    if (connectorId === 1) {
-      transactionId = 111;
-    } else if (connectorId === 2) {
-      transactionId = 222;
-    } else {
-      // 其他連接器使用時間戳
-      transactionId = Date.now();
-    }
+    // 創建新的交易記錄
+    const transactionRecord = await chargePointRepository.createNewTransaction({
+      cpid: cpid,
+      cpsn: cpsn,
+      connector_id: connectorId,
+      idTag: idTag,
+      meterStart: meterStart,
+      user_id: null // 目前沒有用戶系統，暫時設為 null
+    });
     
-    logger.info(`為 ${cpsn}:${connectorId} 分配 transactionId: ${transactionId}`);
+    // 獲取符合 OCPP 1.6 協議的整數 transactionId
+    const ocppTransactionId = transactionRecord.ocppTransactionId;
+    const internalTransactionId = transactionRecord.internalTransactionId;
+    logger.info(`為 ${cpsn}:${connectorId} 創建新交易: OCPP ID=${ocppTransactionId}, 內部ID=${internalTransactionId}`);
     
     // 更新充电桩状态
     await chargePointRepository.updateConnectorStatus(cpid, "Charging");
@@ -463,38 +564,41 @@ async function handleStartTransaction(cpsn, messageBody) {
     // 更新WebSocket数据
     updateTransactionStartInWsData(cpsn, connectorId, timestamp, meterStart);
     
-    // 记录充电开始事务
-    await chargePointRepository.createTransactionRecord({
-      cpid: cpid,
-      cpsn: cpsn,
-      idTag: idTag,
-      meterStart: meterStart,
-      timestamp: timestamp,
-      transactionId: transactionId
-    });
-    
-    // 记录日志
+    // 記錄日志 (已在 createNewTransaction 中記錄)
     await chargePointRepository.createCpLogEntry({
       cpid: cpid,
       cpsn: cpsn,
-      log: `Start Transaction - ID: ${transactionId}, IdTag: ${idTag}, MeterStart: ${meterStart} kWh`,
+      log: `Start Transaction - OCPP ID: ${ocppTransactionId}, 內部ID: ${internalTransactionId}, IdTag: ${idTag}, MeterStart: ${meterStart} kWh`,
       time: new Date(timestamp) || new Date(),
       inout: "in",
     });
     
-    // 【事件驱动】触发EMS控制器处理StartTransaction事件
-    logger.info(`[事件驱动] 处理 StartTransaction 事件: ${cpsn}:${connectorId}, IdTag: ${idTag}`);
+    // 【事件驱动】找到充电樁所屬電表，觸發電表級功率重新分配
+    logger.info(`[事件驱动-电表级] 处理 StartTransaction 事件: ${cpsn}:${connectorId}, IdTag: ${idTag}`);
     try {
-      // 使用事件发射器触发OCPP事件，避免循环依赖
-      ocppEventEmitter.emit('ocpp_event', 'StartTransaction', messageBody, cpsn, connectorId);
-      logger.info(`[事件驱动] StartTransaction 事件已发送，预计触发功率重分配`);
+      // 查找該充電樁所屬的電表
+      const meter = await findMeterForChargePoint(cpid);
+      if (meter) {
+        logger.info(`[事件驱动-电表级] 充电桩 ${cpid} 属于电表 ${meter.id} (${meter.meter_no})`);
+        // 觸發電表級功率重新分配事件
+        ocppEventEmitter.emit('ocpp_event', 'StartTransaction', {
+          ...messageBody,
+          meter_id: meter.id,
+          meter_no: meter.meter_no,
+          station_id: meter.station_id,
+          cpid: cpid
+        }, cpsn, connectorId);
+        logger.info(`[事件驱动-电表级] StartTransaction 事件已发送，预计触发电表 ${meter.id} 的功率重分配`);
+      } else {
+        logger.warn(`[事件驱动-电表级] 无法找到充电桩 ${cpid} 所属的电表，跳过功率重分配`);
+      }
     } catch (emsError) {
-      logger.error(`[事件驱动] 处理 StartTransaction 事件失败: ${emsError.message}`);
+      logger.error(`[事件驱动-电表级] 处理 StartTransaction 事件失败: ${emsError.message}`);
       // 错误不影响正常响应流程
     }
     
     return {
-      transactionId: transactionId,
+      transactionId: ocppTransactionId, // 返回 OCPP 協議要求的整數 ID
       idTagInfo: { status: "Accepted" }
     };
   } catch (error) {
@@ -517,8 +621,8 @@ async function handleStopTransaction(cpsn, messageBody) {
   logger.info(`处理充电站 ${cpsn} 的 StopTransaction: TransactionId ${transactionId}, IdTag: ${idTag}, MeterStop: ${meterStop}`);
   
   try {
-    // 查找事务记录
-    const transaction = await chargePointRepository.findTransaction(transactionId);
+    // 查找事務記錄
+    const transaction = await chargePointRepository.findTransactionById(transactionId);
     
     if (!transaction) {
       logger.warn(`找不到事务ID: ${transactionId} 的记录`);
@@ -527,9 +631,9 @@ async function handleStopTransaction(cpsn, messageBody) {
       };
     }
     
-    // 获取CPID和连接器ID
+    // 獲取充電桩信息
     const cpid = transaction.cpid;
-    const connectorId = transaction.connector;
+    const connectorId = transaction.connector_id;
     
     if (!cpid) {
       logger.warn(`事务记录中没有CPID信息`);
@@ -538,11 +642,11 @@ async function handleStopTransaction(cpsn, messageBody) {
       };
     }
     
-    // 计算充电量和充电时长
-    const meterStart = transaction.meterStart || 0;
+    // 計算充電量和充電時長
+    const meterStart = transaction.meter_start || 0;
     const chargingEnergy = Math.max(0, parseFloat(meterStop) - parseFloat(meterStart)).toFixed(2);
     
-    const startTime = new Date(transaction.timestamp);
+    const startTime = new Date(transaction.start_time);
     const stopTime = new Date(timestamp);
     const chargingDuration = Math.floor((stopTime - startTime) / 1000); // 秒
     
@@ -550,33 +654,53 @@ async function handleStopTransaction(cpsn, messageBody) {
     await chargePointRepository.updateConnectorStatus(cpid, "Available");
     
     // 更新WebSocket数据
-    updateTransactionStopInWsData(cpsn, connectorId, timestamp, meterStop, chargingEnergy, chargingDuration);
+    updateTransactionStopInWsData(transaction.cpsn, connectorId, timestamp, meterStop, chargingEnergy, chargingDuration);
     
-    // 更新事务记录
+    // 更新交易記錄
     await chargePointRepository.updateTransactionRecord(transactionId, {
-      meterStop: meterStop,
-      stopTimestamp: timestamp,
-      chargingEnergy: chargingEnergy,
-      chargingDuration: chargingDuration
+      end_time: stopTime,
+      meter_stop: parseFloat(meterStop),
+      energy_consumed: parseFloat(chargingEnergy),
+      charging_duration: chargingDuration,
+      status: 'COMPLETED'
     });
+    
+    // 清除充電桩上的交易ID
+    await chargePointRepository.updateGun(
+      { cpid: cpid },
+      { transactionid: null }
+    );
     
     // 记录日志
     await chargePointRepository.createCpLogEntry({
       cpid: cpid,
-      cpsn: cpsn,
+      cpsn: transaction.cpsn,
       log: `Stop Transaction - ID: ${transactionId}, IdTag: ${idTag}, MeterStop: ${meterStop} kWh, Energy: ${chargingEnergy} kWh, Duration: ${formatDuration(chargingDuration)}`,
       time: new Date(timestamp) || new Date(),
       inout: "in",
     });
     
-    // 【事件驱动】触发EMS控制器处理StopTransaction事件
-    logger.info(`[事件驱动] 处理 StopTransaction 事件: ${cpsn}:${connectorId}, TransactionId: ${transactionId}`);
+    // 【事件驱动】找到充电樁所屬電表，觸發電表級功率重新分配
+    logger.info(`[事件驱动-电表级] 处理 StopTransaction 事件: ${cpsn}:${connectorId}, TransactionId: ${transactionId}`);
     try {
-      // 使用事件发射器触发OCPP事件，避免循环依赖
-      ocppEventEmitter.emit('ocpp_event', 'StopTransaction', messageBody, cpsn, connectorId);
-      logger.info(`[事件驱动] StopTransaction 事件已发送，预计触发功率重分配`);
+      // 查找該充電樁所屬的電表
+      const meter = await findMeterForChargePoint(cpid);
+      if (meter) {
+        logger.info(`[事件驱动-电表级] 充电桩 ${cpid} 属于电表 ${meter.id} (${meter.meter_no})`);
+        // 觸發電表級功率重新分配事件
+        ocppEventEmitter.emit('ocpp_event', 'StopTransaction', {
+          ...messageBody,
+          meter_id: meter.id,
+          meter_no: meter.meter_no,
+          station_id: meter.station_id,
+          cpid: cpid
+        }, cpsn, connectorId);
+        logger.info(`[事件驱动-电表级] StopTransaction 事件已发送，预计触发电表 ${meter.id} 的功率重分配`);
+      } else {
+        logger.warn(`[事件驱动-电表级] 无法找到充电桩 ${cpid} 所属的电表，跳过功率重分配`);
+      }
     } catch (emsError) {
-      logger.error(`[事件驱动] 处理 StopTransaction 事件失败: ${emsError.message}`);
+      logger.error(`[事件驱动-电表级] 处理 StopTransaction 事件失败: ${emsError.message}`);
       // 错误不影响正常响应流程
     }
     
@@ -763,69 +887,6 @@ function updateStatusInWsData(cpsn, connectorId, status) {
     }
   } catch (error) {
     logger.error(`更新WebSocket数据状态失败: ${cpsn}:${connectorId}`, error);
-  }
-}
-
-/**
- * 更新WebSocket数据中的计量值
- * @param {string} cpsn 充电站序列号
- * @param {number} connectorId 连接器ID
- * @param {Array} sampledValues 采样值数组
- */
-function updateMeterValuesInWsData(cpsn, connectorId, sampledValues) {
-  logger.debug(`更新WebSocket数据 ${cpsn}:${connectorId} 的计量值`);
-  
-  try {
-    if (!connectionService.wsCpdatas[cpsn] || !connectionService.wsCpdatas[cpsn][0]) {
-      logger.debug(`${cpsn} 的WebSocket数据不存在`);
-      return;
-    }
-    
-    const wsData = connectionService.wsCpdatas[cpsn][0];
-    let connectorData = null;
-    
-    if (connectorId === 1) {
-      connectorData = wsData.connector_1_meter;
-    } else if (connectorId === 2) {
-      connectorData = wsData.connector_2_meter;
-    } else if (connectorId === 3) {
-      connectorData = wsData.connector_3_meter;
-    } else if (connectorId === 4) {
-      connectorData = wsData.connector_4_meter;
-    }
-    
-    if (!connectorData) return;
-    
-    // 映射不同的计量值到data1-data6字段
-    for (const sample of sampledValues) {
-      const value = sample.value || "0";
-      
-      switch (sample.measurand) {
-        case "Energy.Active.Import.Register":
-          connectorData.data1 = parseFloat(value).toFixed(2);
-          break;
-        case "Power.Active.Import":
-          connectorData.data2 = parseFloat(value).toFixed(2);
-          break;
-        case "Current.Import":
-          connectorData.data3 = parseFloat(value).toFixed(2);
-          break;
-        case "Voltage":
-          connectorData.data4 = parseFloat(value).toFixed(2);
-          break;
-        case "Temperature":
-          connectorData.data5 = parseFloat(value).toFixed(2);
-          break;
-        default:
-          // 其他值放在data6
-          connectorData.data6 = parseFloat(value).toFixed(2);
-          break;
-      }
-    }
-    
-    logger.debug(`${cpsn}:${connectorId} 计量值已更新`);
-  } catch (error) {
-    logger.error(`更新WebSocket数据计量值失败: ${cpsn}:${connectorId}`, error);
   }
 }
 

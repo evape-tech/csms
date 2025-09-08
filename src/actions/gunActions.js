@@ -20,6 +20,7 @@ export async function createGunAction(formData) {
     const acdc = formData.get('acdc');
     const maxKw = formData.get('max_kw');
     const gunsMemo1 = formData.get('guns_memo1');
+    const meterId = formData.get('meter_id');
     
     // 建構資料物件
     const data = {};
@@ -29,6 +30,7 @@ export async function createGunAction(formData) {
     if (acdc) data.acdc = acdc;
     if (maxKw) data.max_kw = Number(maxKw);
     if (gunsMemo1) data.guns_memo1 = gunsMemo1;
+    if (meterId) data.meter_id = Number(meterId);
     
     // 預設狀態為 'Unavailable'
     data.guns_status = 'Unavailable';
@@ -54,6 +56,7 @@ export async function createGunAction(formData) {
       max_kw: created.max_kw ? Number(created.max_kw) : null,
       guns_memo1: created.guns_memo1,
       guns_status: created.guns_status,
+      meter_id: created.meter_id,
       createdAt: created.createdAt?.toISOString() || new Date().toISOString(),
       updatedAt: created.updatedAt?.toISOString() || new Date().toISOString()
     };

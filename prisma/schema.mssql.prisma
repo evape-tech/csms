@@ -8,142 +8,86 @@ datasource db {
   url      = env("DATABASE_URL_MSSQL")
 }
 
-// Models adapted for SQL Server (NVARCHAR / NTEXT where appropriate). Keep types generic where possible.
-
-model cartitems {
-  id        Int      @id @default(autoincrement())
-  CartId    Int?
-  ProductId Int?
-  quantity  Int?
-  createdAt DateTime
-  updatedAt DateTime
-  carts     carts?   @relation(fields: [CartId], references: [id], onDelete: Cascade)
-
-  @@index([CartId])
-}
-
-model carts {
-  id        Int         @id @default(autoincrement())
-  UserId    Int?
-  createdAt DateTime
-  updatedAt DateTime
-  cartitems cartitems[]
-}
-
-model cp_gun_datas {
-  id                  Int      @id @default(autoincrement())
-  gunid               String   @db.NVarChar(45)
-  cpsn                String   @db.NVarChar(45)
-  connector_num       String   @db.NVarChar(45)
-  connector           String   @db.NVarChar(45)
-  last_heartbeat      String?  @db.NVarChar(45)
-  online              String?  @db.NVarChar(45)
-  brand               String?  @db.NVarChar(45)
-  loc                 String?  @db.NVarChar(max)
-  station_name        String?  @db.NVarChar(45)
-  local_cp_num        String?  @db.NVarChar(45)
-  current_status      String?  @db.NVarChar(45)
-  charging_current_a  String?  @db.NVarChar(45)
-  charging_voltage    String?  @db.NVarChar(45)
-  charging_start_time DateTime?
-  charging_end_time   DateTime?
-}
-
 model cp_logs {
   id        BigInt   @id @default(autoincrement())
   cpid      String?  @db.NVarChar(255)
   cpsn      String?  @db.NVarChar(255)
   log       String?  @db.NVarChar(max)
-  inout     String?  @db.NVarChar(255)
+  inout     String?  @db.NVarChar(45)
   time      DateTime?
-  createdAt DateTime
-  updatedAt DateTime
+  createdAt DateTime?
+  updatedAt DateTime?
 }
 
 model guns {
-  id               Int      @id @default(autoincrement())
-  connector        String?  @db.NVarChar(255)
-  cpid             String?  @db.NVarChar(255)
-  cpsn             String?  @db.NVarChar(255)
-  guns_status      String?  @db.NVarChar(255)
-  createdAt        DateTime
-  updatedAt        DateTime
-  guns_metervalue1 String?  @db.NVarChar(255)
-  guns_metervalue2 String?  @db.NVarChar(255)
-  guns_metervalue3 String?  @db.NVarChar(255)
-  guns_metervalue4 String?  @db.NVarChar(255)
-  guns_metervalue5 String?  @db.NVarChar(255)
-  guns_metervalue6 String?  @db.NVarChar(255)
-  guns_memo1       String?  @db.NVarChar(255)
-  guns_memo2       String?  @db.NVarChar(255)
-  transactionid    String?  @db.NVarChar(255)
-  acdc             String? @default("AC") @db.NVarChar(10)
-  max_kw           Int?     @default(0)
+  id               Int       @id @default(autoincrement())
+  connector        String?   @db.NVarChar(45)
+  cpid             String?   @db.NVarChar(255)
+  cpsn             String?   @db.NVarChar(255)
+  guns_status      String?   @db.NVarChar(45)
+  createdAt        DateTime? @db.DateTime()
+  updatedAt        DateTime? @db.DateTime()
+  guns_metervalue1 String?   @db.NVarChar(255)
+  guns_metervalue2 String?   @db.NVarChar(255)
+  guns_metervalue3 String?   @db.NVarChar(255)
+  guns_metervalue4 String?   @db.NVarChar(255)
+  guns_metervalue5 String?   @db.NVarChar(255)
+  guns_metervalue6 String?   @db.NVarChar(255)
+  guns_memo1       String?   @db.NVarChar(255)
+  guns_memo2       String?   @db.NVarChar(255)
+  transactionid    String?   @db.NVarChar(255)
+  acdc             String?   @default("AC") @db.NVarChar(2)
+  max_kw           Int?      @default(0)
+
+  meter_id         Int?
+  meter            meters?    @relation("meter_guns", fields: [meter_id], references: [id])
 }
 
-model orderitems {
-  id        Int      @id @default(autoincrement())
-  OrderId   Int?
-  ProductId Int?
-  price     Int?
-  quantity  Int?
-  createdAt DateTime
-  updatedAt DateTime
-  orders    orders?  @relation(fields: [OrderId], references: [id], onDelete: Cascade)
+model stations {
+  id           Int       @id @default(autoincrement())
+  station_code String    @db.NVarChar(50)    // 自定義場域編號
+  name         String?   @db.NVarChar(100)   // 場域名稱
+  address      String?   @db.NVarChar(255)
+  floor        String?   @db.NVarChar(50)
+  operator_id  String?   @db.NVarChar(50)    // 營運商/業主ID
+  tariff_id    Int?                                // 預設費率ID (tariffs.id)
+  updated_at   DateTime  @default(now())     @db.DateTime2
 
-  @@index([OrderId])
+  meters       meters[]  @relation("station_meters")
+  tariff       tariffs?  @relation("StationTariff", fields: [tariff_id], references: [id])
 }
 
-model orders {
-  id              Int          @id @default(autoincrement())
-  name            String?      @db.NVarChar(255)
-  phone           String?      @db.NVarChar(255)
-  address         String?      @db.NVarChar(255)
-  amount          Int?
-  sn              String?      @db.NVarChar(255)
-  shipping_status String?      @db.NVarChar(255)
-  payment_status  String?      @db.NVarChar(255)
-  UserId          Int?
-  createdAt       DateTime
-  updatedAt       DateTime
-  orderitems      orderitems[]
-  payments        payments[]
+
+model meters {
+  id           Int       @id @default(autoincrement())
+  station_id   Int
+  meter_no     String    @db.NVarChar(50)
+  ems_mode     String    @default("static") @db.NVarChar(32)
+  max_power_kw Decimal   @default(480.00)  @db.Decimal(10,2)
+  billing_mode String?   @db.NVarChar(32)
+  owner_id     String?   @db.NVarChar(50)
+  updated_at   DateTime  @default(now())    @db.DateTime2
+
+  station      stations  @relation("station_meters", fields: [station_id], references: [id])
+  guns         guns[]    @relation("meter_guns") // 一對多關聯 guns
 }
 
-model payments {
-  id              Int       @id @default(autoincrement())
-  payment_method  String?   @db.NVarChar(255)
-  isSuccess       Boolean?
-  failure_message String?   @db.NVarChar(max)
-  payTime         DateTime?
-  OrderId         Int?
-  createdAt       DateTime
-  updatedAt       DateTime
-  orders          orders?   @relation(fields: [OrderId], references: [id], onDelete: NoAction)
+// MSSQL不支持枚举类型，使用字符串代替
+// 费率类型
+// FIXED_RATE: 固定费率 (单一价格)
+// TIME_OF_USE: 分时费率 (尖峰/离峰价格)
+// PROGRESSIVE: 累进费率 (用量越高单价越高)
+// SPECIAL_PROMOTION: 特殊促销方案
+// MEMBERSHIP: 会员特别费率
+// CUSTOM: 自定义费率
 
-  @@index([OrderId])
-}
-
-model products {
-  id          Int      @id @default(autoincrement())
-  name        String?  @db.NVarChar(255)
-  description String?  @db.NVarChar(max)
-  price       Int?
-  image       String?  @db.NVarChar(255)
-  createdAt   DateTime
-  updatedAt   DateTime
-}
-
-model sequelizemeta {
-  name String @id @unique @db.NVarChar(255)
-}
-
-model site_settings {
-  id           Int      @id @default(autoincrement())
-  ems_mode     String?  @default("static") @db.NVarChar(255)
-  max_power_kw Decimal? @default(480.00) @db.Decimal(10, 2)
-  updatedAt    DateTime? @map("updated_at")
-}
+// 账单状态
+// PENDING: 待处理
+// CALCULATED: 已计算
+// INVOICED: 已开立发票
+// PAID: 已付款
+// CANCELLED: 已取消
+// ERROR: 错误
 
 model users {
   id        Int      @id @default(autoincrement())
@@ -152,4 +96,162 @@ model users {
   role      String?  @db.NVarChar(255)
   createdAt DateTime
   updatedAt DateTime
+}
+
+model transactions {
+  id                BigInt   @id @default(autoincrement()) // 資料庫自動生成，用作 OCPP transactionId
+  transaction_id    String   @unique @db.NVarChar(50) // 內部自訂編號
+  user_id           String?  @db.NVarChar(100)
+  start_time        DateTime
+  end_time          DateTime?
+
+  cpid              String   @db.NVarChar(255)
+  cpsn              String   @db.NVarChar(255)
+  connector_id      Int
+
+  id_tag            String   @db.NVarChar(20)
+
+  // 電表數據
+  meter_start       Decimal?            @db.Decimal(10,3)
+  meter_stop        Decimal?            @db.Decimal(10,3)
+  energy_consumed   Decimal?            @db.Decimal(10,3)
+  
+  // 即時充電數據（由 MeterValues 更新）
+  current_power     Decimal?            @db.Decimal(8,3)  // 當前功率 (kW)
+  current_voltage   Decimal?            @db.Decimal(8,2)  // 當前電壓 (V)
+  current_current   Decimal?            @db.Decimal(8,2)  // 當前電流 (A)
+  last_meter_update DateTime?           // 最後電表更新時間
+  
+  // 充電時長（秒）
+  charging_duration Int?
+
+  // 狀態資訊
+  status            String             @default("ACTIVE") @db.NVarChar(20)
+  stop_reason       String?            @db.NVarChar(100)
+
+  createdAt         DateTime
+  updatedAt         DateTime
+
+  @@index([transaction_id])
+  @@index([cpid])
+  @@index([cpsn])
+  @@index([id_tag])
+  @@index([status])
+  @@index([start_time])
+  @@index([end_time])
+}
+
+// 费率方案表
+model tariffs {
+  id                     Int          @id @default(autoincrement())
+  name                   String       @db.NVarChar(100)               // 费率方案名称
+  description            String?      @db.NVarChar(max)               // 方案描述
+  tariff_type            String       @default("FIXED_RATE") @db.NVarChar(20) // 费率类型
+  
+  // 基本费率设置
+  base_price             Decimal      @db.Decimal(10,2)               // 基本电费单价 (元/kWh)
+  service_fee            Decimal?     @db.Decimal(10,2)               // 服务费 (固定费用)
+  minimum_fee            Decimal?     @db.Decimal(10,2)               // 最低消费金额
+  
+  // 分时费率设置 (若使用 TIME_OF_USE 类型)
+  peak_hours_start       String?      @db.NVarChar(5)                 // 尖峰时段开始 (HH:MM 格式)
+  peak_hours_end         String?      @db.NVarChar(5)                 // 尖峰时段结束 (HH:MM 格式)
+  peak_hours_price       Decimal?     @db.Decimal(10,2)               // 尖峰时段电费 (元/kWh)
+  off_peak_price         Decimal?     @db.Decimal(10,2)               // 离峰时段电费 (元/kWh)
+  weekend_price          Decimal?     @db.Decimal(10,2)               // 假日电费 (元/kWh)
+  
+  // 阶梯式费率设置 (若使用 PROGRESSIVE 类型)
+  tier1_max_kwh          Decimal?     @db.Decimal(10,2)               // 第一阶梯最大值 (kWh)
+  tier1_price            Decimal?     @db.Decimal(10,2)               // 第一阶梯单价 (元/kWh)
+  tier2_max_kwh          Decimal?     @db.Decimal(10,2)               // 第二阶梯最大值 (kWh)
+  tier2_price            Decimal?     @db.Decimal(10,2)               // 第二阶梯单价 (元/kWh)
+  tier3_price            Decimal?     @db.Decimal(10,2)               // 第三阶梯单价 (元/kWh)
+  
+  // 促销或会员设置
+  discount_percentage    Decimal?     @db.Decimal(5,2)                // 折扣百分比 (例: 20.00 表示 8 折)
+  promotion_code         String?      @db.NVarChar(50)                // 促销代码
+  valid_from             DateTime?                                    // 方案有效起始日
+  valid_to               DateTime?                                    // 方案有效结束日
+  
+  // 其他条款设置
+  ac_only                Boolean      @default(false)                 // 仅适用于 AC 充电
+  dc_only                Boolean      @default(false)                 // 仅适用于 DC 充电
+  membership_required    Boolean      @default(false)                 // 是否需要会员资格
+  
+  // 系统信息
+  is_active              Boolean      @default(true)                  // 是否启用
+  is_default             Boolean      @default(false)                 // 是否为预设方案
+  created_by             String?      @db.NVarChar(100)               // 建立者
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  // 关联到账单记录
+  billing_records        billing_records[]
+
+  stations          stations[] @relation("StationTariff") // <- 反向關聯
+
+  @@index([name])
+  @@index([tariff_type])
+  @@index([is_active])
+  @@index([is_default])
+}
+
+// 账单记录表
+model billing_records {
+  id                     BigInt       @id @default(autoincrement())
+  transaction_id         String       @db.NVarChar(50)               // 对应的交易编号
+  transaction_ref        BigInt?                                     // 对应的交易 ID (数据库 ID)
+  
+  // 费率设置
+  tariff_id              Int                                         // 费率方案 ID
+  tariff                 tariffs      @relation(fields: [tariff_id], references: [id])
+  applied_price          Decimal      @db.Decimal(10,2)               // 实际应用的单价 (元/kWh)
+  
+  // 账单信息
+  energy_consumed        Decimal      @db.Decimal(10,3)               // 用电量 (kWh)
+  energy_fee             Decimal      @db.Decimal(10,2)               // 电费金额
+  service_fee            Decimal      @db.Decimal(10,2)               // 服务费金额
+  discount_amount        Decimal?     @db.Decimal(10,2)               // 折扣金额
+  tax_amount             Decimal?     @db.Decimal(10,2)               // 税金
+  total_amount           Decimal      @db.Decimal(10,2)               // 总金额
+  currency               String       @default("TWD") @db.NVarChar(3) // 币别
+  
+  // 计费详情
+  start_time             DateTime                                     // 开始时间
+  end_time               DateTime                                     // 结束时间
+  charging_duration      Int                                          // 充电时长 (秒)
+  billing_details        String?      @db.NVarChar(max)               // 计费明细 (JSON 格式)
+  
+  // 发票/付款信息
+  invoice_number         String?      @db.NVarChar(20)                // 发票编号
+  invoice_issued_at      DateTime?                                    // 发票开立时间
+  payment_method         String?      @db.NVarChar(50)                // 付款方式
+  payment_reference      String?      @db.NVarChar(100)               // 付款参考编号
+  payment_time           DateTime?                                    // 付款时间
+  
+  // 使用者信息
+  user_id                String?      @db.NVarChar(100)               // 用户 ID
+  id_tag                 String       @db.NVarChar(20)                // 识别标签
+  
+  // 充电桩信息
+  cpid                   String       @db.NVarChar(255)               // 充电桩 ID
+  cpsn                   String       @db.NVarChar(255)               // 充电桩序号
+  connector_id           Int                                          // 连接器 ID
+  
+  // 状态信息
+  status                 String       @default("CALCULATED") @db.NVarChar(20) // 账单状态
+  remark                 String?      @db.NVarChar(max)               // 备注
+  
+  // 时间戳
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([transaction_id])
+  @@index([tariff_id])
+  @@index([user_id])
+  @@index([id_tag])
+  @@index([cpid])
+  @@index([status])
+  @@index([start_time])
+  @@index([invoice_number])
 }

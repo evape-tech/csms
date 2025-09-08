@@ -20,7 +20,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import EvStationIcon from '@mui/icons-material/EvStation';
 import TuneIcon from '@mui/icons-material/Tune';
 import CircularProgressWithLabel from '../common/CircularProgressWithLabel';
-import { updateBalanceMode, updateMaxPower } from '../../actions/siteActions';
+import { updateBalanceMode, updateMaxPower } from '../../actions/stationActions';
 
 // 負載平衡模式選項 - 移到組件外部避免初始化問題
 const balanceOptions = [
@@ -31,14 +31,14 @@ const balanceOptions = [
 /**
  * 充電狀態卡片組件
  * @param {Object} props
- * @param {Array} props.siteSettings - 站點設置數據
+ * @param {Array} props.stations - 站點設置數據
  * @param {Array} props.guns - 充電樁數據
  */
-export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
+export default function ChargingStatusCard({ stations = [], guns = [] }) {
   // 一次性宣告所有狀態，避免依賴順序問題
-  const [siteSettingsState, setSiteSettingsState] = useState([]);
-  const [loadingSettings, setLoadingSettings] = useState(true);
-  const [settingsError, setSettingsError] = useState(null);
+  const [stationsState, setStationsState] = useState([]);
+  const [loadingStations, setLoadingStations] = useState(true);
+  const [stationsError, setStationsError] = useState(null);
   const [emsMode, setEmsMode] = useState(null);
   const [maxPowerKw, setMaxPowerKw] = useState(null);
   const [totalWatts, setTotalWatts] = useState(null);
@@ -61,14 +61,14 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
 
   // 工具函數
   const getSettingValue = useCallback((key) => {
-    if (!siteSettingsState || siteSettingsState.length === 0) return undefined;
-    const row = siteSettingsState[0];
+    if (!stationsState || stationsState.length === 0) return undefined;
+    const row = stationsState[0];
     if (!row) return undefined;
     if (key === 'ems_mode') return row.ems_mode ?? row.emsMode ?? undefined;
     if (key === 'max_power_kw') return row.max_power_kw ?? row.maxPowerKw ?? row.max_power ?? undefined;
     if (key === 'total_stations') return row.total_stations ?? row.totalStations ?? undefined;
     return undefined;
-  }, [siteSettingsState]);
+  }, [stationsState]);
 
   // 處理充電狀態統計
   const processChargingStatus = useCallback(() => {
@@ -119,41 +119,44 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
   }, [guns]);
 
   // 處理站點設置
-  const processSiteSettings = useCallback(() => {
-    setLoadingSettings(true);
-    setSettingsError(null);
+  const processStations = useCallback(() => {
+    setLoadingStations(true);
+    setStationsError(null);
 
     try {
-      console.log('Processing site settings from props:', siteSettings);
-      setSiteSettingsState(siteSettings);
+      console.log('Processing stations from props:', stations);
+      setStationsState(stations);
 
-      if (siteSettings && siteSettings.length > 0) {
-        const first = siteSettings[0];
+      if (stations && stations.length > 0) {
+        const first = stations[0];
         if (first) {
-          // 確保正確設定 EMS 模式
-          if (first.ems_mode !== undefined && first.ems_mode !== null) {
-            console.log('Setting EMS mode from props:', first.ems_mode);
-            setEmsMode(first.ems_mode);
-            setBalanceMode(first.ems_mode);
-          }
-          // 確保正確設定最大功率
-          if (first.max_power_kw !== undefined && first.max_power_kw !== null) {
-            const kw = Number(first.max_power_kw);
-            if (!isNaN(kw)) {
-              console.log('Setting max power from props:', kw);
-              setMaxPowerKw(kw);
-              setTotalWatts(kw);
+          // 確保正確設定 EMS 模式 - 現在在meters表中
+          const firstMeter = first.meters?.[0];
+          if (firstMeter) {
+            if (firstMeter.ems_mode !== undefined && firstMeter.ems_mode !== null) {
+              console.log('Setting EMS mode from meter:', firstMeter.ems_mode);
+              setEmsMode(firstMeter.ems_mode);
+              setBalanceMode(firstMeter.ems_mode);
+            }
+            // 確保正確設定最大功率 - 現在在meters表中
+            if (firstMeter.max_power_kw !== undefined && firstMeter.max_power_kw !== null) {
+              const kw = Number(firstMeter.max_power_kw);
+              if (!isNaN(kw)) {
+                console.log('Setting max power from meter:', kw);
+                setMaxPowerKw(kw);
+                setTotalWatts(kw);
+              }
             }
           }
         }
       }
     } catch (error) {
-      setSettingsError(error.message || 'Failed to process site settings');
-      console.error('Failed to process site settings:', error);
+      setStationsError(error.message || 'Failed to process stations');
+      console.error('Failed to process stations:', error);
     } finally {
-      setLoadingSettings(false);
+      setLoadingStations(false);
     }
-  }, [siteSettings]);
+  }, [stations]);
 
   // 更新負載平衡模式 - 使用 server action
   const handleBalanceModeChange = useCallback(async (event) => {
@@ -173,15 +176,16 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
             setEmsMode(result.data.ems_mode);
             setBalanceMode(result.data.ems_mode);
             
-            // 同步更新本地設置狀態
-            setSiteSettingsState(prev => {
+            // 同步更新本地設置狀態 - 更新meter中的ems_mode
+            setStationsState(prev => {
               if (!prev || prev.length === 0) return prev;
               const copy = [...prev];
-              copy[0] = { 
-                ...copy[0], 
-                ems_mode: result.data.ems_mode,
-                max_power_kw: result.data.max_power_kw 
-              };
+              if (copy[0].meters && copy[0].meters.length > 0) {
+                copy[0].meters[0] = { 
+                  ...copy[0].meters[0], 
+                  ems_mode: result.data.ems_mode
+                };
+              }
               return copy;
             });
           }
@@ -190,16 +194,16 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
           console.error('Failed to update ems_mode:', result.error);
           alert('更新負載平衡模式失敗: ' + result.error);
           // 恢復到之前的模式 - 這裡需要重新處理當前的 props
-          processSiteSettings();
+          processStations();
         }
       } catch (error) {
         console.error('Failed to update ems_mode:', error);
         alert('更新負載平衡模式失敗: ' + error.message);
         // 恢復到之前的模式 - 這裡需要重新處理當前的 props
-        processSiteSettings();
+        processStations();
       }
     });
-  }, [processSiteSettings]); // 添加 processSiteSettings 依賴
+  }, [processStations]); // 添加 processStations 依賴
 
   // 更新場域總功率 - 使用 server action
   const handleUpdateMaxPower = useCallback(async () => {
@@ -220,11 +224,16 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
           setMaxPowerKw(Number(updated.max_power_kw));
           setTotalWatts(Number(updated.max_power_kw));
 
-          // 更新本地設置
-          setSiteSettingsState(prev => {
+          // 更新本地設置 - 更新meter中的max_power_kw
+          setStationsState(prev => {
             if (!prev || prev.length === 0) return prev;
             const copy = [...prev];
-            copy[0] = { ...copy[0], max_power_kw: updated.max_power_kw };
+            if (copy[0].meters && copy[0].meters.length > 0) {
+              copy[0].meters[0] = { 
+                ...copy[0].meters[0], 
+                max_power_kw: updated.max_power_kw 
+              };
+            }
             return copy;
           });
 
@@ -306,9 +315,9 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
 
   // 初始化數據
   useEffect(() => {
-    processSiteSettings();
+    processStations();
     processChargingStatus();
-  }, [processSiteSettings, processChargingStatus]);
+  }, [processStations, processChargingStatus]);
 
   return (
     <Card sx={{
@@ -334,9 +343,9 @@ export default function ChargingStatusCard({ siteSettings = [], guns = [] }) {
         </Box>
 
         {/* 錯誤顯示 */}
-        {settingsError && (
+        {stationsError && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {settingsError}
+            {stationsError}
           </Alert>
         )}
 

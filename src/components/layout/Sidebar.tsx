@@ -163,7 +163,7 @@ const SiteSelector = React.memo(function SiteSelector({
           {drawerOpen && (
             <>
               <ListItemText 
-                primary={selectedSite.name} 
+                primary={selectedSite?.name || '載入中...'} 
                 primaryTypographyProps={primaryTypographySx} 
               />
               <KeyboardArrowRightIcon />
