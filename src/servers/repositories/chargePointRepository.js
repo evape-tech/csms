@@ -420,18 +420,6 @@ async function createTransactionRecord(transactionData) {
       );
     }
     
-    // 记录交易日志
-    const logData = {
-      cpid: transactionData.cpid,
-      cpsn: transactionData.cpsn || '',
-      log: `StartTransaction - 开始充电交易 ${transactionData.transactionId}`,
-      time: new Date(),
-      inout: 'transaction'
-    };
-    
-    await createCpLogEntry(logData);
-    logger.debug(`创建交易记录成功: ${transactionData.transactionId}`);
-    
     return {
       id: transactionData.transactionId,
       ...transactionData,
@@ -755,13 +743,13 @@ async function handleOrphanTransaction(transaction) {
     logger.info(`孤兒交易 ${transaction.transaction_id} 已標記為ERROR，充電樁狀態保持不變`);
     
     // 記錄孤兒交易處理日志
-    await createCpLogEntry({
-      cpid: transaction.cpid,
-      cpsn: transaction.cpsn,
-      log: `Orphan Transaction Auto-Closed - ID: ${transaction.transaction_id}, Energy: ${transaction.energy_consumed || 0} kWh, Duration: ${formatDuration(finalChargingDuration)}, Reason: Timeout/Lost Connection`,
-      time: endTime,
-      inout: "system",
-    });
+    // await createCpLogEntry({
+    //   cpid: transaction.cpid,
+    //   cpsn: transaction.cpsn,
+    //   log: `Orphan Transaction Auto-Closed - ID: ${transaction.transaction_id}, Energy: ${transaction.energy_consumed || 0} kWh, Duration: ${formatDuration(finalChargingDuration)}, Reason: Timeout/Lost Connection`,
+    //   time: endTime,
+    //   inout: "system",
+    // });
     
     logger.info(`孤兒交易 ${transaction.transaction_id} 已自動關閉`);
     return { ...transaction, ...updateData, handled: true };

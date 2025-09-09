@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * 手動觸發全站功率重新分配 API
+ * 手動觸發功率重新分配 API 依據參數來判定顆粒度
  * POST /api/trigger-power-reallocation
  */
 export async function POST(request: NextRequest) {
@@ -107,56 +107,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: false,
             message: '觸發功率重新分配失敗',
-            error: error instanceof Error ? error.message : String(error),
-            timestamp: new Date().toISOString()
-        }, { status: 500 });
-    }
-}
-
-/**
- * 取得功率重新分配狀態 API (可選)
- * GET /api/trigger-power-reallocation
- */
-export async function GET(request: NextRequest) {
-    try {
-        console.log('[API] 收到功率重新分配狀態查詢請求');
-        
-        // 這裡可以回傳當前的重新分配狀態或統計資訊
-        return NextResponse.json({
-            success: true,
-            message: '功率重新分配 API 運作正常',
-            features: [
-                '手動觸發全站功率重新分配',
-                '支援針對特定電表重新分配',
-                '支援針對特定站點重新分配',
-                '支援批量更新所有在線充電樁',
-                '智能延遲排程避免衝突',
-                '完整的日誌追蹤和錯誤處理'
-            ],
-            usage: {
-                method: 'POST',
-                endpoint: '/api/trigger-power-reallocation',
-                description: '觸發功率重新分配',
-                parameters: {
-                    meter_id: '可選 - 針對特定電表重新分配',
-                    station_id: '可選 - 針對特定站點重新分配',
-                    source: '可選 - 觸發來源標識'
-                },
-                examples: [
-                    '全站重新分配: {}',
-                    '電表重新分配: {"meter_id": 123}',
-                    '站點重新分配: {"station_id": 456}'
-                ]
-            },
-            timestamp: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('[API] 查詢功率重新分配狀態失敗:', error);
-        
-        return NextResponse.json({
-            success: false,
-            message: '查詢功率重新分配狀態失敗',
             error: error instanceof Error ? error.message : String(error),
             timestamp: new Date().toISOString()
         }, { status: 500 });

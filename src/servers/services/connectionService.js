@@ -191,19 +191,6 @@ async function updateStationOnlineStatus(cpsn) {
     // 记录每个充电桩的状态变更
     for (const gun of guns) {
       logger.info(`CPID:${gun.cpid} | 连接器:${gun.connector} | 状态: ${gun.guns_status} -> Available`);
-      
-      // 记录到 Cp_log
-      try {
-        await chargePointRepository.createCpLogEntry({
-          cpid: gun.cpid,
-          cpsn: cpsn,
-          log: `WebSocket connection established - Status changed to Available`,
-          time: new Date(),
-          inout: "system",
-        });
-      } catch (err) {
-        logger.error(`记录 ${gun.cpid} 日志失败`, err);
-      }
     }
     
     return guns;
@@ -243,19 +230,6 @@ async function updateStationOfflineStatus(cpsn) {
     // 记录每个充电桩的状态变更
     for (const gun of guns) {
       logger.info(`CPID:${gun.cpid} | 连接器:${gun.connector} | 状态: ${gun.guns_status} -> Unavailable`);
-      
-      // 记录到 Cp_log
-      try {
-        await chargePointRepository.createCpLogEntry({
-          cpid: gun.cpid,
-          cpsn: cpsn,
-          log: `WebSocket connection lost - Status changed to Unavailable`,
-          time: new Date(),
-          inout: "system",
-        });
-      } catch (err) {
-        logger.error(`记录 ${gun.cpid} 日志失败`, err);
-      }
     }
     
     return guns;

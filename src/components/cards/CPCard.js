@@ -32,7 +32,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BoltIcon from '@mui/icons-material/Bolt';
-import { AddChargerDialog, ChargerSettingsDialog } from '../dialog';
+import { AddChargerDialog, ChargerSettingsDialog, AddMeterDialog } from '../dialog';
 import { deleteGunAction } from '../../actions/gunActions';
 import { updateBalanceMode, updateMaxPower } from '../../actions/stationActions';
 
@@ -75,6 +75,7 @@ export default function CPCard({ chargers, stations, meters }) {
   const [viewMode, setViewMode] = useState('card');
   const [searchTerm, setSearchTerm] = useState('');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addMeterDialogOpen, setAddMeterDialogOpen] = useState(false);
   
   // 使用 useTransition 來處理 server action
   const [isPendingDelete, startDeleteTransition] = useTransition();
@@ -299,6 +300,13 @@ export default function CPCard({ chargers, stations, meters }) {
     updateLocalCharger(updated.id, updated);
   };
 
+  // save handler for new meter
+  const handleSaveMeter = (newMeter) => {
+    // Since meter data comes from props, we need to notify parent to refresh
+    // For now, just show a success message and suggest refreshing the page
+    alert(`電表 "${newMeter.meter_no}" 新增成功！請重新整理頁面以查看最新資料。`);
+  };
+
   const handleRestart = id => console.log('重啟充電樁:', id);
   const handleSettings = id => console.log('設定充電樁:', id);
 
@@ -326,7 +334,7 @@ export default function CPCard({ chargers, stations, meters }) {
           return 0;
         })
       };
-    }).filter(group => group.guns.length > 0); // 只顯示有充電樁的電表群組
+    }); // 顯示所有電表群組，包括沒有充電樁的
   };
 
   const filteredMeterGroups = getFilteredMeterGroups();
@@ -362,11 +370,21 @@ export default function CPCard({ chargers, stations, meters }) {
   return (
     <Box>
       {/* 篩選和搜尋控制項 */}
-      <Card sx={{ mb: 2 }}>
-        <CardContent>
-          <Grid container spacing={2} alignItems="center">
-            {filterFields.map((field, idx) => (
-              <Grid item size={{ xs: 12, sm: idx === 2 ? 2 : 2 }} key={field.label}>
+      <Card sx={{ mb: 2, width: '100%' }}>
+        <CardContent sx={{ px: 0, py: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              width: '100%',
+              flexWrap: 'nowrap',
+              overflowX: 'auto',
+              px: 1,
+            }}
+          >
+            {filterFields.map((field) => (
+              <Box key={field.label} sx={{ minWidth: 160 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>{field.label}</InputLabel>
                   <Select
@@ -379,10 +397,11 @@ export default function CPCard({ chargers, stations, meters }) {
                     ))}
                   </Select>
                 </FormControl>
-              </Grid>
+              </Box>
             ))}
-            {/* 搜尋框 */}
-            <Grid item size={{ xs: 12, sm: 3 }}>
+
+            {/* 搜尋框 - 彈性成長 */}
+            <Box sx={{ flex: '1 1 360px', minWidth: 240 }}>
               <TextField
                 fullWidth
                 size="small"
@@ -396,37 +415,42 @@ export default function CPCard({ chargers, stations, meters }) {
                     </InputAdornment>
                   ),
                 }}
+                sx={{ minWidth: 0 }}
               />
-            </Grid>
+            </Box>
+
             {/* 視圖切換 */}
-            <Grid item size={{ xs: 12, sm: 1 }}>
-              <Box display="flex" gap={1}>
-                <Tooltip title="卡片視圖">
-                  <IconButton size="small" color={viewMode === 'card' ? 'primary' : 'default'} onClick={() => setViewMode('card')}>
-                    <ViewModuleIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="列表視圖">
-                  <IconButton size="small" color={viewMode === 'list' ? 'primary' : 'default'} onClick={() => setViewMode('list')}>
-                    <ViewListIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Grid>
-            {/* 新增充電樁按鈕 */}
-            <Grid item size={{ xs: 12, sm: 2 }} sx={{ textAlign: 'right' }}>
-              <Tooltip title="新增充電樁">
-                <Box display="flex" justifyContent="flex-end">
-                  <Button variant="contained" color="primary" size="medium" onClick={() => setAddDialogOpen(true)}>
-                    新增充電樁
-                  </Button>
-                </Box>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Tooltip title="卡片視圖">
+                <IconButton size="small" color={viewMode === 'card' ? 'primary' : 'default'} onClick={() => setViewMode('card')}>
+                  <ViewModuleIcon />
+                </IconButton>
               </Tooltip>
-            </Grid>
-          </Grid>
+              <Tooltip title="列表視圖">
+                <IconButton size="small" color={viewMode === 'list' ? 'primary' : 'default'} onClick={() => setViewMode('list')}>
+                  <ViewListIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* action buttons - 固定在最右 */}
+            <Box sx={{ marginLeft: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Tooltip title="新增電表">
+                <Button variant="contained" color="primary" size="medium" onClick={() => setAddMeterDialogOpen(true)}>
+                  新增電表
+                </Button>
+              </Tooltip>
+              <Tooltip title="新增充電樁">
+                <Button variant="contained" color="primary" size="medium" onClick={() => setAddDialogOpen(true)}>
+                  新增充電樁
+                </Button>
+              </Tooltip>
+            </Box>
+          </Box>
         </CardContent>
       </Card>
       <AddChargerDialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} stations={stations} meters={meters} onAdd={handleSaveCharger} />
+      <AddMeterDialog open={addMeterDialogOpen} onClose={() => setAddMeterDialogOpen(false)} stations={stations} onAdd={handleSaveMeter} />
       {/* 充電樁列表 - 按電表群組顯示 */}
       <Box>
         {/* 添加一個小提示顯示總數據 */}

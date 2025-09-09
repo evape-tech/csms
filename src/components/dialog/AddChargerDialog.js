@@ -33,6 +33,16 @@ export default function AddChargerDialog({ open, onClose, onAdd, stations, meter
       return;
     }
     
+    // 驗證所選電表是否存在
+    const selectedMeterExists = stations && stations.some(station => 
+      station.meters && station.meters.some(meter => meter.id.toString() === selectedMeterId.toString())
+    );
+    
+    if (!selectedMeterExists) {
+      setSaveError('找不到對應的電表，請重新選擇');
+      return;
+    }
+    
     startTransition(async () => {
       try {
         // 建立 FormData
@@ -56,12 +66,12 @@ export default function AddChargerDialog({ open, onClose, onAdd, stations, meter
           handleCancel(); // 重置表單並關閉
         } else {
           // 失敗：顯示錯誤訊息
-          setSaveError(result.error);
+          setSaveError(result.error || '新增充電樁失敗，請檢查電表是否有效');
         }
         
       } catch (err) {
         console.error('Failed to save charger', err);
-        setSaveError(err?.message || '儲存失敗');
+        setSaveError(err?.message || '新增充電樁失敗，請確認電表選擇是否正確');
       }
     });
   };
@@ -82,11 +92,13 @@ export default function AddChargerDialog({ open, onClose, onAdd, stations, meter
           </TextField>
           <TextField select label="關聯電表" value={selectedMeterId} onChange={(e) => setSelectedMeterId(e.target.value)} fullWidth required>
             <MenuItem value="">請選擇電表</MenuItem>
-            {meters && meters.map((meter) => (
-              <MenuItem key={meter.id} value={meter.id}>
-                {meter.meter_no} (站點: {meter.station?.name || meter.station?.station_code || '未知'})
-              </MenuItem>
-            ))}
+            {stations && stations.flatMap(station => 
+              station.meters ? station.meters.map((meter) => (
+                <MenuItem key={meter.id} value={meter.id}>
+                  {meter.meter_no} (站點: {station.name || station.station_code || '未知'})
+                </MenuItem>
+              )) : []
+            )}
           </TextField>
           <TextField label="最大功率 (kW)" type="number" value={maxPower} onChange={(e) => setMaxPower(e.target.value)} fullWidth />
           <TextField label="描述(desc)" value={desc} onChange={(e) => setDesc(e.target.value)} multiline rows={4} fullWidth />

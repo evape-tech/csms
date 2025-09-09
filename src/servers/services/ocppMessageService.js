@@ -10,6 +10,28 @@ const chargePointRepository = require('../repositories/chargePointRepository');
 const { generateUniqueId } = require('../utils/helpers');
 const EventEmitter = require('events');
 
+/**
+ * 创建OCPP日志条目 - 只记录OCPP JSON消息
+ * @param {string} cpid - 充电桩ID
+ * @param {string} cpsn - 充电桩序列号
+ * @param {Object} ocppMessage - OCPP消息对象
+ * @param {string} direction - 消息方向 "in" 或 "out"
+ * @param {Date} timestamp - 时间戳
+ */
+async function createOcppLogEntry(cpid, cpsn, ocppMessage, direction = "in", timestamp = new Date()) {
+  try {
+    await chargePointRepository.createCpLogEntry({
+      cpid: cpid,
+      cpsn: cpsn,
+      log: JSON.stringify(ocppMessage),
+      time: timestamp,
+      inout: direction,
+    });
+  } catch (error) {
+    logger.error(`创建OCPP日志失败: ${error.message}`, error);
+  }
+}
+
 // 創建事件發射器，用於觸發OCPP事件而不直接依賴emsController
 const ocppEventEmitter = new EventEmitter();
 
@@ -118,24 +140,7 @@ async function handleBootNotification(cpsn, messageBody) {
     try {
       // 使用第一个连接器的 cpid 作为主要记录
       const cpid = connectionService.getStationPrimaryCpid(cpsn);
-      
-      // 记录详细的原始数据
-      const detailedLog = {
-        action: "BootNotification",
-        vendor: messageBody.chargePointVendor || "Unknown",
-        model: messageBody.chargePointModel || "Unknown",
-        serialNumber: messageBody.chargePointSerialNumber,
-        firmware: messageBody.firmwareVersion,
-        response: JSON.stringify(response)
-      };
-      
-      await chargePointRepository.createCpLogEntry({
-        cpid: cpid,
-        cpsn: cpsn,
-        log: `Boot Notification - Model: ${cpData.cp_model}, Vendor: ${cpData.cp_vendor}, Details: ${JSON.stringify(detailedLog)}`,
-        time: new Date(),
-        inout: "in",
-      });
+      await createOcppLogEntry(cpid, cpsn, messageBody, "in");
     } catch (err) {
       logger.error(`记录 BootNotification 日志失败`, err);
     }
@@ -179,15 +184,6 @@ async function handleStatusNotification(cpsn, messageBody) {
     if (cpid) {
       await chargePointRepository.updateConnectorStatus(cpid, status);
       
-      // 记录状态变更日志
-      await chargePointRepository.createCpLogEntry({
-        cpid: cpid,
-        cpsn: cpsn,
-        log: `Status changed to ${status}${errorCode !== "NoError" ? ` (Error: ${errorCode})` : ''}`,
-        time: new Date(),
-        inout: "in",
-      });
-      
       // 更新WebSocket数据中的状态
       updateStatusInWsData(cpsn, connectorId, status);
       
@@ -214,6 +210,11 @@ async function handleStatusNotification(cpsn, messageBody) {
         logger.error(`[事件驱动-电表级] 处理 StatusNotification 事件失败: ${emsError.message}`);
         // 错误不影响正常响应流程
       }
+    }
+    
+    // 记录OCPP JSON日志
+    if (cpid) {
+      await createOcppLogEntry(cpid, cpsn, messageBody, "in");
     }
     
     // StatusNotification没有特定响应内容，只返回空对象
@@ -255,20 +256,6 @@ async function handleHeartbeat(cpsn) {
     global.heartbeatCounter[cpsn]++;
     if (global.heartbeatCounter[cpsn] >= 10) {
       global.heartbeatCounter[cpsn] = 0;
-      
-      // 记录日志
-      try {
-        const cpid = connectionService.getStationPrimaryCpid(cpsn);
-        await chargePointRepository.createCpLogEntry({
-          cpid: cpid,
-          cpsn: cpsn,
-          log: `Heartbeat`,
-          time: currentTime,
-          inout: "in",
-        });
-      } catch (err) {
-        logger.error(`记录心跳日志失败`, err);
-      }
     }
     
     return {
@@ -474,14 +461,8 @@ async function handleMeterValues(cpsn, messageBody) {
       }
     }
     
-    // 记录日志
-    await chargePointRepository.createCpLogEntry({
-      cpid: cpid,
-      cpsn: cpsn,
-      log: `MeterValues - Energy: ${cp_data1} kWh, Current: ${cp_data2} A, Voltage: ${cp_data3} V, Power: ${cp_data4} kW${transactionId ? `, TxID: ${transactionId}` : ''}`,
-      time: Array.isArray(meterValue) && meterValue.length > 0 ? new Date(meterValue[0].timestamp) : new Date(),
-      inout: "in",
-    });
+    // 记录OCPP JSON日志
+    await createOcppLogEntry(cpid, cpsn, messageBody, "in", Array.isArray(meterValue) && meterValue.length > 0 ? new Date(meterValue[0].timestamp) : new Date());
     
     // MeterValues没有特定响应内容，只返回空对象
     return {};
@@ -564,14 +545,8 @@ async function handleStartTransaction(cpsn, messageBody) {
     // 更新WebSocket数据
     updateTransactionStartInWsData(cpsn, connectorId, timestamp, meterStart);
     
-    // 記錄日志 (已在 createNewTransaction 中記錄)
-    await chargePointRepository.createCpLogEntry({
-      cpid: cpid,
-      cpsn: cpsn,
-      log: `Start Transaction - OCPP ID: ${ocppTransactionId}, 內部ID: ${internalTransactionId}, IdTag: ${idTag}, MeterStart: ${meterStart} kWh`,
-      time: new Date(timestamp) || new Date(),
-      inout: "in",
-    });
+    // 記錄OCPP JSON日志
+    await createOcppLogEntry(cpid, cpsn, messageBody, "in", new Date(timestamp) || new Date());
     
     // 【事件驱动】找到充电樁所屬電表，觸發電表級功率重新分配
     logger.info(`[事件驱动-电表级] 处理 StartTransaction 事件: ${cpsn}:${connectorId}, IdTag: ${idTag}`);
@@ -671,14 +646,8 @@ async function handleStopTransaction(cpsn, messageBody) {
       { transactionid: null }
     );
     
-    // 记录日志
-    await chargePointRepository.createCpLogEntry({
-      cpid: cpid,
-      cpsn: transaction.cpsn,
-      log: `Stop Transaction - ID: ${transactionId}, IdTag: ${idTag}, MeterStop: ${meterStop} kWh, Energy: ${chargingEnergy} kWh, Duration: ${formatDuration(chargingDuration)}`,
-      time: new Date(timestamp) || new Date(),
-      inout: "in",
-    });
+    // 记录OCPP JSON日志
+    await createOcppLogEntry(cpid, transaction.cpsn, messageBody, "in", new Date(timestamp) || new Date());
     
     // 【事件驱动】找到充电樁所屬電表，觸發電表級功率重新分配
     logger.info(`[事件驱动-电表级] 处理 StopTransaction 事件: ${cpsn}:${connectorId}, TransactionId: ${transactionId}`);
@@ -745,14 +714,8 @@ async function sendRemoteStartTransaction(cpsn, connectorId, idTag) {
       const cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
       
       if (cpid) {
-        // 记录日志
-        await chargePointRepository.createCpLogEntry({
-          cpid: cpid,
-          cpsn: cpsn,
-          log: `RemoteStartTransaction requested - IdTag: ${idTag}`,
-          time: new Date(),
-          inout: "out",
-        });
+        // 记录OCPP JSON日志
+        await createOcppLogEntry(cpid, cpsn, message, "out");
       }
     }
     
@@ -791,14 +754,8 @@ async function sendRemoteStopTransaction(cpsn, transactionId) {
       const transaction = await chargePointRepository.findTransaction(transactionId);
       
       if (transaction && transaction.cpid) {
-        // 记录日志
-        await chargePointRepository.createCpLogEntry({
-          cpid: transaction.cpid,
-          cpsn: cpsn,
-          log: `RemoteStopTransaction requested - TransactionId: ${transactionId}`,
-          time: new Date(),
-          inout: "out",
-        });
+        // 记录OCPP JSON日志
+        await createOcppLogEntry(transaction.cpid, cpsn, message, "out");
       }
     }
     
@@ -836,14 +793,8 @@ async function sendResetCommand(cpsn, type) {
       // 获取主要CPID
       const cpid = connectionService.getStationPrimaryCpid(cpsn);
       
-      // 记录日志
-      await chargePointRepository.createCpLogEntry({
-        cpid: cpid,
-        cpsn: cpsn,
-        log: `Reset command sent - Type: ${type}`,
-        time: new Date(),
-        inout: "out",
-      });
+      // 记录OCPP JSON日志
+      await createOcppLogEntry(cpid, cpsn, message, "out");
     }
     
     return success;
@@ -1003,14 +954,8 @@ async function handleAuthorize(cpsn, messageBody) {
     // 获取CPID
     const cpid = connectionService.getStationPrimaryCpid(cpsn);
     
-    // 记录日志
-    await chargePointRepository.createCpLogEntry({
-      cpid: cpid,
-      cpsn: cpsn,
-      log: `Authorize requested - IdTag: ${idTag}`,
-      time: new Date(),
-      inout: "in",
-    });
+    // 记录OCPP JSON日志
+    await createOcppLogEntry(cpid, cpsn, messageBody, "in");
     
     // 在实际应用中，这里应当验证idTag
     // 为了保持与原有逻辑一致，总是返回Accepted
@@ -1058,14 +1003,8 @@ async function handleDataTransfer(cpsn, messageBody) {
           cpid = cpsn;
         }
         
-        // 记录日志
-        await chargePointRepository.createCpLogEntry({
-          cpid: cpid,
-          cpsn: cpsn,
-          log: `DataTransfer - efaner - 返回CPID: ${cpid}`,
-          time: new Date(),
-          inout: "in",
-        });
+        // 记录OCPP JSON日志
+        await createOcppLogEntry(cpid, cpsn, messageBody, "in");
         
         // 返回CPID作为data
         return {
@@ -1085,15 +1024,9 @@ async function handleDataTransfer(cpsn, messageBody) {
     } 
     // 其他厂商的DataTransfer请求
     else {
-      // 记录日志
+      // 记录OCPP JSON日志
       const cpid = connectionService.getStationPrimaryCpid(cpsn);
-      await chargePointRepository.createCpLogEntry({
-        cpid: cpid,
-        cpsn: cpsn,
-        log: `DataTransfer - ${messageBody.vendorId} - ${JSON.stringify(messageBody)}`,
-        time: new Date(),
-        inout: "in",
-      });
+      await createOcppLogEntry(cpid, cpsn, messageBody, "in");
       
       // 默认返回Accepted
       return {
@@ -1140,8 +1073,9 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
     // 获取EMS设置
     const emsMode = siteSetting.ems_mode || 'dynamic';
     const maxPowerKw = parseFloat(siteSetting.max_power_kw || 50);
+    const meterId = siteSetting.meter_id;
     
-    logger.debug(`[EMS] 为 ${gun.cpid} 计算功率分配，模式: ${emsMode}, 场域限制: ${maxPowerKw}kW`);
+    logger.debug(`[EMS] 为 ${gun.cpid} 计算功率分配，模式: ${emsMode}, 场域限制: ${maxPowerKw}kW, 电表ID: ${meterId || '未指定'}`);
     
     // 使用EMS分配算法计算功率
     let unit, limit;
@@ -1150,15 +1084,33 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
       // 导入EMS分配算法
       const { calculateEmsAllocation } = require('../../lib/emsAllocator');
       
-      // 获取所有充电桩数据
-      const allGuns = await chargePointRepository.getAllGuns({});
+      // 如果指定了电表ID，只处理该电表下的充电桩
+      let targetGuns, targetOnlineCpids;
       
-      // 获取在线充电桩
-      const onlineCpids = await connectionService.getOnlineCpids();
+      if (meterId) {
+        // 获取指定电表下的充电桩
+        const allGuns = await chargePointRepository.getAllGuns({});
+        targetGuns = allGuns.filter(g => g.meter_id == meterId);
+        
+        // 获取在线充电桩，过滤出该电表下的在线充电桩
+        const onlineCpids = await connectionService.getOnlineCpids();
+        targetOnlineCpids = onlineCpids.filter(cpid => {
+          const meterGun = targetGuns.find(g => g.cpid === cpid);
+          return meterGun !== undefined;
+        });
+        
+        logger.debug(`[EMS] 电表级计算: 电表 ${meterId} 包含 ${targetGuns.length} 个充电桩，${targetOnlineCpids.length} 个在线`);
+      } else {
+        // 如果没有指定电表ID，使用全部充电桩（兼容旧逻辑）
+        targetGuns = await chargePointRepository.getAllGuns({});
+        targetOnlineCpids = await connectionService.getOnlineCpids();
+        
+        logger.debug(`[EMS] 全局计算: 总共 ${targetGuns.length} 个充电桩，${targetOnlineCpids.length} 个在线`);
+      }
       
       // 运行EMS算法
-      logger.debug(`[EMS] 运行EMS算法，模式: ${emsMode}`);
-      const emsResult = calculateEmsAllocation({ ems_mode: emsMode, max_power_kw: maxPowerKw }, allGuns, onlineCpids);
+      logger.debug(`[EMS] 运行EMS算法，模式: ${emsMode}, 范围: ${meterId ? '电表级' : '全局'}`);
+      const emsResult = calculateEmsAllocation({ ems_mode: emsMode, max_power_kw: maxPowerKw }, targetGuns, targetOnlineCpids);
       
       // 查找当前充电桩的分配结果
       const gunAllocation = emsResult.allocations.find(a => a.cpid === gun.cpid);
@@ -1168,7 +1120,7 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
         unit = gunAllocation.unit;
         limit = gunAllocation.limit;
         
-        logger.info(`[EMS] ${gun.cpid} 配置结果: ${limit}${unit} (${gunAllocation.allocated_kw}kW)`);
+        logger.info(`[EMS] ${gun.cpid} 配置结果: ${limit}${unit} (${gunAllocation.allocated_kw}kW) ${meterId ? `[电表${meterId}]` : '[全局]'}`);
         
         // 记录EMS日志以便调试
         emsResult.logs.forEach(log => {
@@ -1227,14 +1179,8 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
       }
     ];
     
-    // 记录发送的消息
-    await chargePointRepository.createCpLogEntry({
-      cpid: gun.cpid,
-      cpsn: cpsn,
-      log: `发送充电配置: ${JSON.stringify(message)}`,
-      time: new Date(),
-      inout: "out",
-    });
+    // 记录OCPP JSON日志
+    await createOcppLogEntry(gun.cpid, cpsn, message, "out");
     
     // 发送消息
     const success = await connectionService.sendCommandToStation(cpsn, message);

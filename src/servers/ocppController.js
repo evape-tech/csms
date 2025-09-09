@@ -227,20 +227,6 @@ async function updateStationOnlineStatus(cpsn) {
         // 記錄每個充電樁的狀態變更
         guns.forEach(async gun => {
             console.log(`[updateStationOnlineStatus] 📍 CPID:${gun.cpid} | 連接器:${gun.connector} | 狀態: ${gun.guns_status} -> Available`);
-            
-            // 記錄到 Cp_log
-            try {
-                const { createCpLog: logFunction } = await loadDatabaseModules();
-                await logFunction({
-                    cpid: gun.cpid,
-                    cpsn: cpsn,
-                    log: `WebSocket connection established - Status changed to Available`,
-                    time: new Date(),
-                    inout: "system",
-                });
-            } catch (err) {
-                console.error(`[updateStationOnlineStatus] 記錄 ${gun.cpid} 日誌失敗:`, err);
-            }
         });
         
         // 充電站上線後，觸發功率重新分配
@@ -319,20 +305,6 @@ async function updateStationOfflineStatus(cpsn) {
         // 記錄每個充電樁的狀態變更
         guns.forEach(async gun => {
             console.log(`[updateStationOfflineStatus] 📍 CPID:${gun.cpid} | 連接器:${gun.connector} | 狀態: ${gun.guns_status} -> Unavailable`);
-            
-            // 記錄到 Cp_log
-            try {
-                const { createCpLog: logFunction } = await loadDatabaseModules();
-                await logFunction({
-                    cpid: gun.cpid,
-                    cpsn: cpsn,
-                    log: `WebSocket connection lost - Status changed to Unavailable`,
-                    time: new Date(),
-                    inout: "system",
-                });
-            } catch (err) {
-                console.error(`[updateStationOfflineStatus] 記錄 ${gun.cpid} 日誌失敗:`, err);
-            }
         });
         
         // 如果充電站斷線，也需要觸發功率重新分配
@@ -825,7 +797,9 @@ var before_status = "Available";
 
 
 
-
+/**
+ * @deprecated 
+ */
 async function cpid_mapping(gun_cpsn,gun_connector){
     console.log(`[cpid_mapping] 開始為 ${gun_cpsn}:${gun_connector} 建立映射`);
     
@@ -885,7 +859,9 @@ async function cpid_mapping(gun_cpsn,gun_connector){
     return 0;
 }
 
-
+/**
+ * @deprecated 
+ */
 async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun_data3,gun_data4){
     console.log("into update_guns_meters()");
     const { databaseService: dbService } = await loadDatabaseModules();
@@ -955,7 +931,9 @@ async function update_guns_meters(gun_cpsn,gun_connector,gun_data1,gun_data2,gun
     return 0;
 }
 
-
+/**
+ * @deprecated 
+ */
 async function update_guns_memo2(gun_cpsn,gun_connector){
     console.log("into update_guns_memo2()");
     const { databaseService: dbService } = await loadDatabaseModules();
@@ -971,7 +949,9 @@ async function update_guns_memo2(gun_cpsn,gun_connector){
     return 0;
 }
 
-
+/**
+ * @deprecated 
+ */
 async function send_cp_to_kw_api(kw_cpid,kw_gun_status,data1,data2,data3,data4,data5,data6) {
     //外站接口
     //gun_cpid={"id":4,"connector":"0","cpsn":"spacepark102","guns_data1":"Available","createdAt":null,"updatedAt":"2024-01-09"}
@@ -1009,7 +989,9 @@ async function send_cp_to_kw_api(kw_cpid,kw_gun_status,data1,data2,data3,data4,d
         });
 
 }
-
+/**
+ * @deprecated 
+ */
 async function ocpp_send_command(cpid,cmd, payload) {
     //外站接口
     //gun_cpid={"id":4,"connector":"0","cpsn":"spacepark102","guns_data1":"Available","createdAt":null,"updatedAt":"2024-01-09"}
@@ -1212,10 +1194,7 @@ async function ocpp_send_command(cpid,cmd, payload) {
 }
 
 /**
- * 記錄當前全站功率配置總覽
- * 顯示所有充電樁的功率分配狀況，包含 A 和 W 的詳細記錄
- * @param {string} emsMode EMS 模式 (static/dynamic)
- * @param {number} maxPowerKw 場域總功率限制
+ * @deprecated 
  */
 async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
     try {
@@ -1339,7 +1318,9 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw) {
     }
 }
 
-
+/**
+ * @deprecated 
+ */
 const ocppController = {
     /*
        功能: KW api----
@@ -2459,6 +2440,9 @@ const ocppController = {
 
     },
 }
+/**
+ * @deprecated 
+ */
 async function update_guns_status(gun_cpsn, gun_connector, new_status) {
     try {
         const { databaseService: dbService } = await loadDatabaseModules();

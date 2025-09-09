@@ -70,62 +70,140 @@ async function publishGlobalReallocation(data) {
 }
 
 /**
- * 处理功率分配请求
+ * 处理功率分配请求 - 修复后按电表分组计算
  * @param {Object} data - 请求数据
  */
 async function handleAllocationRequest(data) {
   logger.info(`🔋 处理功率分配请求:`, data);
   
   try {
-    let { siteSetting, allGuns, onlineCpids } = data;
+    let { siteSetting, allGuns, onlineCpids, meterId } = data;
     
-    // 设置默认值
-    let finalSiteSetting = {
-      ems_mode: 'static',
-      max_power_kw: 100,
-      station_id: 0,
-      station_name: 'Default Station'
-    };
-    
-    // 如果提供的是站点对象而不是电表级别的配置，进行转换
-    if (siteSetting) {
-      if (siteSetting.meters && Array.isArray(siteSetting.meters) && siteSetting.meters.length > 0) {
-        // 从站点中获取第一个电表的配置
-        const meter = siteSetting.meters[0];
-        finalSiteSetting = {
-          ems_mode: meter.ems_mode || 'static',
-          max_power_kw: meter.max_power_kw || 100,
-          station_id: siteSetting.id || 0,
-          station_name: siteSetting.name || 'Unknown Station'
-        };
-      } else if (siteSetting.ems_mode || siteSetting.max_power_kw) {
-        // 如果直接提供了ems_mode或max_power_kw
-        finalSiteSetting = {
-          ems_mode: siteSetting.ems_mode || 'static',
-          max_power_kw: siteSetting.max_power_kw || 100,
-          station_id: siteSetting.station_id || 0,
-          station_name: siteSetting.station_name || 'Unknown Station'
-        };
+    // 如果指定了meterId，只处理该电表的分配
+    if (meterId) {
+      logger.info(`🎯 处理指定电表 ${meterId} 的功率分配`);
+      
+      // 获取指定电表的配置
+      const stations = await chargePointRepository.getStations();
+      let targetMeter = null;
+      
+      for (const station of stations) {
+        if (station.meters && Array.isArray(station.meters)) {
+          const foundMeter = station.meters.find(meter => meter.id == meterId);
+          if (foundMeter) {
+            targetMeter = foundMeter;
+            siteSetting = {
+              ems_mode: foundMeter.ems_mode || 'static',
+              max_power_kw: foundMeter.max_power_kw || 100,
+              station_id: station.id,
+              station_name: station.name,
+              meter_id: foundMeter.id
+            };
+            break;
+          }
+        }
       }
-    } else {
-      logger.warn('🔋 缺少场域设置，使用默认值');
+      
+      if (!targetMeter) {
+        throw new Error(`找不到电表 ID: ${meterId}`);
+      }
+      
+      // 只获取该电表下的充电枪
+      const meterGuns = allGuns.filter(gun => gun.meter_id == meterId);
+      const meterOnlineCpids = onlineCpids.filter(cpid => {
+        const gun = meterGuns.find(g => g.cpid === cpid);
+        return gun !== undefined;
+      });
+      
+      logger.info(`🔋 电表 ${meterId} 包含 ${meterGuns.length} 个充电枪，${meterOnlineCpids.length} 个在线`);
+      
+      // 执行该电表的EMS分配算法
+      const result = calculateEmsAllocation(siteSetting, meterGuns, meterOnlineCpids);
+      
+      // 发布分配结果
+      await publishAllocationResult({
+        requestId: data.requestId,
+        result: result,
+        meterId: meterId,
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.info(`✅ 电表 ${meterId} 功率分配完成，共分配 ${result.allocations?.length || 0} 个充电桩`);
+      return true;
     }
     
-    // 使用处理后的siteSetting
-    siteSetting = finalSiteSetting;
+    // 如果没有指定meterId，按电表分组处理所有功率分配
+    logger.info(`🌐 处理所有电表的功率分配`);
     
-    // 执行EMS分配算法
-    const result = calculateEmsAllocation(siteSetting, allGuns, onlineCpids);
+    // 获取所有站点和电表信息
+    const stations = await chargePointRepository.getStations();
+    const combinedResults = {
+      allocations: [],
+      summary: {
+        total_allocated_kw: 0,
+        ac_allocated_kw: 0,
+        dc_allocated_kw: 0,
+        total_available_kw: 0
+      }
+    };
     
-    // 发布分配结果
+    let processedMeters = 0;
+    
+    // 按电表分组处理
+    for (const station of stations) {
+      if (!station.meters || !Array.isArray(station.meters)) continue;
+      
+      for (const meter of station.meters) {
+        // 获取该电表下的充电枪
+        const meterGuns = allGuns.filter(gun => gun.meter_id == meter.id);
+        const meterOnlineCpids = onlineCpids.filter(cpid => {
+          const gun = meterGuns.find(g => g.cpid === cpid);
+          return gun !== undefined;
+        });
+        
+        if (meterGuns.length === 0) {
+          logger.debug(`⚠️ 电表 ${meter.id} (${meter.meter_no}) 没有关联充电枪，跳过`);
+          continue;
+        }
+        
+        logger.info(`⚡ 处理电表 ${meter.id} (${meter.meter_no}): ${meterGuns.length} 个充电枪，${meterOnlineCpids.length} 个在线`);
+        
+        // 为该电表创建独立的配置
+        const meterSiteSetting = {
+          ems_mode: meter.ems_mode || 'static',
+          max_power_kw: meter.max_power_kw || 100,
+          station_id: station.id,
+          station_name: station.name,
+          meter_id: meter.id
+        };
+        
+        // 执行该电表的EMS分配算法
+        const meterResult = calculateEmsAllocation(meterSiteSetting, meterGuns, meterOnlineCpids);
+        
+        // 合并结果
+        combinedResults.allocations.push(...meterResult.allocations);
+        combinedResults.summary.total_allocated_kw += meterResult.summary.total_allocated_kw;
+        combinedResults.summary.ac_allocated_kw += meterResult.summary.ac_allocated_kw;
+        combinedResults.summary.dc_allocated_kw += meterResult.summary.dc_allocated_kw;
+        combinedResults.summary.total_available_kw += meterResult.summary.total_available_kw;
+        
+        processedMeters++;
+        
+        logger.info(`✅ 电表 ${meter.id} 分配完成: ${meterResult.allocations.length} 个充电桩，${meterResult.summary.total_allocated_kw.toFixed(2)}kW`);
+      }
+    }
+    
+    // 发布合并后的分配结果
     await publishAllocationResult({
       requestId: data.requestId,
-      result: result,
+      result: combinedResults,
+      processedMeters: processedMeters,
       timestamp: new Date().toISOString()
     });
     
-    logger.info(`✅ 功率分配计算完成，共分配 ${result.allocations?.length || 0} 个充电桩`);
+    logger.info(`✅ 所有电表功率分配完成: ${processedMeters} 个电表，共分配 ${combinedResults.allocations.length} 个充电桩，总功率 ${combinedResults.summary.total_allocated_kw.toFixed(2)}kW`);
     return true;
+    
   } catch (error) {
     logger.error('❌ 功率分配计算失败:', error.message);
     
@@ -617,7 +695,7 @@ function clearAllProfileUpdateTimers() {
  * 显示所有充电桩的功率分配状况，包含 A 和 W 的详细记录
  * 
  * 从旧版 ocppController.js 的 logCurrentPowerConfiguration 迁移
- * 已适配新的数据库结构（stations - meters - guns）
+ * 已适配新的数据库结构（stations - meters - guns）并修复按电表分组计算
  * 
  * @param {string} emsMode EMS 模式 (static/dynamic)
  * @param {number} maxPowerKw 场域总功率限制
@@ -636,10 +714,45 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = nul
     const allGuns = await chargePointRepository.getAllGuns({});
     const onlineCpids = await connectionService.getOnlineCpids();
     
-    // 🚀 使用正确的 EMS 分配算法
-    const siteSetting = { ems_mode: emsMode, max_power_kw: maxPowerKw };
-    const emsResult = calculateEmsAllocation(siteSetting, allGuns, onlineCpids);
-    const allocation = emsResult.allocations;
+    // 获取所有站点和电表信息
+    const stations = await chargePointRepository.getStations();
+    
+    // 按电表分组进行EMS分配计算
+    const combinedAllocation = [];
+    let totalSystemPowerKw = 0;
+    
+    for (const station of stations) {
+      if (!station.meters || !Array.isArray(station.meters)) continue;
+      
+      for (const meter of station.meters) {
+        // 获取该电表下的充电枪
+        const meterGuns = allGuns.filter(gun => gun.meter_id == meter.id);
+        const meterOnlineCpids = onlineCpids.filter(cpid => {
+          const gun = meterGuns.find(g => g.cpid === cpid);
+          return gun !== undefined;
+        });
+        
+        if (meterGuns.length === 0) continue;
+        
+        // 为该电表创建独立的配置
+        const meterSiteSetting = {
+          ems_mode: meter.ems_mode || 'static',
+          max_power_kw: meter.max_power_kw || 100,
+          station_id: station.id,
+          station_name: station.name,
+          meter_id: meter.id
+        };
+        
+        // 执行该电表的EMS分配算法
+        const meterResult = calculateEmsAllocation(meterSiteSetting, meterGuns, meterOnlineCpids);
+        
+        // 合并结果
+        combinedAllocation.push(...meterResult.allocations);
+        totalSystemPowerKw += meterResult.summary.total_allocated_kw;
+        
+        logger.info(`📋 电表 ${meter.id} (${meter.meter_no}): ${meterResult.summary.total_allocated_kw.toFixed(2)}kW / ${meter.max_power_kw}kW`);
+      }
+    }
     
     // 分类统计
     const acGuns = allGuns.filter(g => g.acdc === 'AC');
@@ -665,8 +778,8 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = nul
         const charging = isCharging(status) ? '⚡充电中' : '⏸️待机';
         const maxKw = parseFloat(gun.max_kw || 0);
         
-        // 从EMS分配结果获取配置值
-        const gunAllocation = allocation.find(a => a.cpid === gun.cpid);
+        // 从按电表分组的EMS分配结果获取配置值
+        const gunAllocation = combinedAllocation.find(a => a.cpid === gun.cpid);
         let allocatedCurrentA, allocatedPowerKw;
         
         if (gunAllocation) {
@@ -681,7 +794,9 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = nul
         totalAcCurrentA += allocatedCurrentA;
         totalAcPowerKw += allocatedPowerKw;
         
-        logger.info(`  📍 ${gun.cpid.padEnd(12)} | ${gun.cpsn.padEnd(20)} | ${charging.padEnd(8)} | ${allocatedCurrentA.toString().padStart(3)}A | ${allocatedPowerKw.toFixed(2).padStart(6)}kW | 规格:${maxKw}kW`);
+        // 显示电表信息
+        const meterInfo = gun.meter_id ? `[M${gun.meter_id}]` : '[M?]';
+        logger.info(`  📍 ${gun.cpid.padEnd(12)} | ${gun.cpsn.padEnd(20)} | ${charging.padEnd(8)} | ${allocatedCurrentA.toString().padStart(3)}A | ${allocatedPowerKw.toFixed(2).padStart(6)}kW | 规格:${maxKw}kW ${meterInfo}`);
       });
       
       logger.info(`  🔋 AC总计: ${totalAcCurrentA}A | ${totalAcPowerKw.toFixed(2)}kW`);
@@ -699,8 +814,8 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = nul
         const charging = isCharging(status) ? '⚡充电中' : '⏸️待机';
         const maxKw = parseFloat(gun.max_kw || 0);
         
-        // 从EMS分配结果获取配置值
-        const gunAllocation = allocation.find(a => a.cpid === gun.cpid);
+        // 从按电表分组的EMS分配结果获取配置值
+        const gunAllocation = combinedAllocation.find(a => a.cpid === gun.cpid);
         let allocatedPowerW, allocatedPowerKw;
         
         if (gunAllocation) {
@@ -715,27 +830,35 @@ async function logCurrentPowerConfiguration(emsMode, maxPowerKw, stationId = nul
         totalDcPowerW += allocatedPowerW;
         totalDcPowerKw += allocatedPowerKw;
         
-        logger.info(`  📍 ${gun.cpid.padEnd(12)} | ${gun.cpsn.padEnd(20)} | ${charging.padEnd(8)} | ${allocatedPowerW.toString().padStart(6)}W | ${allocatedPowerKw.toFixed(2).padStart(6)}kW | 规格:${maxKw}kW`);
+        // 显示电表信息
+        const meterInfo = gun.meter_id ? `[M${gun.meter_id}]` : '[M?]';
+        logger.info(`  📍 ${gun.cpid.padEnd(12)} | ${gun.cpsn.padEnd(20)} | ${charging.padEnd(8)} | ${allocatedPowerW.toString().padStart(6)}W | ${allocatedPowerKw.toFixed(2).padStart(6)}kW | 规格:${maxKw}kW ${meterInfo}`);
       });
       
       logger.info(`  ⚡ DC总计: ${totalDcPowerW}W | ${totalDcPowerKw.toFixed(2)}kW`);
       logger.info('-'.repeat(80));
     }
     
-    // 功率使用统计 - 使用EMS分配结果
-    const totalUsedPower = emsResult.summary.total_allocated_kw || 0;
-    const maxPowerKwNum = isNaN(maxPowerKw) ? 0 : parseFloat(maxPowerKw) || 0;
-    const powerUtilization = maxPowerKwNum > 0 ? ((totalUsedPower / maxPowerKwNum) * 100).toFixed(1) : '0.0';
+    // 功率使用统计 - 使用按电表分组计算的总和
+    const totalUsedPower = totalSystemPowerKw;
+    const powerUtilization = formattedMaxPower > 0 ? ((totalUsedPower / formattedMaxPower) * 100).toFixed(1) : '0.0';
     
     logger.info(`📊 功率使用统计:`);
-    logger.info(`  💡 场域总功率: ${maxPowerKwNum}kW`);
-    logger.info(`  ⚡ 实际使用功率: ${totalUsedPower.toFixed(2)}kW`);
+    logger.info(`  💡 系统配置总功率: ${formattedMaxPower}kW (输入参考值)`);
+    logger.info(`  ⚡ 按电表分组计算功率: ${totalUsedPower.toFixed(2)}kW`);
     logger.info(`  📈 功率使用率: ${powerUtilization}%`);
     logger.info(`  ⏰ 更新时间: ${new Date().toLocaleString('zh-TW')}`);
     logger.info('='.repeat(80));
     logger.info('📊 【功率配置总览完成】\n');
     
-    return emsResult;
+    return {
+      allocations: combinedAllocation,
+      summary: {
+        total_allocated_kw: totalSystemPowerKw,
+        total_available_kw: formattedMaxPower,
+        utilization_percent: parseFloat(powerUtilization)
+      }
+    };
     
   } catch (error) {
     logger.error('❌ 记录功率配置总览时发生错误:', error);
