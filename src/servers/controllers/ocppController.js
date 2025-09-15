@@ -10,7 +10,6 @@ const ocppMessageService = require('../services/ocppMessageService');
 const { MQ_ENABLED } = require('../config/mqConfig');
 
 // OCPP消息类型常量
-const OCPP_PROTOCOL_1_6 = 'ocpp1.6';
 const CALL_MESSAGE = 2;
 const CALLRESULT_MESSAGE = 3;
 const CALLERROR_MESSAGE = 4;
@@ -26,15 +25,6 @@ async function handleConnection(ws, req) {
   const cpsn = urlParts[urlParts.length - 1];
   
   logger.info(`新的WebSocket连接: ${req.url}, CPSN: ${cpsn}`);
-  
-  // 检查Sec-WebSocket-Protocol，确保匹配OCPP协议版本
-  const protocol = req.headers['sec-websocket-protocol'];
-  
-  if (protocol !== OCPP_PROTOCOL_1_6) {
-    logger.error(`不支持的协议: ${protocol}`);
-    ws.close();
-    return;
-  }
   
   // 注册连接
   await connectionService.registerConnection(cpsn, ws);
@@ -95,13 +85,37 @@ async function handleMessage(cpsn, ws, message) {
     logger.error(`记录消息到数据库失败: ${logErr.message}`, logErr);
   }
   
-  // 尝试解析消息
+  // 尝试解析消息并根据 OCPP 消息类型拆解字段
   let messageId, action, payload, msgTypeId;
   try {
     const parsedMessage = JSON.parse(messageStr);
-    [msgTypeId, messageId, action, payload] = parsedMessage;
-    
-    logger.debug(`收到来自 ${cpsn} 的消息: [${msgTypeId}, ${messageId}, ${action}, ${JSON.stringify(payload)}]`);
+
+    // OCPP 消息格式：
+    // CALL:       [2, messageId, action, payload]
+    // CALLRESULT: [3, messageId, payload]
+    // CALLERROR:  [4, messageId, errorCode, errorDescription, errorDetails?]
+    msgTypeId = parsedMessage[0];
+    messageId = parsedMessage[1];
+
+    if (msgTypeId === CALL_MESSAGE) {
+      action = parsedMessage[2];
+      payload = parsedMessage[3];
+    } else if (msgTypeId === CALLRESULT_MESSAGE) {
+      action = undefined;
+      payload = parsedMessage[2];
+    } else if (msgTypeId === CALLERROR_MESSAGE) {
+      action = undefined;
+      payload = {
+        errorCode: parsedMessage[2],
+        errorDescription: parsedMessage[3],
+        errorDetails: parsedMessage[4]
+      };
+    } else {
+      // fallback：保留原始解構（兼容未知格式）
+      [msgTypeId, messageId, action, payload] = parsedMessage;
+    }
+
+    logger.info(`收到来自 ${cpsn} 的消息: [${msgTypeId}, ${messageId}, ${action || ''}, ${payload ? JSON.stringify(payload) : 'undefined'}]`);
   } catch (err) {
     logger.error(`无法解析消息: ${messageStr}`, err);
     return;
@@ -120,7 +134,7 @@ async function handleMessage(cpsn, ws, message) {
       break;
     
     case CALLERROR_MESSAGE:
-      // 接收充电站返回的错误
+      // 继续执行 CALLERROR 的业务处理逻辑
       await handleCallErrorMessage(cpsn, messageId, payload);
       break;
     
@@ -148,7 +162,7 @@ async function handleMessage(cpsn, ws, message) {
  * @param {Object} payload 消息负载
  */
 async function handleCallMessage(cpsn, ws, messageId, action, payload) {
-  logger.info(`处理来自 ${cpsn} 的调用: ${action}`);
+  // logger.info(`处理来自 ${cpsn} 的调用: ${action}`);
   
   let response = {};
   
@@ -265,7 +279,7 @@ async function handleCallMessage(cpsn, ws, messageId, action, payload) {
  * @param {Object} payload 消息负载
  */
 async function handleCallResultMessage(cpsn, messageId, payload) {
-  logger.info(`接收到 ${cpsn} 对 ${messageId} 的响应`);
+  // logger.info(`接收到 ${cpsn} 对 ${messageId} 的响应`);
   
   try {
     // 这里可以处理充电站对我们发送的请求的响应

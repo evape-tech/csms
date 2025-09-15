@@ -13,24 +13,6 @@ class DatabaseUtils {
       const currentProvider = databaseManager.getProvider();
       console.log(`🎉 [DatabaseUtils] Database connection established successfully with ${currentProvider?.toUpperCase()}`);
       
-      // 測試查詢 guns 表來確認連接到正確的資料庫
-      try {
-        console.log(`🔍 [DatabaseUtils] Testing guns table query to verify ${currentProvider?.toUpperCase()} connection...`);
-        const gunsCount = await databaseService.getGuns({});
-        console.log(`✅ [DatabaseUtils] Successfully queried guns table: found ${gunsCount.length} records in ${currentProvider?.toUpperCase()}`);
-        
-        // 顯示前3筆資料的基本資訊來確認資料來源
-        if (gunsCount.length > 0) {
-          console.log(`📊 [DatabaseUtils] Sample data from ${currentProvider?.toUpperCase()} guns table:`);
-          gunsCount.slice(0, 3).forEach((gun, index) => {
-            console.log(`   ${index + 1}. ID:${gun.id} | CPID:${gun.cpid} | CPSN:${gun.cpsn} | Status:${gun.guns_status}`);
-          });
-        }
-      } catch (queryError) {
-        console.error(`❌ [DatabaseUtils] Failed to query guns table in ${currentProvider?.toUpperCase()}:`, queryError.message);
-        return false;
-      }
-      
       return true;
     } catch (error) {
       console.error('💥 Failed to initialize database:', error);

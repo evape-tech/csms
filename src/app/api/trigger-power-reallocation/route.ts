@@ -9,10 +9,10 @@ export async function POST(request: NextRequest) {
         console.log('[API] 收到手動觸發功率重新分配請求');
         
         // 解析請求體參數
-        let requestBody: any = {};
+        let requestBody: Record<string, any> = {};
         try {
             requestBody = await request.json();
-        } catch (parseError) {
+        } catch {
             console.log('[API] 請求體解析失敗，使用空參數');
         }
         
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
         // 呼叫 OCPP Server 的手動觸發 API
         const ocppServerUrl = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
         let triggerUrl: string;
-        let triggerBody: any = {
+        const triggerBody: Record<string, any> = {
             source: source,
             timestamp: new Date().toISOString(),
             userAgent: userAgent,

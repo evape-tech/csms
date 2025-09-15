@@ -3,7 +3,6 @@
 import { NextResponse } from 'next/server';
 import billingService from '@/lib/services/billingService';
 import { auth } from '@/lib/auth';
-import logger from '@/lib/logger';
 
 /**
  * 获取指定ID的账单记录

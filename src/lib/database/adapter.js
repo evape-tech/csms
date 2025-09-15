@@ -10,8 +10,6 @@ class DatabaseManager {
 
   async initialize(provider) {
     const dbProvider = provider || process.env.DB_PROVIDER || 'mysql';
-    // 減少 debug log，提升效能
-    // console.log(`🔍 [DatabaseManager] initialize() called with provider: ${provider}, env DB_PROVIDER: ${process.env.DB_PROVIDER}, final dbProvider: ${dbProvider}`);
     
     // 如果已經初始化且使用相同的provider，直接返回
     if (this.isInitialized && this.adapter?.provider === dbProvider) {

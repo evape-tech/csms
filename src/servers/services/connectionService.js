@@ -164,11 +164,11 @@ async function initializeStationData(cpsn) {
 /**
  * 更新充电站在线状态
  * @param {string} cpsn 充电站序列号
- * @returns {Promise<Array>} 更新的充电桩列表
+ * @returns {Promise<Array>} 查找到的充电桩列表
  */
 async function updateStationOnlineStatus(cpsn) {
   try {
-    logger.info(`更新充电站 ${cpsn} 上线状态`);
+    logger.info(`充电站 ${cpsn} WebSocket 连接建立`);
     
     // 查找该充电站下的所有充电桩
     const guns = await chargePointRepository.getAllGuns({ cpsn });
@@ -178,24 +178,18 @@ async function updateStationOnlineStatus(cpsn) {
       return [];
     }
     
-    logger.info(`找到 ${guns.length} 个充电桩需要更新状态`);
+    logger.info(`充电站 ${cpsn} 共有 ${guns.length} 个充电桩连接器`);
     
-    // 批量更新所有充电桩状态为 Available (可用)
-    const updateResult = await chargePointRepository.updateGunStatus(
-      { cpsn },
-      'Available'
-    );
-    
-    logger.info(`成功更新 ${updateResult[0]} 个充电桩状态为 Available`);
-    
-    // 记录每个充电桩的状态变更
+    // 记录每个充电桩的连接建立事件（不改变状态）
     for (const gun of guns) {
       logger.info(`CPID:${gun.cpid} | 连接器:${gun.connector} | 状态: ${gun.guns_status} -> Available`);
     }
     
+    logger.info(`充电站 ${cpsn} 已上线，等待接收 StatusNotification 更新实际状态`);
+    
     return guns;
   } catch (error) {
-    logger.error(`更新充电站 ${cpsn} 上线状态失败`, error);
+    logger.error(`处理充电站 ${cpsn} 上线状态失败`, error);
     throw error;
   }
 }

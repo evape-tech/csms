@@ -3,7 +3,6 @@
 import { NextResponse } from 'next/server';
 import billingService from '@/lib/services/billingService';
 import { auth } from '@/lib/auth';
-import logger from '@/lib/logger';
 
 /**
  * 获取所有费率方案
@@ -41,7 +40,7 @@ export async function GET(request) {
 
     return NextResponse.json({ tariffs });
   } catch (error) {
-    logger.error(`获取费率方案列表失败: ${error.message}`);
+    console.error(`获取费率方案列表失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -64,7 +63,7 @@ export async function POST(request) {
 
     return NextResponse.json({ tariff });
   } catch (error) {
-    logger.error(`创建费率方案失败: ${error.message}`);
+    console.error(`创建费率方案失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

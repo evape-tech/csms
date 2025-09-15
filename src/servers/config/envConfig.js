@@ -18,8 +18,10 @@ const ENV = {
 
 // 服务配置
 const SERVER = {
+  // HTTP服务器主机
+  HOST: process.env.OCPP_HOST || 'localhost',
   // HTTP服务器端口
-  PORT: parseInt(process.env.PORT || '8089', 10),
+  PORT: parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10),
   // 允许的跨域来源
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   // 状态报告间隔(毫秒)

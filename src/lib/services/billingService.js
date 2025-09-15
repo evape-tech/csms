@@ -11,7 +11,6 @@
 
 import { PrismaClient as MysqlClient } from '../../../prisma-clients/mysql';
 import { PrismaClient as MssqlClient } from '../../../prisma-clients/mssql';
-import logger from '../logger';
 
 const mysqlClient = new MysqlClient();
 const mssqlClient = new MssqlClient();
@@ -70,7 +69,7 @@ class BillingService {
 
       return tariff;
     } catch (error) {
-      logger.error(`获取默认费率方案失败: ${error.message}`);
+      console.error(`获取默认费率方案失败: ${error.message}`);
       throw new Error(`获取默认费率方案失败: ${error.message}`);
     }
   }
@@ -87,7 +86,7 @@ class BillingService {
       });
       return tariff;
     } catch (error) {
-      logger.error(`获取费率方案失败: ${error.message}`);
+      console.error(`获取费率方案失败: ${error.message}`);
       throw new Error(`获取费率方案失败: ${error.message}`);
     }
   }
@@ -109,7 +108,7 @@ class BillingService {
       
       return tariff;
     } catch (error) {
-      logger.error(`创建费率方案失败: ${error.message}`);
+      console.error(`创建费率方案失败: ${error.message}`);
       throw new Error(`创建费率方案失败: ${error.message}`);
     }
   }
@@ -133,7 +132,7 @@ class BillingService {
       
       return updatedTariff;
     } catch (error) {
-      logger.error(`更新费率方案失败: ${error.message}`);
+      console.error(`更新费率方案失败: ${error.message}`);
       throw new Error(`更新费率方案失败: ${error.message}`);
     }
   }
@@ -165,12 +164,12 @@ class BillingService {
           where: { id }
         });
       } catch (mssqlError) {
-        logger.warn(`从MSSQL删除费率方案失败: ${mssqlError.message}`);
+        console.warn(`从MSSQL删除费率方案失败: ${mssqlError.message}`);
       }
       
       return { success: true, message: '费率方案已删除' };
     } catch (error) {
-      logger.error(`删除费率方案失败: ${error.message}`);
+      console.error(`删除费率方案失败: ${error.message}`);
       throw new Error(`删除费率方案失败: ${error.message}`);
     }
   }
@@ -269,9 +268,9 @@ class BillingService {
         });
       }
 
-      logger.info(`费率方案 ID ${id} 已同步到 MSSQL`);
+      console.info(`费率方案 ID ${id} 已同步到 MSSQL`);
     } catch (error) {
-      logger.error(`同步费率方案到 MSSQL 失败: ${error.message}`);
+      console.error(`同步费率方案到 MSSQL 失败: ${error.message}`);
       throw new Error(`同步费率方案到 MSSQL 失败: ${error.message}`);
     }
   }
@@ -338,7 +337,7 @@ class BillingService {
 
       return billingRecord;
     } catch (error) {
-      logger.error(`为交易生成账单失败: ${error.message}`);
+      console.error(`为交易生成账单失败: ${error.message}`);
       throw new Error(`为交易生成账单失败: ${error.message}`);
     }
   }
@@ -360,7 +359,7 @@ class BillingService {
       
       return gun?.acdc || 'AC'; // 默认为AC
     } catch (error) {
-      logger.error(`获取充电桩类型失败: ${error.message}`);
+      console.error(`获取充电桩类型失败: ${error.message}`);
       return 'AC'; // 出错时默认为AC
     }
   }
@@ -546,7 +545,7 @@ class BillingService {
         status: 'CALCULATED' // 使用字符串，兼容MSSQL
       };
     } catch (error) {
-      logger.error(`计算账单金额失败: ${error.message}`);
+      console.error(`计算账单金额失败: ${error.message}`);
       throw new Error(`计算账单金额失败: ${error.message}`);
     }
   }
@@ -645,9 +644,9 @@ class BillingService {
         });
       }
 
-      logger.info(`账单记录 ID ${id} 已同步到 MSSQL`);
+      console.info(`账单记录 ID ${id} 已同步到 MSSQL`);
     } catch (error) {
-      logger.error(`同步账单记录到 MSSQL 失败: ${error.message}`);
+      console.error(`同步账单记录到 MSSQL 失败: ${error.message}`);
       throw new Error(`同步账单记录到 MSSQL 失败: ${error.message}`);
     }
   }
@@ -682,7 +681,7 @@ class BillingService {
 
       return updatedBilling;
     } catch (error) {
-      logger.error(`更新账单状态失败: ${error.message}`);
+      console.error(`更新账单状态失败: ${error.message}`);
       throw new Error(`更新账单状态失败: ${error.message}`);
     }
   }
@@ -761,7 +760,7 @@ class BillingService {
         }
       };
     } catch (error) {
-      logger.error(`获取账单列表失败: ${error.message}`);
+      console.error(`获取账单列表失败: ${error.message}`);
       throw new Error(`获取账单列表失败: ${error.message}`);
     }
   }

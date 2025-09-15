@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { NextResponse } from 'next/server';
 import billingService from '@/lib/services/billingService';
 import { auth } from '@/lib/auth';
-import logger from '@/lib/logger';
 
 /**
  * 获取所有费率方案
@@ -24,7 +23,7 @@ export async function getTariffs(request) {
 
     return NextResponse.json({ tariffs });
   } catch (error) {
-    logger.error(`获取费率方案列表失败: ${error.message}`);
+    console.error(`获取费率方案列表失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -50,7 +49,7 @@ export async function createTariff(request) {
     revalidatePath('/pricing_management');
     return NextResponse.json({ tariff });
   } catch (error) {
-    logger.error(`创建费率方案失败: ${error.message}`);
+    console.error(`创建费率方案失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -75,7 +74,7 @@ export async function updateTariff(request, { params }) {
     revalidatePath('/pricing_management');
     return NextResponse.json({ tariff });
   } catch (error) {
-    logger.error(`更新费率方案失败: ${error.message}`);
+    console.error(`更新费率方案失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -99,7 +98,7 @@ export async function deleteTariff(request, { params }) {
     revalidatePath('/pricing_management');
     return NextResponse.json(result);
   } catch (error) {
-    logger.error(`删除费率方案失败: ${error.message}`);
+    console.error(`删除费率方案失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -134,7 +133,7 @@ export async function getBillings(request) {
     const billings = await billingService.getBillingList(filters, { page, limit });
     return NextResponse.json(billings);
   } catch (error) {
-    logger.error(`获取账单列表失败: ${error.message}`);
+    console.error(`获取账单列表失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -161,7 +160,7 @@ export async function generateBilling(request) {
     const billing = await billingService.generateBillingForTransaction(transactionId, { tariffId });
     return NextResponse.json({ billing });
   } catch (error) {
-    logger.error(`生成账单失败: ${error.message}`);
+    console.error(`生成账单失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -186,7 +185,7 @@ export async function updateBillingStatus(request, { params }) {
     const billing = await billingService.updateBillingStatus(parseInt(id), status, additionalData);
     return NextResponse.json({ billing });
   } catch (error) {
-    logger.error(`更新账单状态失败: ${error.message}`);
+    console.error(`更新账单状态失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

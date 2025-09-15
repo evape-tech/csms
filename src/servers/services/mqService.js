@@ -119,7 +119,7 @@ async function setupConsumer(queue, handler, options = {}) {
       }
     }, { noAck: false });
     
-    console.log(`✅ 消费者创建成功 - 队列: ${queue}, 消费者标签: ${consumer.consumerTag}`);
+    // console.log(`✅ 消费者创建成功 - 队列: ${queue}, 消费者标签: ${consumer.consumerTag}`);
     return consumer;
   } catch (error) {
     console.error(`❌ 创建消费者失败 - 队列: ${queue}:`, error.message);
@@ -177,7 +177,7 @@ async function bindQueue(queue, exchange, routingKey, queueOptions = {}) {
     // 绑定队列到交换机
     await channel.bindQueue(queue, exchange, routingKey);
     
-    console.log(`✅ 队列绑定成功 - 队列: ${queue}, 交换机: ${exchange}, 路由键: ${routingKey}`);
+    // console.log(`✅ 队列绑定成功 - 队列: ${queue}, 交换机: ${exchange}, 路由键: ${routingKey}`);
     return true;
   } catch (error) {
     console.error(`❌ 队列绑定失败 - 队列: ${queue}, 交换机: ${exchange}:`, error.message);
@@ -212,7 +212,7 @@ async function setupDeadLetterQueue(queue, deadLetterExchange, deadLetterRouting
     // 绑定死信队列到死信交换机
     await channel.bindQueue(deadLetterQueue, deadLetterExchange, deadLetterRoutingKey);
     
-    console.log(`✅ 死信队列配置成功 - 队列: ${queue}, 死信队列: ${deadLetterQueue}`);
+    // console.log(`✅ 死信队列配置成功 - 队列: ${queue}, 死信队列: ${deadLetterQueue}`);
     return true;
   } catch (error) {
     console.error(`❌ 创建死信队列失败 - 队列: ${queue}:`, error.message);

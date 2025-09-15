@@ -278,73 +278,12 @@ async function getStations() {
     await ensureDbInitialized();
     const { databaseService: dbService } = await loadDatabaseModules();
     const stations = await dbService.getStations();
-    logger.info(`获取站点设置成功，共 ${stations ? stations.length : 0} 个站点`);
-    
-    if (!stations || stations.length === 0) {
-      logger.warn('未找到任何站点配置，尝试创建默认站点');
-      await createDefaultStation();
-      // 重新获取站点信息
-      return await dbService.getStations();
-    }
-    
-    return stations;
+    // logger.info(`获取站点设置成功，共 ${stations ? stations.length : 0} 个站点`);
+
+    return stations || [];
   } catch (error) {
     logger.error(`获取站点设置失败: ${error.message}`, error);
     return []; // 返回空数组而非null，避免后续引用错误
-  }
-}
-
-/**
- * 创建默认站点和电表配置
- * 当数据库中没有站点时，自动创建默认配置
- */
-async function createDefaultStation() {
-  try {
-    logger.warn('创建默认站点配置...');
-    await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    
-    // 创建默认站点
-    const defaultStation = await dbService.createStation({
-      name: '默认站点',
-      station_code: 'DEFAULT',
-      address: '默认地址',
-      gps_lat: 0,
-      gps_lng: 0,
-      status: 'active'
-    });
-    
-    logger.info(`创建默认站点成功: ID=${defaultStation.id}`);
-    
-    // 创建默认电表
-    const defaultMeter = await dbService.createMeter({
-      station_id: defaultStation.id,
-      name: '默认电表',
-      meter_code: 'DEFAULT',
-      ems_mode: 'static',
-      max_power_kw: 100
-    });
-    
-    logger.info(`创建默认电表成功: ID=${defaultMeter.id}`);
-    
-    // 关联所有现有充电枪到默认电表
-    const guns = await getAllGuns();
-    if (guns && guns.length > 0) {
-      logger.info(`尝试关联 ${guns.length} 个现有充电枪到默认电表...`);
-      
-      for (const gun of guns) {
-        await dbService.updateGun(gun.id, {
-          meter_id: defaultMeter.id
-        });
-      }
-      
-      logger.info(`成功关联 ${guns.length} 个充电枪到默认电表`);
-    }
-    
-    return defaultStation;
-  } catch (error) {
-    logger.error(`创建默认站点失败: ${error.message}`, error);
-    throw error;
   }
 }
 
@@ -537,7 +476,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     }
     
     const transaction = await dbService.updateTransactionById(transactionIdInt, updateFields);
-    logger.info(`更新交易記錄成功: OCPP ID=${transactionIdInt}`);
+    // logger.info(`更新交易記錄成功: OCPP ID=${transactionIdInt}`);
     return transaction;
   } catch (error) {
     logger.error(`更新交易記錄失败: OCPP ID=${ocppTransactionId}`, error);
@@ -641,7 +580,7 @@ async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
     // 3. 最後電表更新時間超過 timeoutMinutes/2 分鐘（或為 null）
     const meterUpdateThreshold = new Date(Date.now() - (timeoutMinutes / 2) * 60 * 1000);
     
-    logger.info(`查找孤兒交易: 超時閾值=${timeoutThreshold.toISOString()}, 電表更新閾值=${meterUpdateThreshold.toISOString()}`);
+    // logger.info(`查找孤兒交易: 超時閾值=${timeoutThreshold.toISOString()}, 電表更新閾值=${meterUpdateThreshold.toISOString()}`);
     
     // 查找所有可能的孤兒交易
     const activeTransactions = await dbService.getTransactions({ 
@@ -651,7 +590,7 @@ async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
       }
     });
     
-    logger.info(`找到 ${activeTransactions.length} 個超時的活躍交易`);
+    // logger.info(`找到 ${activeTransactions.length} 個超時的活躍交易`);
     
     const orphanTransactions = [];
     
@@ -662,11 +601,11 @@ async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
       if (!transaction.last_meter_update) {
         // 沒有電表更新記錄，可能是孤兒交易
         isOrphan = true;
-        logger.warn(`交易 ${transaction.transaction_id} 沒有電表更新記錄`);
+        // logger.warn(`交易 ${transaction.transaction_id} 沒有電表更新記錄`);
       } else if (new Date(transaction.last_meter_update) < meterUpdateThreshold) {
         // 電表更新時間過舊
         isOrphan = true;
-        logger.warn(`交易 ${transaction.transaction_id} 電表更新時間過舊: ${transaction.last_meter_update}`);
+        // logger.warn(`交易 ${transaction.transaction_id} 電表更新時間過舊: ${transaction.last_meter_update}`);
       }
       
       if (isOrphan) {
@@ -676,7 +615,7 @@ async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
       }
     }
     
-    logger.info(`處理了 ${orphanTransactions.length} 個孤兒交易`);
+    // logger.info(`處理了 ${orphanTransactions.length} 個孤兒交易`);
     return orphanTransactions;
     
   } catch (error) {
@@ -740,7 +679,7 @@ async function handleOrphanTransaction(transaction) {
     // 2. 已重新上線但處於不同狀態
     // 3. 已經在進行新的交易
     // 因此，讓充電樁在重新連接時自己報告正確的狀態
-    logger.info(`孤兒交易 ${transaction.transaction_id} 已標記為ERROR，充電樁狀態保持不變`);
+    // logger.info(`孤兒交易 ${transaction.transaction_id} 已標記為ERROR，充電樁狀態保持不變`);
     
     // 記錄孤兒交易處理日志
     // await createCpLogEntry({
@@ -751,7 +690,7 @@ async function handleOrphanTransaction(transaction) {
     //   inout: "system",
     // });
     
-    logger.info(`孤兒交易 ${transaction.transaction_id} 已自動關閉`);
+    // logger.info(`孤兒交易 ${transaction.transaction_id} 已自動關閉`);
     return { ...transaction, ...updateData, handled: true };
     
   } catch (error) {

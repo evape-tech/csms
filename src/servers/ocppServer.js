@@ -31,10 +31,25 @@ const PORT = SERVER.PORT || 8089;
 const wss = new WebSocket.Server({
   server,
   handleProtocols: (protocols) => {
-    // 只接受ocpp1.6协议
+    logger.info(`📡 WebSocket 協議協商 - 客戶端支援: ${JSON.stringify(protocols)}`);
+    
+    // 支援的協議列表
+    const SUPPORTED_PROTOCOLS = ['ocpp1.6', 'ocpp'];
+    
+    // 優先選擇 ocpp1.6
     if (protocols.includes('ocpp1.6')) {
+      logger.info(`✅ 選擇協議: ocpp1.6`);
       return 'ocpp1.6';
     }
+    
+    // 備選 ocpp
+    if (protocols.includes('ocpp')) {
+      logger.info(`✅ 選擇協議: ocpp (作為 ocpp1.6 別名)`);
+      return 'ocpp';  // 或返回 'ocpp1.6' 進行標準化
+    }
+    
+    logger.warn(`❌ 拒絕不支援的協議: ${JSON.stringify(protocols)}`);
+    logger.info(`💡 支援的協議: ${JSON.stringify(SUPPORTED_PROTOCOLS)}`);
     return false;
   }
 });
@@ -52,6 +67,9 @@ const systemStatusService = MQ_ENABLED ? require('./services/systemStatusService
 
 // 引入孤兒交易監控服務
 const { orphanTransactionService } = require('./services/orphanTransactionService');
+
+// 引入健康監控服務
+const { healthMonitoringService } = require('./services/healthMonitoringService');
 
 /**
  * 发布充电桩连接状态事件到MQ
@@ -436,85 +454,141 @@ async function initializeMQ(maxRetries = 3, retryDelay = 5000) {
 }
 
 /**
- * 优雅关闭服务器及所有连接
- * @param {string} signal - 触发关闭的信号
- * @returns {Promise<void>}
+ * 启动服务器（帶重試機制）
  */
-async function gracefulShutdown(signal) {
-  logger.info(`接收到${signal || '关闭'}信号，开始优雅关闭...`);
+async function startServerWithRetry() {
+  const RETRY_CONFIG = {
+    maxRetries: 5,
+    retryDelay: 3000,
+    backoffMultiplier: 1.5,
+    maxRetryDelay: 15000
+  };
   
-  // 更新系统状态
-  if (systemStatusService) {
-    systemStatusService.updateServerStatus('stopping');
-  }
-
-  // 停止孤兒交易監控服務
-  try {
-    orphanTransactionService.stop();
-    logger.info('🔍 孤兒交易監控服務已停止');
-  } catch (error) {
-    logger.error(`⚠️ 停止孤兒交易監控服務失败: ${error.message}`);
-  }
+  let retryCount = 0;
   
-  // 尝试发送关闭通知
-  if (MQ_ENABLED && mqServer && mqServer.isConnected() && systemStatusService) {
+  while (retryCount < RETRY_CONFIG.maxRetries) {
     try {
-      await systemStatusService.sendStatusReport(`shutdown-${signal || 'manual'}`);
-      logger.info('系统关闭通知已发送');
+      logger.info(retryCount > 0 ? 
+        `🔄 重試啟動 OCPP Server (第 ${retryCount + 1} 次)` : 
+        '🚀 啟動 OCPP Server...');
+      
+      await startServer();
+      
+      // 啟動成功
+      logger.info(`✅ OCPP Server 啟動成功！`);
+      return;
+      
     } catch (error) {
-      logger.warn(`发送关闭通知失败: ${error.message}`);
-    }
-  }
-  
-  // 关闭MQ连接
-  if (MQ_ENABLED && mqServer && mqServer.isConnected()) {
-    try {
-      await mqServer.close();
-      logger.info('MQ连接已关闭');
-    } catch (error) {
-      logger.error(`关闭MQ连接出错: ${error.message}`);
-    }
-  }
-  
-  // 关闭WebSocket连接
-  if (wss && wss.clients) {
-    wss.clients.forEach(client => {
+      retryCount++;
+      logger.error(`❌ 啟動失敗 (嘗試 ${retryCount}/${RETRY_CONFIG.maxRetries}): ${error.message}`);
+      
+      // 清理失敗的服務器實例
       try {
-        client.terminate();
-      } catch (err) {
-        // 忽略关闭错误
+        if (server && server.listening) {
+          logger.info('🧹 清理失敗的服務器實例...');
+          server.close();
+        }
+        if (wss) {
+          logger.info('🧹 清理 WebSocket 服務器...');
+          wss.close();
+        }
+      } catch (cleanupError) {
+        logger.warn(`清理服務器實例時出錯: ${cleanupError.message}`);
       }
-    });
+      
+      if (retryCount >= RETRY_CONFIG.maxRetries) {
+        logger.error(`💥 已達到最大重試次數，OCPP Server 啟動失敗`);
+        process.exit(1);
+      }
+      
+      // 計算退避延遲
+      const delay = Math.min(
+        RETRY_CONFIG.retryDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, retryCount - 1),
+        RETRY_CONFIG.maxRetryDelay
+      );
+      
+      logger.info(`⏳ ${delay/1000} 秒後重試...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
-  
-  // 关闭HTTP服务器
-  if (server && server.close) {
-    server.close(() => {
-      logger.info('HTTP服务器已关闭');
-    });
-  }
-  
-  // 等待1秒后退出进程，给日志刷新时间
-  setTimeout(() => {
-    logger.info('服务器已安全关闭');
-    process.exit(0);
-  }, 1000);
 }
 
 /**
- * 启动服务器
+ * 启动服务器（基本版本）
  */
 async function startServer() {
-  // 初始化API路由
-  initializeRoutes();
-  
-  // 初始化WebSocket服务器
-  initializeWebSocketServer();
-  
+  return new Promise((resolve, reject) => {
+    try {
+      // 檢查服務器是否已經在監聽
+      if (server && server.listening) {
+        logger.warn('服務器已在運行，跳過重複啟動');
+        resolve();
+        return;
+      }
+      
+      // 初始化API路由
+      initializeRoutes();
+      
+      // 初始化WebSocket服务器
+      initializeWebSocketServer();
+      
+      // 异步初始化其他服务
+      initializeServices().then((mqInitialized) => {
+        // 启动HTTP服务器
+        const HOST = SERVER.HOST || 'localhost';
+        const PORT = SERVER.PORT || 8089;
+        const serverInstance = server.listen(PORT, HOST, () => {
+          logger.info(`OCPP服务器正在监听端口 ${PORT} (綁定到: ${HOST})`);
+          logger.info(`REST API: http://${HOST}:${PORT}/api/v1`);
+          logger.info(`WebSocket服务: ws://${HOST}:${PORT}/ocpp`);
+          
+          // 如果綁定到所有接口，顯示額外的訪問地址
+          if (HOST === '0.0.0.0') {
+            logger.info(`本地訪問: http://localhost:${PORT}`);
+            logger.info(`局域網訪問: http://[本機IP]:${PORT}`);
+          }
+          
+          logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
+          
+          // 更新系统状态
+          if (systemStatusService) {
+            systemStatusService.updateServerStatus('running');
+            
+            // 定期发送状态报告
+            const statusReportInterval = SERVER.STATUS_REPORT_INTERVAL;
+            if (statusReportInterval > 0) {
+              setInterval(() => {
+                systemStatusService.sendStatusReport('periodic');
+              }, statusReportInterval);
+            }
+          }
+          
+          resolve();
+        });
+        
+        serverInstance.on('error', (error) => {
+          reject(error);
+        });
+      }).catch(reject);
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * 初始化服務
+ */
+async function initializeServices() {
   // 初始化MQ系统（如果启用）
   let mqInitialized = false;
   if (MQ_ENABLED) {
-    mqInitialized = await initializeMQ();
+    try {
+      mqInitialized = await initializeMQ();
+    } catch (error) {
+      logger.warn(`MQ初始化失敗: ${error.message}`);
+    }
   }
   
   // 初始化EMS系统
@@ -528,50 +602,145 @@ async function startServer() {
 
   // 啟動孤兒交易監控服務
   try {
-    orphanTransactionService.start({
-      checkIntervalMinutes: 10,      // 每10分鐘檢查一次
-      transactionTimeoutMinutes: 30, // 30分鐘超時
-      meterUpdateTimeoutMinutes: 15  // 15分鐘電表更新超時
-    });
-    logger.info('🔍 孤兒交易監控服務已啟動');
+    if (!orphanTransactionService.isRunning) {
+      orphanTransactionService.start({
+        checkIntervalMinutes: 10,      // 每10分鐘檢查一次
+        transactionTimeoutMinutes: 10, // 10分鐘超時
+        meterUpdateTimeoutMinutes: 10  // 10分鐘電表更新超時
+      });
+      logger.info('🔍 孤兒交易監控服務已啟動');
+    } else {
+      logger.debug('🔍 孤兒交易監控服務已在運行，跳過重複啟動');
+    }
   } catch (error) {
     logger.error(`⚠️ 孤兒交易監控服務啟動失败: ${error.message}`);
   }
-  
-  // 启动HTTP服务器
-  server.listen(PORT, () => {
-    logger.info(`OCPP服务器正在监听端口 ${PORT}`);
-    logger.info(`REST API: http://localhost:${PORT}/api/v1`);
-    logger.info(`WebSocket服务: ws://localhost:${PORT}/ocpp`);
-    logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
-    
-    // 更新系统状态
-    if (systemStatusService) {
-      systemStatusService.updateServerStatus('running');
+
+  // 啟動健康監控服務
+  try {
+    if (!healthMonitoringService.isRunning) {
+      const isDevelopment = process.env.NODE_ENV !== 'production';
+      const HOST = process.env.OCPP_HOST || 'localhost';
+      const PORT = process.env.OCPP_PORT || 8089;
       
-      // 定期发送状态报告
-      const statusReportInterval = SERVER.STATUS_REPORT_INTERVAL;
-      if (statusReportInterval > 0) {
-        setInterval(() => {
-          systemStatusService.sendStatusReport('periodic');
-        }, statusReportInterval);
-      }
+      healthMonitoringService.start({
+        checkIntervalSeconds: isDevelopment ? 5 : 60,  // 開發環境5秒，生產環境60秒
+        enableAutoRestart: isDevelopment,               // 只在開發環境啟用自動重啟
+        maxConsecutiveFailures: -1,                     // -1 表示無限制重試，不放棄
+        healthEndpoint: `http://${SERVER.HOST || 'localhost'}:${SERVER.PORT || 8089}/ocpp/api/health`, // 健康檢查端點
+        onRestartRequired: () => {
+          // 當需要重啟時的回調函數
+          logger.warn('🔄 健康監控服務檢測到需要重啟服務器');
+          if (isDevelopment) {
+            handleCriticalError('healthCheckFailed', new Error('連續健康檢查失敗'));
+          }
+        }
+      });
+      logger.info('💓 健康監控服務已啟動');
+    } else {
+      logger.debug('💓 健康監控服務已在運行，跳過重複啟動');
     }
-  });
+  } catch (error) {
+    logger.error(`⚠️ 健康監控服務啟動失败: ${error.message}`);
+  }
+  
+  return mqInitialized;
 }
 
 // 捕获终止信号
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // Nodemon重启信号
+
+// 錯誤處理和自動重啟
 process.on('uncaughtException', (error) => {
   logger.error(`未捕获的异常: ${error.message}`, error);
-  gracefulShutdown('uncaughtException');
+  handleCriticalError('uncaughtException', error);
 });
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error(`未处理的Promise拒绝: ${reason}`, promise);
+  handleCriticalError('unhandledRejection', new Error(reason));
+});
+
+/**
+ * 處理嚴重錯誤
+ */
+function handleCriticalError(type, error) {
+  logger.error(`嚴重錯誤 (${type}): ${error.message}`);
+  
+  // 如果是開發環境，嘗試重啟
+  if (process.env.NODE_ENV !== 'production') {
+    logger.info('🔄 開發環境檢測到嚴重錯誤，準備重啟...');
+    
+    setTimeout(() => {
+      logger.info('🚀 正在重啟 OCPP Server...');
+      
+      // 清理現有連接
+      if (server && server.listening) {
+        server.close(() => {
+          startServerWithRetry().catch((restartError) => {
+            logger.error(`重啟失敗: ${restartError.message}`);
+            process.exit(1);
+          });
+        });
+      } else {
+        startServerWithRetry().catch((restartError) => {
+          logger.error(`重啟失敗: ${restartError.message}`);
+          process.exit(1);
+        });
+      }
+    }, 2000);
+  } else {
+    // 生產環境直接退出，讓進程管理器重啟
+    gracefulShutdown(type);
+  }
+}
+
+/**
+ * 優雅關閉服務器
+ */
+async function gracefulShutdown(signal) {
+  logger.info(`接收到信号 ${signal}，准备关闭服务器...`);
+  
+  // 停止健康監控服務
+  try {
+    healthMonitoringService.stop();
+    // logger.info('💓 健康監控服務已停止');
+  } catch (error) {
+    logger.error(`停止健康監控服務時出錯: ${error.message}`);
+  }
+
+  // 停止孤兒交易監控服務
+  try {
+    orphanTransactionService.stop();
+    // logger.info('孤兒交易監控服務已停止');
+  } catch (error) {
+    logger.error(`停止孤兒交易監控服務時出錯: ${error.message}`);
+  }
+  
+  // 清理WebSocket連接
+  if (wss) {
+    wss.clients.forEach((ws) => {
+      ws.terminate();
+    });
+    logger.info('WebSocket連接已清理');
+  }
+  
+  // 關閉HTTP服務器
+  if (server && server.listening) {
+    server.close(() => {
+      logger.info('服务器已关闭');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+}
 
 // 如果这个文件是直接运行的，则启动服务器
 if (require.main === module) {
-  startServer();
+  startServerWithRetry();
 }
 
 // 导出供其他模块使用
@@ -580,5 +749,6 @@ module.exports = {
   server,
   wss,
   startServer,
+  startServerWithRetry,
   gracefulShutdown
 };

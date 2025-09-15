@@ -882,20 +882,20 @@ function initReconciliationInterval() {
   
   reconciliationIntervalId = setInterval(async () => {
     try {
-      logger.info('='.repeat(60));
-      logger.info('[reconciliation] 🔄 开始定时功率配置校正（按電表分組）');
-      logger.info(`[reconciliation] ⏰ 校正间隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
+      // logger.info('='.repeat(60));
+      // logger.info('[reconciliation] 🔄 开始定时功率配置校正（按電表分組）');
+      // logger.info(`[reconciliation] ⏰ 校正间隔: ${RECONCILE_INTERVAL_MS/1000} 秒`);
       
       // 獲取所有站點和電表
       const allStations = await chargePointRepository.getStations();
       
       if (!allStations || allStations.length === 0) {
-        logger.info('[reconciliation] ⚠️ 沒有找到任何站點，跳過此次校正');
-        logger.info('='.repeat(60));
+        // logger.info('[reconciliation] ⚠️ 沒有找到任何站點，跳過此次校正');
+        // logger.info('='.repeat(60));
         return;
       }
       
-      logger.info(`[reconciliation] � 找到 ${allStations.length} 個站點`);
+      // logger.info(`[reconciliation] � 找到 ${allStations.length} 個站點`);
       
       let totalProcessedMeters = 0;
       let totalScheduledUpdates = 0;
@@ -903,11 +903,11 @@ function initReconciliationInterval() {
       // 依序處理每個站點下的所有電表
       for (const station of allStations) {
         if (!station.meters || !Array.isArray(station.meters) || station.meters.length === 0) {
-          logger.info(`[reconciliation] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
+          // logger.info(`[reconciliation] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
           continue;
         }
         
-        logger.info(`[reconciliation] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
+        // logger.info(`[reconciliation] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
         
         // 依序處理每個電表
         for (const meter of station.meters) {
@@ -917,7 +917,7 @@ function initReconciliationInterval() {
             const meterCpids = gunsForMeter.map(gun => gun.cpid).filter(cpid => cpid);
             
             if (meterCpids.length === 0) {
-              logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
+              // logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
               continue;
             }
             
@@ -926,11 +926,11 @@ function initReconciliationInterval() {
             const onlineMeterCpids = meterCpids.filter(cpid => onlineCpids.includes(cpid));
             
             if (onlineMeterCpids.length === 0) {
-              logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
+              // logger.info(`[reconciliation] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
               continue;
             }
             
-            logger.info(`[reconciliation] ⚡ 校正電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
+            // logger.info(`[reconciliation] ⚡ 校正電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
             
             // 為該電表下的每個充電桩排程更新，使用隨機延遲
             for (let i = 0; i < onlineMeterCpids.length; i++) {
@@ -945,7 +945,7 @@ function initReconciliationInterval() {
                 reconciliationTime: new Date().toISOString()
               });
               
-              logger.debug(`[reconciliation] ✅ 排程更新 ${cpid} (電表 ${meter.id})，延迟 ${Math.round(delay)}ms`);
+              // logger.debug(`[reconciliation] ✅ 排程更新 ${cpid} (電表 ${meter.id})，延迟 ${Math.round(delay)}ms`);
               totalScheduledUpdates++;
             }
             
@@ -955,22 +955,22 @@ function initReconciliationInterval() {
             await new Promise(resolve => setTimeout(resolve, 100));
             
           } catch (meterError) {
-            logger.error(`[reconciliation] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
+            // logger.error(`[reconciliation] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
           }
         }
       }
       
-      logger.info(`[reconciliation] 📈 校正统计:`);
-      logger.info(`[reconciliation]   - 掃描站點: ${allStations.length} 個`);
-      logger.info(`[reconciliation]   - 處理電表: ${totalProcessedMeters} 個`);
-      logger.info(`[reconciliation]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
-      logger.info(`[reconciliation] ✨ 定时校正完成，下次校正将在 ${RECONCILE_INTERVAL_MS/1000} 秒后执行`);
-      logger.info('='.repeat(60));
+      // logger.info(`[reconciliation] 📈 校正统计:`);
+      // logger.info(`[reconciliation]   - 掃描站點: ${allStations.length} 個`);
+      // logger.info(`[reconciliation]   - 處理電表: ${totalProcessedMeters} 個`);
+      // logger.info(`[reconciliation]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
+      // logger.info(`[reconciliation] ✨ 定时校正完成，下次校正将在 ${RECONCILE_INTERVAL_MS/1000} 秒后执行`);
+      // logger.info('='.repeat(60));
       
       // 如果有排程更新，延迟显示全站功率配置总览
       if (totalScheduledUpdates > 0) {
         const totalDelay = Math.max(5000, totalScheduledUpdates * 300); // 至少等待5秒
-        logger.debug(`[reconciliation] 📊 将在 ${totalDelay}ms 后显示全站功率配置总览`);
+        // logger.debug(`[reconciliation] 📊 将在 ${totalDelay}ms 后显示全站功率配置总览`);
         
         setTimeout(async () => {
           try {
@@ -980,7 +980,7 @@ function initReconciliationInterval() {
               const firstMeter = firstStation.meters[0];
               const emsMode = firstMeter.ems_mode || 'static';
               const maxPower = firstMeter.max_power_kw ? parseFloat(firstMeter.max_power_kw) : 100;
-              await logCurrentPowerConfiguration(emsMode, maxPower, firstStation.id);
+              // await logCurrentPowerConfiguration(emsMode, maxPower, firstStation.id);
             } else {
               logger.warn('❌ [reconciliation] 未找到可用的電表配置，使用默認值');
               await logCurrentPowerConfiguration('static', 100, null);

@@ -25,7 +25,7 @@ async function isAdmin(req: NextRequest) {
  */
 export async function GET(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         // 檢查用戶是否是管理員
@@ -39,7 +39,8 @@ export async function GET(
         }
         
         // 獲取用戶 ID
-        const userId = params.id;
+        const resolvedParams = await params;
+        const userId = resolvedParams.id;
         
         if (!userId) {
             return NextResponse.json({
@@ -70,7 +71,7 @@ export async function GET(
         });
         
     } catch (error: any) {
-        console.error(`API 錯誤 - 獲取用戶 ${params.id}:`, error);
+        console.error(`API 錯誤 - 獲取用戶:`, error);
         
         return NextResponse.json({
             success: false,
@@ -87,7 +88,7 @@ export async function GET(
  */
 export async function PUT(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         // 檢查用戶是否是管理員
@@ -101,7 +102,8 @@ export async function PUT(
         }
         
         // 獲取用戶 ID
-        const userId = params.id;
+        const resolvedParams = await params;
+        const userId = resolvedParams.id;
         
         if (!userId) {
             return NextResponse.json({
@@ -139,7 +141,7 @@ export async function PUT(
         });
         
     } catch (error: any) {
-        console.error(`API 錯誤 - 更新用戶 ${params.id}:`, error);
+        console.error(`API 錯誤 - 更新用戶:`, error);
         
         return NextResponse.json({
             success: false,
@@ -156,7 +158,7 @@ export async function PUT(
  */
 export async function DELETE(
     req: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         // 檢查用戶是否是管理員
@@ -170,7 +172,8 @@ export async function DELETE(
         }
         
         // 獲取用戶 ID
-        const userId = params.id;
+        const resolvedParams = await params;
+        const userId = resolvedParams.id;
         
         if (!userId) {
             return NextResponse.json({
@@ -201,7 +204,7 @@ export async function DELETE(
         });
         
     } catch (error: any) {
-        console.error(`API 錯誤 - 刪除用戶 ${params.id}:`, error);
+        console.error(`API 錯誤 - 刪除用戶:`, error);
         
         return NextResponse.json({
             success: false,

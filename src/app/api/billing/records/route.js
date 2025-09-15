@@ -3,7 +3,6 @@
 import { NextResponse } from 'next/server';
 import billingService from '@/lib/services/billingService';
 import { auth } from '@/lib/auth';
-import logger from '@/lib/logger';
 
 /**
  * 获取账单记录列表
@@ -33,7 +32,7 @@ export async function GET(request) {
     const billings = await billingService.getBillingList(filters, { page, limit });
     return NextResponse.json(billings);
   } catch (error) {
-    logger.error(`获取账单列表失败: ${error.message}`);
+    console.error(`获取账单列表失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -58,7 +57,7 @@ export async function POST(request) {
     const billing = await billingService.generateBillingForTransaction(transactionId, { tariffId });
     return NextResponse.json({ billing });
   } catch (error) {
-    logger.error(`生成账单失败: ${error.message}`);
+    console.error(`生成账单失败: ${error.message}`);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

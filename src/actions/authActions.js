@@ -73,7 +73,8 @@ export async function loginAction(formData) {
     );
 
     // 設定 HTTP-only cookie
-    cookies().set('session', token, {
+    const cookieStore = await cookies();
+    cookieStore.set('session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -86,6 +87,11 @@ export async function loginAction(formData) {
     redirect(redirectPath);
 
   } catch (error) {
+    // 過濾掉 NEXT_REDIRECT 錯誤，因為它是正常的重定向流程
+    if (error.message === 'NEXT_REDIRECT') {
+      throw error; // 重新拋出重定向錯誤以讓 Next.js 處理
+    }
+    
     console.error('Login action error:', error);
     
     // 如果是重定向錯誤，讓它正常拋出
@@ -103,7 +109,8 @@ export async function loginAction(formData) {
 export async function logoutAction() {
   try {
     // 清除 session cookie
-    cookies().delete('session');
+    const cookieStore = await cookies();
+    cookieStore.delete('session');
     
     console.log(`✅ [logoutAction] User logged out successfully`);
     
@@ -111,6 +118,11 @@ export async function logoutAction() {
     redirect('/login');
     
   } catch (error) {
+    // 過濾掉 NEXT_REDIRECT 錯誤，因為它是正常的重定向流程
+    if (error.message === 'NEXT_REDIRECT') {
+      throw error; // 重新拋出重定向錯誤以讓 Next.js 處理
+    }
+    
     console.error('Logout action error:', error);
     
     // 如果是重定向錯誤，讓它正常拋出

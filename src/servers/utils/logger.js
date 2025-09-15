@@ -50,7 +50,6 @@ function getCallerInfo() {
 function formatLog(level, message, details = null) {
   const now = new Date();
   const timestamp = now.toISOString();
-  const caller = getCallerInfo();
   
   let logMessage = `[${timestamp}] [${level}] ${message}`;
   
@@ -62,7 +61,7 @@ function formatLog(level, message, details = null) {
     } else {
       try {
         logMessage += ` - ${JSON.stringify(details)}`;
-      } catch (e) {
+      } catch {
         logMessage += ` - [Non-serializable Object]`;
       }
     }
