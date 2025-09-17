@@ -249,7 +249,7 @@ async function getOnlineCpids() {
     logger.debug(`找到 ${onlineCSPNs.length} 个在线设备序号 (CPSN): [${onlineCSPNs.join(', ')}]`);
     
     if (onlineCSPNs.length === 0) {
-      logger.info('没有在线的充电站');
+      // logger.info('没有在线的充电站');
       return [];
     }
     

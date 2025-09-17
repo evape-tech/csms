@@ -9,24 +9,24 @@ datasource db {
 }
 
 model cp_logs {
-  id        BigInt   @id @default(autoincrement())
-  cpid      String?  @db.NVarChar(255)
-  cpsn      String?  @db.NVarChar(255)
-  log       String?  @db.NVarChar(max)
-  inout     String?  @db.NVarChar(45)
+  id        BigInt    @id(map: "PK__cp_logs__3213E83FE0AD6BAB") @default(autoincrement())
+  cpid      String?   @db.NVarChar(255)
+  cpsn      String?   @db.NVarChar(255)
+  log       String?   @db.NVarChar(Max)
+  inout     String?   @db.NVarChar(45)
   time      DateTime?
   createdAt DateTime?
   updatedAt DateTime?
 }
 
 model guns {
-  id               Int       @id @default(autoincrement())
+  id               Int       @id(map: "PK__guns__3213E83FF2EC5AB1") @default(autoincrement())
   connector        String?   @db.NVarChar(45)
   cpid             String?   @db.NVarChar(255)
   cpsn             String?   @db.NVarChar(255)
   guns_status      String?   @db.NVarChar(45)
-  createdAt        DateTime? @db.DateTime()
-  updatedAt        DateTime? @db.DateTime()
+  createdAt        DateTime? @db.Date
+  updatedAt        DateTime? @db.Date
   guns_metervalue1 String?   @db.NVarChar(255)
   guns_metervalue2 String?   @db.NVarChar(255)
   guns_metervalue3 String?   @db.NVarChar(255)
@@ -36,61 +36,49 @@ model guns {
   guns_memo1       String?   @db.NVarChar(255)
   guns_memo2       String?   @db.NVarChar(255)
   transactionid    String?   @db.NVarChar(255)
-  acdc             String?   @default("AC") @db.NVarChar(2)
-  max_kw           Int?      @default(0)
-
+  acdc             String?   @default("N'AC'", map: "DF__guns__acdc__4D94879B") @db.NVarChar(2)
+  max_kw           Int?      @default(0, map: "DF__guns__max_kw__4E88ABD4")
   meter_id         Int?
-  meter            meters?    @relation("meter_guns", fields: [meter_id], references: [id])
+  meter            meters?   @relation("meter_guns", fields: [meter_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_guns_meter")
 }
 
 model stations {
-  id           Int       @id @default(autoincrement())
-  station_code String    @db.NVarChar(50)    // 自定義場域編號
-  name         String?   @db.NVarChar(100)   // 場域名稱
-  address      String?   @db.NVarChar(255)
-  floor        String?   @db.NVarChar(50)
-  operator_id  String?   @db.NVarChar(50)    // 營運商/業主ID
-  tariff_id    Int?                                // 預設費率ID (tariffs.id)
-  updated_at   DateTime  @default(now())     @db.DateTime2
+  id           Int      @id(map: "PK__stations__3213E83F8C9E4FC5") @default(autoincrement())
+  station_code String   @unique(map: "UQ_stations_station_code") @db.NVarChar(50)
+  name         String?  @db.NVarChar(100)
+  address      String?  @db.NVarChar(255)
+  floor        String?  @db.NVarChar(50)
+  operator_id  String?  @db.NVarChar(50)
+  tariff_id    Int?
+  updated_at   DateTime @default(now(), map: "DF__stations__update__4316F928")
+  meters       meters[] @relation("station_meters")
+  tariff       tariffs? @relation("StationTariff", fields: [tariff_id], references: [id], map: "FK_stations_tariff")
 
-  meters       meters[]  @relation("station_meters")
-  tariff       tariffs?  @relation("StationTariff", fields: [tariff_id], references: [id])
+  @@index([name], map: "IX_stations_name")
+  @@index([operator_id], map: "IX_stations_operator_id")
 }
-
 
 model meters {
-  id           Int       @id @default(autoincrement())
+  id           Int      @id(map: "PK__meters__3213E83F2279467A") @default(autoincrement())
   station_id   Int
-  meter_no     String    @db.NVarChar(50)
-  ems_mode     String    @default("static") @db.NVarChar(32)
-  max_power_kw Decimal   @default(480.00)  @db.Decimal(10,2)
-  billing_mode String?   @db.NVarChar(32)
-  owner_id     String?   @db.NVarChar(50)
-  updated_at   DateTime  @default(now())    @db.DateTime2
+  meter_no     String   @db.NVarChar(50)
+  ems_mode     String   @default("N'static'", map: "DF__meters__ems_mode__47DBAE45") @db.NVarChar(32)
+  max_power_kw Decimal  @default(480.00, map: "DF__meters__max_powe__48CFD27E") @db.Decimal(10, 2)
+  billing_mode String?  @db.NVarChar(32)
+  owner_id     String?  @db.NVarChar(50)
+  updated_at   DateTime @default(now(), map: "DF__meters__updated___49C3F6B7")
+  guns         guns[]   @relation("meter_guns")
+  station      stations @relation("station_meters", fields: [station_id], references: [id], onDelete: Cascade, map: "FK_meters_station")
 
-  station      stations  @relation("station_meters", fields: [station_id], references: [id])
-  guns         guns[]    @relation("meter_guns") // 一對多關聯 guns
+  @@unique([station_id, meter_no], map: "UQ_station_meter")
+  @@index([billing_mode], map: "IX_meters_billing_mode")
+  @@index([meter_no], map: "IX_meters_meter_no")
+  @@index([owner_id], map: "IX_meters_owner_id")
+  @@index([station_id], map: "IX_meters_station_id")
 }
 
-// MSSQL不支持枚举类型，使用字符串代替
-// 费率类型
-// FIXED_RATE: 固定费率 (单一价格)
-// TIME_OF_USE: 分时费率 (尖峰/离峰价格)
-// PROGRESSIVE: 累进费率 (用量越高单价越高)
-// SPECIAL_PROMOTION: 特殊促销方案
-// MEMBERSHIP: 会员特别费率
-// CUSTOM: 自定义费率
-
-// 账单状态
-// PENDING: 待处理
-// CALCULATED: 已计算
-// INVOICED: 已开立发票
-// PAID: 已付款
-// CANCELLED: 已取消
-// ERROR: 错误
-
 model users {
-  id        Int      @id @default(autoincrement())
+  id        Int      @id(map: "PK__users__3213E83F6AF24666") @default(autoincrement())
   email     String?  @db.NVarChar(255)
   password  String?  @db.NVarChar(255)
   role      String?  @db.NVarChar(255)
@@ -99,159 +87,81 @@ model users {
 }
 
 model transactions {
-  id                BigInt   @id @default(autoincrement()) // 資料庫自動生成，用作 OCPP transactionId
-  transaction_id    String   @unique @db.NVarChar(50) // 內部自訂編號
-  user_id           String?  @db.NVarChar(100)
+  id                BigInt    @id(map: "PK__transact__3213E83F6FAE4EE5") @default(autoincrement())
+  transaction_id    String    @unique(map: "UQ__transact__85C600AE71C0990A") @db.NVarChar(50)
   start_time        DateTime
   end_time          DateTime?
-
-  cpid              String   @db.NVarChar(255)
-  cpsn              String   @db.NVarChar(255)
+  cpid              String    @db.NVarChar(255)
+  cpsn              String    @db.NVarChar(255)
   connector_id      Int
-
-  id_tag            String   @db.NVarChar(20)
-
-  // 電表數據
-  meter_start       Decimal?            @db.Decimal(10,3)
-  meter_stop        Decimal?            @db.Decimal(10,3)
-  energy_consumed   Decimal?            @db.Decimal(10,3)
-  
-  // 即時充電數據（由 MeterValues 更新）
-  current_power     Decimal?            @db.Decimal(8,3)  // 當前功率 (kW)
-  current_voltage   Decimal?            @db.Decimal(8,2)  // 當前電壓 (V)
-  current_current   Decimal?            @db.Decimal(8,2)  // 當前電流 (A)
-  last_meter_update DateTime?           // 最後電表更新時間
-  
-  // 充電時長（秒）
+  user_id           String?   @db.NVarChar(100)
+  id_tag            String    @db.NVarChar(20)
+  meter_start       Decimal?  @db.Decimal(10, 3)
+  meter_stop        Decimal?  @db.Decimal(10, 3)
+  energy_consumed   Decimal?  @db.Decimal(10, 3)
+  current_power     Decimal?  @db.Decimal(8, 3)
+  current_voltage   Decimal?  @db.Decimal(8, 2)
+  current_current   Decimal?  @db.Decimal(8, 2)
+  last_meter_update DateTime?
   charging_duration Int?
-
-  // 狀態資訊
-  status            String             @default("ACTIVE") @db.NVarChar(20)
-  stop_reason       String?            @db.NVarChar(100)
-
+  status            String    @default("N'ACTIVE'", map: "DF__transacti__statu__5535A963") @db.NVarChar(20)
+  stop_reason       String?   @db.NVarChar(100)
   createdAt         DateTime
   updatedAt         DateTime
 
-  @@index([transaction_id])
-  @@index([cpid])
-  @@index([cpsn])
-  @@index([id_tag])
-  @@index([status])
-  @@index([start_time])
-  @@index([end_time])
+  @@index([cpid], map: "IX_transactions_cpid")
+  @@index([cpsn], map: "IX_transactions_cpsn")
+  @@index([end_time], map: "IX_transactions_end_time")
+  @@index([id_tag], map: "IX_transactions_id_tag")
+  @@index([start_time], map: "IX_transactions_start_time")
+  @@index([status], map: "IX_transactions_status")
+  @@index([transaction_id], map: "IX_transactions_transaction_id")
 }
 
-// 费率方案表
 model tariffs {
-  id                     Int          @id @default(autoincrement())
-  name                   String       @db.NVarChar(100)               // 费率方案名称
-  description            String?      @db.NVarChar(max)               // 方案描述
-  tariff_type            String       @default("FIXED_RATE") @db.NVarChar(20) // 费率类型
-  
-  // 基本费率设置
-  base_price             Decimal      @db.Decimal(10,2)               // 基本电费单价 (元/kWh)
-  service_fee            Decimal?     @db.Decimal(10,2)               // 服务费 (固定费用)
-  minimum_fee            Decimal?     @db.Decimal(10,2)               // 最低消费金额
-  
-  // 分时费率设置 (若使用 TIME_OF_USE 类型)
-  peak_hours_start       String?      @db.NVarChar(5)                 // 尖峰时段开始 (HH:MM 格式)
-  peak_hours_end         String?      @db.NVarChar(5)                 // 尖峰时段结束 (HH:MM 格式)
-  peak_hours_price       Decimal?     @db.Decimal(10,2)               // 尖峰时段电费 (元/kWh)
-  off_peak_price         Decimal?     @db.Decimal(10,2)               // 离峰时段电费 (元/kWh)
-  weekend_price          Decimal?     @db.Decimal(10,2)               // 假日电费 (元/kWh)
-  
-  // 阶梯式费率设置 (若使用 PROGRESSIVE 类型)
-  tier1_max_kwh          Decimal?     @db.Decimal(10,2)               // 第一阶梯最大值 (kWh)
-  tier1_price            Decimal?     @db.Decimal(10,2)               // 第一阶梯单价 (元/kWh)
-  tier2_max_kwh          Decimal?     @db.Decimal(10,2)               // 第二阶梯最大值 (kWh)
-  tier2_price            Decimal?     @db.Decimal(10,2)               // 第二阶梯单价 (元/kWh)
-  tier3_price            Decimal?     @db.Decimal(10,2)               // 第三阶梯单价 (元/kWh)
-  
-  // 促销或会员设置
-  discount_percentage    Decimal?     @db.Decimal(5,2)                // 折扣百分比 (例: 20.00 表示 8 折)
-  promotion_code         String?      @db.NVarChar(50)                // 促销代码
-  valid_from             DateTime?                                    // 方案有效起始日
-  valid_to               DateTime?                                    // 方案有效结束日
-  
-  // 其他条款设置
-  ac_only                Boolean      @default(false)                 // 仅适用于 AC 充电
-  dc_only                Boolean      @default(false)                 // 仅适用于 DC 充电
-  membership_required    Boolean      @default(false)                 // 是否需要会员资格
-  
-  // 系统信息
-  is_active              Boolean      @default(true)                  // 是否启用
-  is_default             Boolean      @default(false)                 // 是否为预设方案
-  created_by             String?      @db.NVarChar(100)               // 建立者
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
+  id                  Int        @id(map: "PK__tariffs__3213E83F0793228A") @default(autoincrement())
+  name                String     @db.NVarChar(100)
+  description         String?    @db.NVarChar(Max)
+  tariff_type         String     @default("N'FIXED_RATE'", map: "DF__tariffs__tariff___37A5467C") @db.NVarChar(20)
+  base_price          Decimal    @db.Decimal(10, 2)
+  service_fee         Decimal?   @db.Decimal(10, 2)
+  minimum_fee         Decimal?   @db.Decimal(10, 2)
+  peak_hours_start    String?    @db.NVarChar(5)
+  peak_hours_end      String?    @db.NVarChar(5)
+  peak_hours_price    Decimal?   @db.Decimal(10, 2)
+  off_peak_price      Decimal?   @db.Decimal(10, 2)
+  weekend_price       Decimal?   @db.Decimal(10, 2)
+  tier1_max_kwh       Decimal?   @db.Decimal(10, 2)
+  tier1_price         Decimal?   @db.Decimal(10, 2)
+  tier2_max_kwh       Decimal?   @db.Decimal(10, 2)
+  tier2_price         Decimal?   @db.Decimal(10, 2)
+  tier3_price         Decimal?   @db.Decimal(10, 2)
+  discount_percentage Decimal?   @db.Decimal(5, 2)
+  promotion_code      String?    @db.NVarChar(50)
+  valid_from          DateTime?
+  valid_to            DateTime?
+  ac_only             Boolean    @default(false, map: "DF__tariffs__ac_only__398D8EEE")
+  dc_only             Boolean    @default(false, map: "DF__tariffs__dc_only__3A81B327")
+  membership_required Boolean    @default(false, map: "DF__tariffs__members__3B75D760")
+  is_active           Boolean    @default(true, map: "DF__tariffs__is_acti__3C69FB99")
+  is_default          Boolean    @default(false, map: "DF__tariffs__is_defa__3D5E1FD2")
+  created_by          String?    @db.NVarChar(100)
+  createdAt           DateTime   @default(now(), map: "DF__tariffs__created__3E52440B")
+  updatedAt           DateTime   @default(now(), map: "DF__tariffs__updated__3F466844") @updatedAt
+  stations            stations[] @relation("StationTariff")
 
-  // 关联到账单记录
-  billing_records        billing_records[]
-
-  stations          stations[] @relation("StationTariff") // <- 反向關聯
-
-  @@index([name])
-  @@index([tariff_type])
-  @@index([is_active])
-  @@index([is_default])
+  @@index([is_active], map: "IX_tariffs_is_active")
+  @@index([is_default], map: "IX_tariffs_is_default")
+  @@index([name], map: "IX_tariffs_name")
+  @@index([tariff_type], map: "IX_tariffs_tariff_type")
 }
 
-// 账单记录表
-model billing_records {
-  id                     BigInt       @id @default(autoincrement())
-  transaction_id         String       @db.NVarChar(50)               // 对应的交易编号
-  transaction_ref        BigInt?                                     // 对应的交易 ID (数据库 ID)
-  
-  // 费率设置
-  tariff_id              Int                                         // 费率方案 ID
-  tariff                 tariffs      @relation(fields: [tariff_id], references: [id])
-  applied_price          Decimal      @db.Decimal(10,2)               // 实际应用的单价 (元/kWh)
-  
-  // 账单信息
-  energy_consumed        Decimal      @db.Decimal(10,3)               // 用电量 (kWh)
-  energy_fee             Decimal      @db.Decimal(10,2)               // 电费金额
-  service_fee            Decimal      @db.Decimal(10,2)               // 服务费金额
-  discount_amount        Decimal?     @db.Decimal(10,2)               // 折扣金额
-  tax_amount             Decimal?     @db.Decimal(10,2)               // 税金
-  total_amount           Decimal      @db.Decimal(10,2)               // 总金额
-  currency               String       @default("TWD") @db.NVarChar(3) // 币别
-  
-  // 计费详情
-  start_time             DateTime                                     // 开始时间
-  end_time               DateTime                                     // 结束时间
-  charging_duration      Int                                          // 充电时长 (秒)
-  billing_details        String?      @db.NVarChar(max)               // 计费明细 (JSON 格式)
-  
-  // 发票/付款信息
-  invoice_number         String?      @db.NVarChar(20)                // 发票编号
-  invoice_issued_at      DateTime?                                    // 发票开立时间
-  payment_method         String?      @db.NVarChar(50)                // 付款方式
-  payment_reference      String?      @db.NVarChar(100)               // 付款参考编号
-  payment_time           DateTime?                                    // 付款时间
-  
-  // 使用者信息
-  user_id                String?      @db.NVarChar(100)               // 用户 ID
-  id_tag                 String       @db.NVarChar(20)                // 识别标签
-  
-  // 充电桩信息
-  cpid                   String       @db.NVarChar(255)               // 充电桩 ID
-  cpsn                   String       @db.NVarChar(255)               // 充电桩序号
-  connector_id           Int                                          // 连接器 ID
-  
-  // 状态信息
-  status                 String       @default("CALCULATED") @db.NVarChar(20) // 账单状态
-  remark                 String?      @db.NVarChar(max)               // 备注
-  
-  // 时间戳
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
-
-  @@index([transaction_id])
-  @@index([tariff_id])
-  @@index([user_id])
-  @@index([id_tag])
-  @@index([cpid])
-  @@index([status])
-  @@index([start_time])
-  @@index([invoice_number])
+model billing_channels {
+  id        Int      @id(map: "PK__billing___3213E83FE18A5F69") @default(autoincrement())
+  name      String   @db.NVarChar(50)
+  code      String   @unique(map: "UQ__billing___357D4CF90730AA3F") @db.NVarChar(30)
+  status    Int      @default(1, map: "DF__billing_c__statu__59FA5E80") @db.TinyInt
+  config    String?  @db.NVarChar(Max)
+  createdAt DateTime @default(now(), map: "DF__billing_c__creat__5AEE82B9")
+  updatedAt DateTime @default(now(), map: "DF__billing_c__updat__5BE2A6F2")
 }

@@ -8,6 +8,212 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model cp_logs {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  cpid      String?   @db.VarChar(255)
+  cpsn      String?   @db.VarChar(255)
+  log       String?   @db.LongText
+  inout     String?   @db.VarChar(45)
+  time      DateTime? @db.DateTime(0)
+  createdAt DateTime? @db.DateTime(0)
+  updatedAt DateTime? @db.DateTime(0)
+}
+
+model guns {
+  id               Int        @id @default(autoincrement())
+  connector        String?    @db.VarChar(45)
+  cpid             String?    @db.VarChar(255)
+  cpsn             String?    @db.VarChar(255)
+  guns_status      String?    @db.VarChar(45)
+  createdAt        DateTime?  @db.Date
+  updatedAt        DateTime?  @db.Date
+  guns_metervalue1 String?    @db.VarChar(255)
+  guns_metervalue2 String?    @db.VarChar(255)
+  guns_metervalue3 String?    @db.VarChar(255)
+  guns_metervalue4 String?    @db.VarChar(255)
+  guns_metervalue5 String?    @db.VarChar(255)
+  guns_metervalue6 String?    @db.VarChar(255)
+  guns_memo1       String?    @db.VarChar(255)
+  guns_memo2       String?    @db.VarChar(255)
+  transactionid    String?    @db.VarChar(255)
+  acdc             guns_acdc? @default(AC)
+  max_kw           Int?       @default(0)
+  meter_id         Int
+  meter            meters     @relation("meter_guns", fields: [meter_id], references: [id], onDelete: Cascade, map: "fk_guns_meter")
+
+  @@index([meter_id], map: "fk_guns_meter")
+}
+
+model stations {
+  id           Int      @id @default(autoincrement())
+  station_code String   @unique(map: "uniq_station_code") @db.VarChar(50)
+  name         String?  @db.VarChar(100)
+  address      String?  @db.VarChar(255)
+  floor        String?  @db.VarChar(50)
+  operator_id  String?  @db.VarChar(50)
+  tariff_id    Int?
+  updated_at   DateTime @default(now()) @db.DateTime(0)
+  meters       meters[] @relation("station_meters")
+  tariff       tariffs? @relation("StationTariff", fields: [tariff_id], references: [id], map: "fk_stations_tariff")
+
+  @@index([tariff_id], map: "IX_stations_tariff_id")
+}
+
+model meters {
+  id           Int      @id @default(autoincrement())
+  station_id   Int
+  meter_no     String   @db.VarChar(50)
+  ems_mode     String   @default("static") @db.VarChar(32)
+  max_power_kw Decimal  @default(480.00) @db.Decimal(10, 2)
+  billing_mode String?  @db.VarChar(32)
+  owner_id     String?  @db.VarChar(50)
+  updated_at   DateTime @default(now()) @db.DateTime(0)
+  guns         guns[]   @relation("meter_guns")
+  station      stations @relation("station_meters", fields: [station_id], references: [id], onDelete: Cascade, map: "fk_meter_station")
+
+  @@unique([station_id, meter_no], map: "uniq_station_meter")
+}
+
+model users {
+  id        Int      @id @default(autoincrement())
+  email     String?  @db.VarChar(255)
+  password  String?  @db.VarChar(255)
+  role      String?  @db.VarChar(255)
+  createdAt DateTime @db.DateTime(0)
+  updatedAt DateTime @db.DateTime(0)
+}
+
+model transactions {
+  id                BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_id    String             @unique(map: "transaction_id") @db.VarChar(50)
+  start_time        DateTime           @db.DateTime(0)
+  end_time          DateTime?          @db.DateTime(0)
+  cpid              String             @db.VarChar(255)
+  cpsn              String             @db.VarChar(255)
+  connector_id      Int
+  user_id           String?            @db.VarChar(100)
+  id_tag            String             @db.VarChar(20)
+  meter_start       Decimal?           @db.Decimal(10, 3)
+  meter_stop        Decimal?           @db.Decimal(10, 3)
+  energy_consumed   Decimal?           @db.Decimal(10, 3)
+  current_power     Decimal?           @db.Decimal(8, 3)
+  current_voltage   Decimal?           @db.Decimal(8, 2)
+  current_current   Decimal?           @db.Decimal(8, 2)
+  last_meter_update DateTime?          @db.DateTime(0)
+  charging_duration Int?
+  status            transaction_status @default(ACTIVE)
+  stop_reason       String?            @db.VarChar(100)
+  createdAt         DateTime           @db.DateTime(0)
+  updatedAt         DateTime           @db.DateTime(0)
+  billing_records   billing_records[]
+
+  @@index([cpid], map: "idx_cpid")
+  @@index([cpsn], map: "idx_cpsn")
+  @@index([end_time], map: "idx_end_time")
+  @@index([id_tag], map: "idx_id_tag")
+  @@index([start_time], map: "idx_start_time")
+  @@index([status], map: "idx_status")
+  @@index([transaction_id], map: "idx_transaction_id")
+}
+
+model tariffs {
+  id                  Int               @id @default(autoincrement())
+  name                String            @db.VarChar(100)
+  description         String?           @db.Text
+  tariff_type         tariff_type       @default(FIXED_RATE)
+  base_price          Decimal           @db.Decimal(10, 2)
+  service_fee         Decimal?          @db.Decimal(10, 2)
+  minimum_fee         Decimal?          @db.Decimal(10, 2)
+  peak_hours_start    String?           @db.VarChar(5)
+  peak_hours_end      String?           @db.VarChar(5)
+  peak_hours_price    Decimal?          @db.Decimal(10, 2)
+  off_peak_price      Decimal?          @db.Decimal(10, 2)
+  weekend_price       Decimal?          @db.Decimal(10, 2)
+  tier1_max_kwh       Decimal?          @db.Decimal(10, 2)
+  tier1_price         Decimal?          @db.Decimal(10, 2)
+  tier2_max_kwh       Decimal?          @db.Decimal(10, 2)
+  tier2_price         Decimal?          @db.Decimal(10, 2)
+  tier3_price         Decimal?          @db.Decimal(10, 2)
+  discount_percentage Decimal?          @db.Decimal(5, 2)
+  promotion_code      String?           @db.VarChar(50)
+  valid_from          DateTime?         @db.DateTime(0)
+  valid_to            DateTime?         @db.DateTime(0)
+  ac_only             Boolean           @default(false)
+  dc_only             Boolean           @default(false)
+  membership_required Boolean           @default(false)
+  is_active           Boolean           @default(true)
+  is_default          Boolean           @default(false)
+  created_by          String?           @db.VarChar(100)
+  createdAt           DateTime          @default(now()) @db.DateTime(0)
+  updatedAt           DateTime          @default(now()) @updatedAt @db.DateTime(0)
+  billing_records     billing_records[]
+  stations            stations[]        @relation("StationTariff")
+
+  @@index([is_active], map: "idx_is_active")
+  @@index([is_default], map: "idx_is_default")
+  @@index([name], map: "idx_name")
+  @@index([tariff_type], map: "idx_tariff_type")
+}
+
+model billing_records {
+  id                BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_id    String            @db.VarChar(50)
+  transaction_ref   BigInt?           @db.UnsignedBigInt
+  tariff_id         Int
+  applied_price     Decimal           @db.Decimal(10, 2)
+  energy_consumed   Decimal           @db.Decimal(10, 3)
+  energy_fee        Decimal           @db.Decimal(10, 2)
+  service_fee       Decimal           @db.Decimal(10, 2)
+  discount_amount   Decimal?          @db.Decimal(10, 2)
+  tax_amount        Decimal?          @db.Decimal(10, 2)
+  total_amount      Decimal           @db.Decimal(10, 2)
+  currency          String            @default("TWD") @db.VarChar(3)
+  start_time        DateTime          @db.DateTime(0)
+  end_time          DateTime          @db.DateTime(0)
+  charging_duration Int
+  billing_details   String?           @db.Text
+  invoice_number    String?           @db.VarChar(20)
+  invoice_issued_at DateTime?         @db.DateTime(0)
+  payment_method    String?           @db.VarChar(50)
+  payment_reference String?           @db.VarChar(100)
+  payment_time      DateTime?         @db.DateTime(0)
+  user_id           String?           @db.VarChar(100)
+  id_tag            String            @db.VarChar(20)
+  cpid              String            @db.VarChar(255)
+  cpsn              String            @db.VarChar(255)
+  connector_id      Int
+  status            billing_status    @default(CALCULATED)
+  remark            String?           @db.Text
+  createdAt         DateTime          @default(now()) @db.DateTime(0)
+  updatedAt         DateTime          @default(now()) @updatedAt @db.DateTime(0)
+  billing_channels  billing_channels? @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
+  tariff            tariffs           @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
+  transactions      transactions?     @relation(fields: [transaction_ref], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_ref")
+
+  @@index([payment_method], map: "fk_billing_records_payment_method")
+  @@index([transaction_ref], map: "fk_billing_records_transaction_ref")
+  @@index([cpid], map: "idx_cpid")
+  @@index([id_tag], map: "idx_id_tag")
+  @@index([invoice_number], map: "idx_invoice_number")
+  @@index([start_time], map: "idx_start_time")
+  @@index([status], map: "idx_status")
+  @@index([tariff_id], map: "idx_tariff_id")
+  @@index([transaction_id], map: "idx_transaction_id")
+  @@index([user_id], map: "idx_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model billing_channels {
+  id              Int               @id @default(autoincrement()) @db.UnsignedInt
+  name            String            @db.VarChar(50)
+  code            String            @unique(map: "code") @db.VarChar(30)
+  status          Int               @default(1) @db.TinyInt
+  config          Json?
+  createdAt       DateTime          @default(now()) @db.DateTime(0)
+  updatedAt       DateTime          @default(now()) @db.DateTime(0)
+  billing_records billing_records[]
+}
+
 enum guns_acdc {
   AC
   DC
@@ -22,253 +228,19 @@ enum transaction_status {
 }
 
 enum tariff_type {
-  FIXED_RATE         // 固定費率 (單一價格)
-  TIME_OF_USE        // 分時費率 (尖峰/離峰價格)
-  PROGRESSIVE        // 累進費率 (用量越高單價越高)
-  SPECIAL_PROMOTION  // 特殊促銷方案
-  MEMBERSHIP         // 會員特別費率
-  CUSTOM             // 自定義費率
+  FIXED_RATE
+  TIME_OF_USE
+  PROGRESSIVE
+  SPECIAL_PROMOTION
+  MEMBERSHIP
+  CUSTOM
 }
 
 enum billing_status {
-  PENDING      // 待處理
-  CALCULATED   // 已計算
-  INVOICED     // 已開立發票
-  PAID         // 已付款
-  CANCELLED    // 已取消
-  ERROR        // 錯誤
-}
-
-model cp_logs {
-  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  cpid      String?   @db.VarChar(255)
-  cpsn      String?   @db.VarChar(255)
-  log       String?   @db.Text
-  inout     String?   @db.VarChar(45)
-  time      DateTime? @db.DateTime(0)
-  createdAt DateTime? @db.DateTime(0)
-  updatedAt DateTime? @db.DateTime(0)
-}
-
-model guns {
-  id               Int        @id @default(autoincrement())
-  connector        String?    @db.VarChar(45)
-  cpid             String?    @db.VarChar(255)
-  cpsn             String?    @db.VarChar(255)
-  guns_status      String?    @db.VarChar(45)
-  createdAt        DateTime?  @db.DateTime(0)
-  updatedAt        DateTime?  @db.DateTime(0)
-  guns_metervalue1 String?    @db.VarChar(255)
-  guns_metervalue2 String?    @db.VarChar(255)
-  guns_metervalue3 String?    @db.VarChar(255)
-  guns_metervalue4 String?    @db.VarChar(255)
-  guns_metervalue5 String?    @db.VarChar(255)
-  guns_metervalue6 String?    @db.VarChar(255)
-  guns_memo1       String?    @db.VarChar(255)
-  guns_memo2       String?    @db.VarChar(255)
-  transactionid    String?    @db.VarChar(255)
-  acdc             guns_acdc? @default(AC)
-  max_kw           Int?       @default(0)
-
-  // 新增關聯
-  meter_id         Int
-  meter            meters     @relation("meter_guns", fields: [meter_id], references: [id])
-}
-
-
-model stations {
-  id           Int       @id @default(autoincrement())
-  station_code String    @db.VarChar(50) // 自定義場域編號
-  name         String?   @db.VarChar(100) // 場域名稱
-  address      String?   @db.VarChar(255)
-  floor        String?   @db.VarChar(50)
-  operator_id  String?   @db.VarChar(50) // 營運商/業主ID
-  tariff_id    Int?      // 預設費率ID (tariffs.id)
-  updated_at   DateTime  @default(now()) @db.DateTime(0)
-
-  meters       meters[]  @relation("station_meters") // 一對多關聯到 meters
-  tariff       tariffs?  @relation("StationTariff", fields: [tariff_id], references: [id]) // 關聯到費率
-}
-
-
-model meters {
-  id           Int       @id @default(autoincrement())
-  station_id   Int
-  meter_no     String    @db.VarChar(50)
-  ems_mode     String    @default("static") @db.VarChar(32)
-  max_power_kw Decimal   @default(480.00) @db.Decimal(10,2)
-  billing_mode String?   @db.VarChar(32)
-  owner_id     String?   @db.VarChar(50)
-  updated_at   DateTime  @default(now()) @db.DateTime(0)
-
-  station      stations  @relation("station_meters", fields: [station_id], references: [id])
-  guns         guns[]    @relation("meter_guns") // 一對多關聯到 guns
-}
-
-model users {
-  id        Int      @id @default(autoincrement())
-  email     String?  @db.VarChar(255)
-  password  String?  @db.VarChar(255)
-  role      String?  @db.VarChar(255)
-  createdAt DateTime @db.DateTime(0)
-  updatedAt DateTime @db.DateTime(0)
-}
-
-model transactions {
-  id                BigInt             @id @default(autoincrement()) @db.UnsignedBigInt // 資料庫自動生成，用作 OCPP transactionId
-  transaction_id    String             @unique @db.VarChar(50) // 內部自訂編號
-  start_time        DateTime           @db.DateTime(0)
-  end_time          DateTime?          @db.DateTime(0)
-
-  // 充電樁資訊
-  cpid              String             @db.VarChar(255)
-  cpsn              String             @db.VarChar(255)
-  connector_id      Int
-
-  // 用戶識別
-  user_id           String?            @db.VarChar(100)
-  id_tag            String             @db.VarChar(20)
-
-  // 電表數據
-  meter_start       Decimal?           @db.Decimal(10,3)
-  meter_stop        Decimal?           @db.Decimal(10,3)
-  energy_consumed   Decimal?           @db.Decimal(10,3)
-
-  // 即時充電數據（由 MeterValues 更新）
-  current_power     Decimal?           @db.Decimal(8,3)  // 當前功率 (kW)
-  current_voltage   Decimal?           @db.Decimal(8,2)  // 當前電壓 (V)
-  current_current   Decimal?           @db.Decimal(8,2)  // 當前電流 (A)
-  last_meter_update DateTime?          @db.DateTime(0)   // 最後電表更新時間
-
-  // 充電時長（秒）
-  charging_duration Int?
-
-  // 狀態資訊
-  status            transaction_status @default(ACTIVE)
-  stop_reason       String?            @db.VarChar(100)
-
-  // 時間戳
-  createdAt         DateTime           @db.DateTime(0)
-  updatedAt         DateTime           @db.DateTime(0)
-
-  @@index([transaction_id])
-  @@index([cpid])
-  @@index([cpsn])
-  @@index([id_tag])
-  @@index([status])
-  @@index([start_time])
-  @@index([end_time])
-}
-
-model tariffs {
-  id                     Int          @id @default(autoincrement())
-  name                   String       @db.VarChar(100)                // 費率方案名稱
-  description            String?      @db.Text                        // 方案描述
-  tariff_type            tariff_type  @default(FIXED_RATE)            // 費率類型
-  
-  // 基本費率設置
-  base_price             Decimal      @db.Decimal(10,2)               // 基本電費單價 (元/kWh)
-  service_fee            Decimal?     @db.Decimal(10,2)               // 服務費 (固定費用)
-  minimum_fee            Decimal?     @db.Decimal(10,2)               // 最低消費金額
-  
-  // 分時費率設置 (若使用 TIME_OF_USE 類型)
-  peak_hours_start       String?      @db.VarChar(5)                  // 尖峰時段開始 (HH:MM 格式)
-  peak_hours_end         String?      @db.VarChar(5)                  // 尖峰時段結束 (HH:MM 格式)
-  peak_hours_price       Decimal?     @db.Decimal(10,2)               // 尖峰時段電費 (元/kWh)
-  off_peak_price         Decimal?     @db.Decimal(10,2)               // 離峰時段電費 (元/kWh)
-  weekend_price          Decimal?     @db.Decimal(10,2)               // 假日電費 (元/kWh)
-  
-  // 階梯式費率設置 (若使用 PROGRESSIVE 類型)
-  tier1_max_kwh          Decimal?     @db.Decimal(10,2)               // 第一階梯最大值 (kWh)
-  tier1_price            Decimal?     @db.Decimal(10,2)               // 第一階梯單價 (元/kWh)
-  tier2_max_kwh          Decimal?     @db.Decimal(10,2)               // 第二階梯最大值 (kWh)
-  tier2_price            Decimal?     @db.Decimal(10,2)               // 第二階梯單價 (元/kWh)
-  tier3_price            Decimal?     @db.Decimal(10,2)               // 第三階梯單價 (元/kWh)
-  
-  // 促銷或會員設置
-  discount_percentage    Decimal?     @db.Decimal(5,2)                // 折扣百分比 (例: 20.00 表示 8 折)
-  promotion_code         String?      @db.VarChar(50)                 // 促銷代碼
-  valid_from             DateTime?    @db.DateTime(0)                 // 方案有效起始日
-  valid_to               DateTime?    @db.DateTime(0)                 // 方案有效結束日
-  
-  // 其他條款設置
-  ac_only                Boolean      @default(false)                 // 僅適用於 AC 充電
-  dc_only                Boolean      @default(false)                 // 僅適用於 DC 充電
-  membership_required    Boolean      @default(false)                 // 是否需要會員資格
-  
-  // 系統資訊
-  is_active              Boolean      @default(true)                  // 是否啟用
-  is_default             Boolean      @default(false)                 // 是否為預設方案
-  created_by             String?      @db.VarChar(100)                // 建立者
-  createdAt              DateTime     @default(now()) @db.DateTime(0)
-  updatedAt              DateTime     @updatedAt @db.DateTime(0)
-
-  // 關聯到帳單記錄
-  billing_records        billing_records[]
-  
-  stations               stations[]   @relation("StationTariff") // <-- 反向關聯
-
-  @@index([name])
-  @@index([tariff_type])
-  @@index([is_active])
-  @@index([is_default])
-}
-
-model billing_records {
-  id                     BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  transaction_id         String       @db.VarChar(50)                // 對應的交易編號
-  transaction_ref        BigInt?      @db.UnsignedBigInt             // 對應的交易 ID (資料庫 ID)
-  
-  // 費率設置
-  tariff_id              Int                                         // 費率方案 ID
-  tariff                 tariffs      @relation(fields: [tariff_id], references: [id])
-  applied_price          Decimal      @db.Decimal(10,2)               // 實際應用的單價 (元/kWh)
-  
-  // 帳單資訊
-  energy_consumed        Decimal      @db.Decimal(10,3)               // 用電量 (kWh)
-  energy_fee             Decimal      @db.Decimal(10,2)               // 電費金額
-  service_fee            Decimal      @db.Decimal(10,2)               // 服務費金額
-  discount_amount        Decimal?     @db.Decimal(10,2)               // 折扣金額
-  tax_amount             Decimal?     @db.Decimal(10,2)               // 稅金
-  total_amount           Decimal      @db.Decimal(10,2)               // 總金額
-  currency               String       @default("TWD") @db.VarChar(3)  // 幣別
-  
-  // 計費詳情
-  start_time             DateTime     @db.DateTime(0)                 // 開始時間
-  end_time               DateTime     @db.DateTime(0)                 // 結束時間
-  charging_duration      Int                                          // 充電時長 (秒)
-  billing_details        String?      @db.Text                        // 計費明細 (JSON 格式)
-  
-  // 發票/付款資訊
-  invoice_number         String?      @db.VarChar(20)                 // 發票編號
-  invoice_issued_at      DateTime?    @db.DateTime(0)                 // 發票開立時間
-  payment_method         String?      @db.VarChar(50)                 // 付款方式
-  payment_reference      String?      @db.VarChar(100)                // 付款參考編號
-  payment_time           DateTime?    @db.DateTime(0)                 // 付款時間
-  
-  // 使用者資訊
-  user_id                String?      @db.VarChar(100)                // 用戶 ID
-  id_tag                 String       @db.VarChar(20)                 // 識別標籤
-  
-  // 充電樁資訊
-  cpid                   String       @db.VarChar(255)                // 充電樁 ID
-  cpsn                   String       @db.VarChar(255)                // 充電樁序號
-  connector_id           Int                                          // 連接器 ID
-  
-  // 狀態資訊
-  status                 billing_status @default(CALCULATED)          // 帳單狀態
-  remark                 String?      @db.Text                        // 備註
-  
-  // 時間戳
-  createdAt              DateTime     @default(now()) @db.DateTime(0)
-  updatedAt              DateTime     @updatedAt @db.DateTime(0)
-
-  @@index([transaction_id])
-  @@index([tariff_id])
-  @@index([user_id])
-  @@index([id_tag])
-  @@index([cpid])
-  @@index([status])
-  @@index([start_time])
-  @@index([invoice_number])
+  PENDING
+  CALCULATED
+  INVOICED
+  PAID
+  CANCELLED
+  ERROR
 }

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Paper,
@@ -23,8 +23,21 @@ import {
   InputAdornment,
   useTheme,
   alpha,
-  Grid
+  Grid,
+  Alert,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar
 } from '@mui/material';
+import {
+  togglePaymentMethodStatus,
+  createPaymentMethod,
+  updatePaymentMethod,
+  deletePaymentMethod
+} from '../../actions/paymentActions';
 import SearchIcon from '@mui/icons-material/Search';
 import PaymentIcon from '@mui/icons-material/Payment';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -33,51 +46,286 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import TableChartIcon from '@mui/icons-material/TableChart';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PaymentMethodDialog from '../../components/dialog/PaymentMethodDialog';
 
-const paymentMethods = [
-  { id: 1, name: '信用卡', enabled: true },
-  { id: 2, name: 'Line Pay', enabled: true },
-  { id: 3, name: 'Apple Pay', enabled: false },
-  { id: 4, name: '悠遊卡', enabled: true },
-  { id: 5, name: 'RFID', enabled: true },
-];
+// 定義類型
+interface PaymentMethod {
+  id: number;
+  name: string;
+  status: number;
+  config?: any;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PaymentRecord {
+  id: string;
+  transactionId: string;
+  userId: string;
+  idTag: string;
+  amount: number;
+  energyConsumed: number;
+  paymentMethod: string;
+  status: string;
+  startTime: string;
+  endTime: string;
+  chargingDuration: number;
+  cpid: string;
+  cpsn: string;
+  connectorId: number;
+  invoiceNumber: string;
+  createdAt: string;
+}
+
+interface FormData {
+  name: string;
+  code: string;
+  status: number;
+  config: any;
+}
+
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 const statusOptions = [
   { label: '全部狀態', value: '' },
   { label: '成功', value: 'success' },
   { label: '失敗', value: 'fail' },
   { label: '退款', value: 'refund' },
 ];
-const methodOptions = [
-  { label: '全部方式', value: '' },
-  ...paymentMethods.map(m => ({ label: m.name, value: m.name }))
-];
-const paymentRows = [
-  { id: 1, user: '陳先生', amount: 120, method: '信用卡', status: 'success', time: '2024-06-01 10:20', order: 'ORD001' },
-  { id: 2, user: '李小姐', amount: 80, method: 'Line Pay', status: 'fail', time: '2024-06-01 11:10', order: 'ORD002' },
-  { id: 3, user: '張大明', amount: 60, method: '悠遊卡', status: 'success', time: '2024-06-02 09:30', order: 'ORD003' },
-];
 
 export default function PaymentManagement() {
   const theme = useTheme();
-  const [methods, setMethods] = useState(paymentMethods);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const [loading, setLoading] = useState(true);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [method, setMethod] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<PaymentMethod | null>(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [formData, setFormData] = useState<FormData>({
+    name: '',
+    code: '',
+    status: 1,
+    config: {}
+  });
+
+  // 獲取支付方式數據
+  const fetchPaymentMethods = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/billing/channels');
+      const result = await response.json();
+
+      if (result.success) {
+        setPaymentMethods(result.data);
+        setError(null);
+      } else {
+        setError(result.error || '獲取支付方式失敗');
+      }
+    } catch (err) {
+      setError('網絡錯誤，請稍後重試');
+      console.error('Error fetching payment methods:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 獲取支付記錄數據
+  const fetchPaymentRecords = async (page = 1, limit = 10) => {
+    try {
+      setRecordsLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        ...(status && { status }),
+        ...(method && { paymentMethod: method }),
+        ...(keyword && { keyword })
+      });
+
+      const response = await fetch(`/api/billing/records?${params}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setPaymentRecords(result.data);
+        setPagination(result.pagination);
+        setCurrentPage(page);
+      } else {
+        console.error('Error fetching payment records:', result.error);
+        setPaymentRecords([]);
+        setPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
+      }
+    } catch (err) {
+      console.error('Error fetching payment records:', err);
+      setPaymentRecords([]);
+      setPagination({ page: 1, limit: 10, total: 0, totalPages: 0 });
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentMethods();
+    fetchPaymentRecords();
+  }, []);
+
+  // 處理支付方式狀態切換
+  const handleToggleStatus = async (channel: PaymentMethod) => {
+    const result = await togglePaymentMethodStatus(channel.id);
+
+    if (result.success && result.data) {
+      setPaymentMethods(prev =>
+        prev.map(m => m.id === channel.id ? {
+          ...result.data!,
+          createdAt: result.data!.createdAt.toISOString(),
+          updatedAt: result.data!.updatedAt.toISOString()
+        } : m)
+      );
+      setSnackbar({
+        open: true,
+        message: '支付方式狀態已更新',
+        severity: 'success'
+      });
+    } else {
+      setSnackbar({
+        open: true,
+        message: result.error || '更新失敗',
+        severity: 'error'
+      });
+    }
+  };
+
+  // 處理新增/編輯支付方式
+  const handleSaveChannel = async (formData: FormData) => {
+    const isEditing = !!editingChannel;
+
+    const result = isEditing
+      ? await updatePaymentMethod(editingChannel.id, formData)
+      : await createPaymentMethod(formData);
+
+    if (result.success && result.data) {
+      const formattedData = {
+        ...result.data,
+        createdAt: result.data.createdAt.toISOString(),
+        updatedAt: result.data.updatedAt.toISOString()
+      };
+
+      if (isEditing) {
+        setPaymentMethods(prev =>
+          prev.map(m => m.id === editingChannel.id ? formattedData : m)
+        );
+      } else {
+        setPaymentMethods(prev => [formattedData, ...prev]);
+      }
+      setOpenDialog(false);
+      setEditingChannel(null);
+      setFormData({ name: '', code: '', status: 1, config: {} });
+      setSnackbar({
+        open: true,
+        message: isEditing ? '支付方式已更新' : '支付方式已新增',
+        severity: 'success'
+      });
+    } else {
+      setSnackbar({
+        open: true,
+        message: result.error || '操作失敗',
+        severity: 'error'
+      });
+    }
+  };
+
+  // 處理刪除支付方式
+  const handleDeleteChannel = async (channel: PaymentMethod) => {
+    if (!confirm(`確定要刪除支付方式 "${channel.name}" 嗎？`)) {
+      return;
+    }
+
+    const result = await deletePaymentMethod(channel.id);
+
+    if (result.success) {
+      setPaymentMethods(prev => prev.filter(m => m.id !== channel.id));
+      setSnackbar({
+        open: true,
+        message: '支付方式已刪除',
+        severity: 'success'
+      });
+    } else {
+      setSnackbar({
+        open: true,
+        message: result.error || '刪除失敗',
+        severity: 'error'
+      });
+    }
+  };
+
+  // 打開新增對話框
+  const handleOpenAddDialog = () => {
+    setEditingChannel(null);
+    setFormData({ name: '', code: '', status: 1, config: {} });
+    setOpenDialog(true);
+  };
+
+  // 打開編輯對話框
+  const handleOpenEditDialog = (channel: PaymentMethod) => {
+    setEditingChannel(channel);
+    setFormData({
+      name: channel.name,
+      code: '',
+      status: channel.status,
+      config: channel.config || {}
+    });
+    setOpenDialog(true);
+  };
+
+  // 處理查詢
+  const handleSearch = () => {
+    fetchPaymentRecords(1, pagination.limit);
+  };
+
+  // 處理分頁
+  const handlePageChange = (page: number) => {
+    fetchPaymentRecords(page, pagination.limit);
+  };
+
+  // 處理表單提交
+  const handleFormSubmit = async (formData: FormData) => {
+    await handleSaveChannel(formData);
+  };
+
+  // 動態生成支付方式選項
+  const methodOptions = [
+    { label: '全部方式', value: '' },
+    ...paymentMethods.map(m => ({ label: m.name, value: m.name }))
+  ];
 
   // 計算統計數據
-  const totalPayments = paymentRows.length;
-  const successfulPayments = paymentRows.filter(row => row.status === 'success').length;
-  const failedPayments = paymentRows.filter(row => row.status === 'fail').length;
-  const totalAmount = paymentRows.reduce((sum, row) => sum + row.amount, 0);
+  const totalPayments = paymentRecords.length;
+  const successfulPayments = paymentRecords.filter((record: PaymentRecord) => record.status === 'success').length;
+  const failedPayments = paymentRecords.filter((record: PaymentRecord) => record.status === 'fail').length;
+  const totalAmount = paymentRecords.reduce((sum: number, record: PaymentRecord) => sum + record.amount, 0);
 
-  // 過濾數據
-  const filteredRows = paymentRows.filter((row) => {
+  // 過濾數據（前端過濾，因為數據已經從後端獲取）
+  const filteredRows = paymentRecords.filter((record: PaymentRecord) => {
     const matchesKeyword = !keyword ||
-      row.user?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.order?.toLowerCase().includes(keyword.toLowerCase());
+      record.userId?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.transactionId?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.idTag?.toLowerCase().includes(keyword.toLowerCase());
 
-    const matchesMethod = !method || row.method === method;
-    const matchesStatus = !status || row.status === status;
+    const matchesMethod = !method || record.paymentMethod === method;
+    const matchesStatus = !status || record.status === status;
 
     return matchesKeyword && matchesMethod && matchesStatus;
   });
@@ -249,7 +497,10 @@ export default function PaymentManagement() {
         <Box sx={{
           p: 3,
           borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-          bgcolor: alpha(theme.palette.primary.main, 0.02)
+          bgcolor: alpha(theme.palette.primary.main, 0.02),
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
           <Typography variant="h6" sx={{
             fontWeight: 600,
@@ -261,71 +512,114 @@ export default function PaymentManagement() {
             <CreditCardIcon sx={{ color: theme.palette.primary.main }} />
             支付方式管理
           </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleOpenAddDialog}
+            sx={{
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 500
+            }}
+          >
+            新增支付方式
+          </Button>
         </Box>
         <Box sx={{ p: 3 }}>
-          <Box sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 3,
-            '& > *': { flex: '1 1 280px', minWidth: 250 }
-          }}>
-            {methods.map(m => (
-              <Card
-                key={m.id}
-                elevation={1}
-                sx={{
-                  borderRadius: 3,
-                  border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                  transition: 'all 0.3s ease-in-out',
-                  '&:hover': {
-                    elevation: 3,
-                    transform: 'translateY(-1px)'
-                  }
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{
-                        bgcolor: m.enabled ? theme.palette.primary.main : theme.palette.grey[400],
-                        width: 40,
-                        height: 40
-                      }}>
-                        {m.name === '信用卡' && <CreditCardIcon />}
-                        {m.name === 'Line Pay' && <AccountBalanceWalletIcon />}
-                        {m.name === 'Apple Pay' && <AccountBalanceWalletIcon />}
-                        {m.name === '悠遊卡' && <AccountBalanceWalletIcon />}
-                        {m.name === 'RFID' && <AccountBalanceWalletIcon />}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {m.name}
-                        </Typography>
-                        <Chip
-                          label={m.enabled ? '啟用' : '停用'}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, 1fr)',
+                md: 'repeat(3, 1fr)',
+                lg: 'repeat(4, 1fr)'
+              },
+              gap: 3,
+            }}>
+              {paymentMethods.map(m => (
+                <Card
+                  key={m.id}
+                  elevation={1}
+                  sx={{
+                    borderRadius: 3,
+                    border: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                    transition: 'all 0.3s ease-in-out',
+                    '&:hover': {
+                      elevation: 3,
+                      transform: 'translateY(-1px)'
+                    }
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{
+                          bgcolor: m.status === 1 ? theme.palette.primary.main : theme.palette.grey[400],
+                          width: 40,
+                          height: 40
+                        }}>
+                          <PaymentIcon />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                            {m.name}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
                           size="small"
-                          color={m.enabled ? 'success' : 'default'}
-                          variant="filled"
-                        />
+                          onClick={() => handleOpenEditDialog(m)}
+                          sx={{ minWidth: 'auto', p: 1 }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteChannel(m)}
+                          sx={{ minWidth: 'auto', p: 1 }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </Button>
                       </Box>
                     </Box>
-                    <Switch
-                      checked={m.enabled}
-                      onChange={(_, checked) => setMethods(list => list.map(x => x.id === m.id ? { ...x, enabled: checked } : x))}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': {
-                          color: theme.palette.primary.main,
-                        },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                          backgroundColor: theme.palette.primary.main,
-                        },
-                      }}
-                    />
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Chip
+                        label={m.status === 1 ? '啟用' : '停用'}
+                        size="small"
+                        color={m.status === 1 ? 'success' : 'default'}
+                        variant="filled"
+                      />
+                      <Switch
+                        checked={m.status === 1}
+                        onChange={() => handleToggleStatus(m)}
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': {
+                            color: theme.palette.primary.main,
+                          },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: theme.palette.primary.main,
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
         </Box>
       </Paper>
       {/* 支付記錄查詢篩選區 */}
@@ -423,6 +717,7 @@ export default function PaymentManagement() {
           <Button
             variant="contained"
             size="large"
+            onClick={handleSearch}
             sx={{
               px: 4,
               py: 1.5,
@@ -494,78 +789,111 @@ export default function PaymentManagement() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map(row => (
-                <TableRow
-                  key={row.id}
-                  sx={{
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.02),
-                      transition: 'background-color 0.2s ease-in-out'
-                    }
-                  }}
-                >
-                  <TableCell sx={{ py: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
-                        {row.user.charAt(0)}
-                      </Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {row.user}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
-                      ${row.amount}
+              {recordsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
+                    <CircularProgress size={24} />
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      載入中...
                     </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {row.method === '信用卡' && <CreditCardIcon sx={{ color: 'primary.main', fontSize: '1rem' }} />}
-                      {row.method === 'Line Pay' && <AccountBalanceWalletIcon sx={{ color: 'success.main', fontSize: '1rem' }} />}
-                      {row.method === 'Apple Pay' && <AccountBalanceWalletIcon sx={{ color: 'info.main', fontSize: '1rem' }} />}
-                      {row.method === '悠遊卡' && <AccountBalanceWalletIcon sx={{ color: 'warning.main', fontSize: '1rem' }} />}
-                      {row.method === 'RFID' && <AccountBalanceWalletIcon sx={{ color: 'secondary.main', fontSize: '1rem' }} />}
-                      <Typography variant="body2">
-                        {row.method}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Chip
-                      label={row.status === 'success' ? '成功' : row.status === 'fail' ? '失敗' : '退款'}
-                      size="small"
-                      color={row.status === 'success' ? 'success' : row.status === 'fail' ? 'error' : 'warning'}
-                      variant="filled"
-                    />
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      {row.time}
-                    </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {row.order}
-                    </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      sx={{
-                        minWidth: 'auto',
-                        px: 2,
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 500
-                      }}
-                    >
-                      詳情
-                    </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      沒有找到相關記錄
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredRows.map((row: PaymentRecord) => (
+                  <TableRow
+                    key={row.id}
+                    sx={{
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.02),
+                        transition: 'background-color 0.2s ease-in-out'
+                      }
+                    }}
+                  >
+                    <TableCell sx={{ py: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
+                          {row.idTag?.charAt(0) || row.userId?.charAt(0) || 'U'}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {row.idTag || row.userId || '未知用戶'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {row.transactionId}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
+                        ${row.amount.toFixed(2)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {row.energyConsumed.toFixed(2)} kWh
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {row.paymentMethod === '信用卡' && <CreditCardIcon sx={{ color: 'primary.main', fontSize: '1rem' }} />}
+                        {row.paymentMethod === 'Line Pay' && <AccountBalanceWalletIcon sx={{ color: 'success.main', fontSize: '1rem' }} />}
+                        {row.paymentMethod === 'Apple Pay' && <AccountBalanceWalletIcon sx={{ color: 'info.main', fontSize: '1rem' }} />}
+                        {row.paymentMethod === '悠遊卡' && <AccountBalanceWalletIcon sx={{ color: 'warning.main', fontSize: '1rem' }} />}
+                        {row.paymentMethod === 'RFID' && <AccountBalanceWalletIcon sx={{ color: 'secondary.main', fontSize: '1rem' }} />}
+                        <Typography variant="body2">
+                          {row.paymentMethod}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Chip
+                        label={row.status === 'success' ? '成功' : row.status === 'fail' ? '失敗' : '退款'}
+                        size="small"
+                        color={row.status === 'success' ? 'success' : row.status === 'fail' ? 'error' : 'warning'}
+                        variant="filled"
+                      />
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {new Date(row.startTime).toLocaleString('zh-TW')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        持續 {row.chargingDuration} 分鐘
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {row.invoiceNumber || row.transactionId}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {row.cpid}-{row.connectorId}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          minWidth: 'auto',
+                          px: 2,
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 500
+                        }}
+                      >
+                        詳情
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -578,13 +906,14 @@ export default function PaymentManagement() {
         }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              顯示 {filteredRows.length} 筆資料，共 {paymentRows.length} 筆
+              顯示 {filteredRows.length} 筆資料，共 {pagination.total} 筆
             </Typography>
             <Stack direction="row" spacing={1}>
               <Button
                 size="small"
                 variant="outlined"
-                disabled
+                disabled={currentPage <= 1}
+                onClick={() => handlePageChange(currentPage - 1)}
                 sx={{ borderRadius: 2, textTransform: 'none' }}
               >
                 上一頁
@@ -594,11 +923,13 @@ export default function PaymentManagement() {
                 variant="contained"
                 sx={{ borderRadius: 2, textTransform: 'none' }}
               >
-                1
+                {currentPage}
               </Button>
               <Button
                 size="small"
                 variant="outlined"
+                disabled={currentPage >= pagination.totalPages}
+                onClick={() => handlePageChange(currentPage + 1)}
                 sx={{ borderRadius: 2, textTransform: 'none' }}
               >
                 下一頁
@@ -607,6 +938,30 @@ export default function PaymentManagement() {
           </Box>
         </Box>
       </Paper>
+
+      {/* 新增/編輯支付方式對話框 */}
+      <PaymentMethodDialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        onSubmit={handleFormSubmit}
+        editingChannel={editingChannel}
+      />
+
+      {/* Snackbar 提示 */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

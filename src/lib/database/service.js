@@ -60,7 +60,7 @@ class DatabaseService {
 
   async getGuns(filter) {
     const client = getDatabaseClient();
-    console.log(`🔍 [DatabaseService] getGuns() called with filter:`, filter);
+    // console.log(`🔍 [DatabaseService] getGuns() called with filter:`, filter);
     return await client.guns.findMany({ where: filter });
   }
 

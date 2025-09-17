@@ -33,6 +33,9 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import TableChartIcon from '@mui/icons-material/TableChart';
+import AddIcon from '@mui/icons-material/Add';
+import UserDialog from '../../components/dialog/UserDialog';
+import { createUser } from '../../actions/userActions';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -49,49 +52,93 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   
   // 從 API 獲取用戶數據
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-      setError('');
-      
-      try {
-        // API 請求頭 - 包含 API 密鑰
-        const headers = {
-          'X-API-Key': 'admin-secret-key' // 在生產環境中，應該從環境變量或安全存儲中獲取
-        };
-        
-        // 獲取管理員
-        const adminResponse = await fetch('/api/users?role=admin', { headers });
-        if (!adminResponse.ok) {
-          throw new Error(`獲取管理員數據失敗: ${adminResponse.statusText}`);
-        }
-        const adminData = await adminResponse.json();
-        setAdministrators(adminData.data || []);
-        
-        // 獲取一般用戶
-        const userResponse = await fetch('/api/users?role=user', { headers });
-        if (!userResponse.ok) {
-          throw new Error(`獲取用戶數據失敗: ${userResponse.statusText}`);
-        }
-        const userData = await userResponse.json();
-        setUsers(userData.data || []);
-        
-      } catch (err) {
-        console.error('獲取用戶數據失敗:', err);
-        setError('獲取用戶數據時發生錯誤，請稍後再試');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError('');
     
+    try {
+      // API 請求頭 - 包含 API 密鑰
+      const headers = {
+        'X-API-Key': 'admin-secret-key' // 在生產環境中，應該從環境變量或安全存儲中獲取
+      };
+      
+      // 獲取管理員
+      const adminResponse = await fetch('/api/users?role=admin', { headers });
+      if (!adminResponse.ok) {
+        throw new Error(`獲取管理員數據失敗: ${adminResponse.statusText}`);
+      }
+      const adminData = await adminResponse.json();
+      setAdministrators(adminData.data || []);
+      
+      // 獲取一般用戶
+      const userResponse = await fetch('/api/users?role=user', { headers });
+      if (!userResponse.ok) {
+        throw new Error(`獲取用戶數據失敗: ${userResponse.statusText}`);
+      }
+      const userData = await userResponse.json();
+      setUsers(userData.data || []);
+      
+    } catch (err) {
+      console.error('獲取用戶數據失敗:', err);
+      setError('獲取用戶數據時發生錯誤，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 初始化數據
+  useEffect(() => {
     fetchUsers();
   }, []);
   
   // 處理標籤頁切換
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
+  };
+
+  // 處理新增用戶
+  const handleAddUser = () => {
+    setEditingUser(null);
+    setDialogOpen(true);
+  };
+
+  // 處理編輯用戶
+  const handleEditUser = (user: any) => {
+    setEditingUser(user);
+    setDialogOpen(true);
+  };
+
+  // 處理關閉對話框
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setEditingUser(null);
+  };
+
+  // 處理提交用戶表單
+  const handleSubmitUser = async (formData: FormData) => {
+    setSubmitting(true);
+    try {
+      const result = await createUser(formData);
+      
+      if (result.success) {
+        // 重新獲取用戶數據
+        await fetchUsers();
+        handleCloseDialog();
+        alert('用戶創建成功');
+      } else {
+        alert('創建用戶失敗: ' + result.error);
+      }
+    } catch (error) {
+      console.error('提交用戶表單失敗:', error);
+      alert('創建用戶失敗: ' + (error instanceof Error ? error.message : '未知錯誤'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // 獲取當前標籤頁的數據
@@ -197,9 +244,31 @@ export default function UserManagement() {
           backdropFilter: 'blur(10px)'
         }}
       >
-        <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: theme.palette.text.primary }}>
-          搜尋與篩選
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+            搜尋與篩選
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddUser}
+            sx={{
+              borderRadius: 2,
+              fontWeight: 600,
+              textTransform: 'none',
+              px: 3,
+              py: 1,
+              boxShadow: theme.shadows[2],
+              '&:hover': {
+                boxShadow: theme.shadows[4],
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            新增{activeTab === 0 ? '管理者' : '使用者'}
+          </Button>
+        </Box>
         <Stack 
           direction={{ xs: 'column', md: 'row' }} 
           spacing={3} 
@@ -623,6 +692,14 @@ export default function UserManagement() {
           </Box>
         </Box>
       </Paper>
+
+      {/* 用戶對話框 */}
+      <UserDialog
+        open={dialogOpen}
+        onClose={handleCloseDialog}
+        onSubmit={handleSubmitUser}
+        editingUser={editingUser}
+      />
     </Container>
   );
 }

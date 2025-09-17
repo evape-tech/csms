@@ -181,7 +181,7 @@ class HealthMonitoringService {
     }
 
     // 定期記錄正常狀態（每10次檢查記錄一次）
-    if (this.stats.totalChecks % 10 === 0) {
+    if (this.stats.totalChecks % 100 === 0) {
       logger.info(`💚 服務器運行正常 (響應時間: ${responseTime}ms, 總檢查: ${this.stats.totalChecks})`);
     }
   }

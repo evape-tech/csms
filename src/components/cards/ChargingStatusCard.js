@@ -366,7 +366,7 @@ export default function ChargingStatusCard({ stations = [], guns = [] }) {
 
           {/* 右側：系統控制 */}
           <Box sx={{
-            display: 'flex',
+            display: 'none',
             flexDirection: 'column',
             gap: 2.5,
             minWidth: 180,

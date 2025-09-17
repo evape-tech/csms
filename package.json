@@ -20,6 +20,8 @@
     "db:migrate:mssql": "npx prisma migrate dev --schema=prisma/schema.mssql.prisma",
     "db:push:mysql": "npx prisma db push --schema=prisma/schema.prisma",
     "db:push:mssql": "npx prisma db push --schema=prisma/schema.mssql.prisma",
+    "db:pull:mysql": "npx prisma db pull --schema=prisma/schema.prisma",
+    "db:pull:mssql": "npx prisma db pull --schema=prisma/schema.mssql.prisma",
     "db:studio:mysql": "npx prisma studio --schema=prisma/schema.prisma",
     "db:studio:mssql": "npx prisma studio --schema=prisma/schema.mssql.prisma",
     "db:init": "node scripts/init-database.js",
