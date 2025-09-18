@@ -15,14 +15,32 @@ import {
     Paper,
     Box,
     Typography,
-    useTheme
+    useTheme,
+    Skeleton,
+    Alert,
+    Chip
 } from "@mui/material";
 
-const ElectricityRateTableCard = () => {
+const ElectricityRateTableCard = ({ tariff = null, loading = false }) => {
     const [activeTab, setActiveTab] = useState(0); // 0 for rate, 1 for calendar
     const theme = useTheme();
     const [currentMonthOffset, setCurrentMonthOffset] = useState(0); // 0 = this month, -1 prev, +1 next
     const [showAllMonths, setShowAllMonths] = useState(false);
+
+    const getTariffTypeLabel = (type) => {
+        const typeMap = {
+            'FIXED_RATE': '固定費率',
+            'TIME_OF_USE': '時間電價',
+            'PROGRESSIVE': '累進費率',
+            'SPECIAL_PROMOTION': '特殊優惠'
+        };
+        return typeMap[type] || type;
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        return new Date(dateString).toLocaleDateString('zh-TW');
+    };
 
     const handleTabChange = (event, newValue) => {
         setActiveTab(newValue);
@@ -241,6 +259,70 @@ const ElectricityRateTableCard = () => {
      return (
          <Card sx={{ margin: '1rem 0', boxShadow: 'none' }} elevation={0}>
              <CardContent>
+                 {/* 費率方案資訊 */}
+                 {loading ? (
+                     <Box sx={{ mb: 3 }}>
+                         <Skeleton variant="text" width="40%" height={32} />
+                         <Skeleton variant="text" width="60%" height={20} />
+                         <Skeleton variant="text" width="30%" height={20} />
+                     </Box>
+                 ) : tariff ? (
+                     <Box sx={{ mb: 3, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
+                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                             <Typography variant="h5" component="h2">
+                                 {tariff.name}
+                             </Typography>
+                             <Chip 
+                                 label={getTariffTypeLabel(tariff.tariff_type)} 
+                                 color="primary" 
+                                 variant="outlined"
+                                 size="small"
+                             />
+                             {tariff.is_default && (
+                                 <Chip 
+                                     label="預設方案" 
+                                     color="warning" 
+                                     size="small"
+                                 />
+                             )}
+                             {!tariff.is_active && (
+                                 <Chip 
+                                     label="停用" 
+                                     color="default" 
+                                     size="small"
+                                 />
+                             )}
+                         </Box>
+                         {tariff.description && (
+                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                 {tariff.description}
+                             </Typography>
+                         )}
+                         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                             <Typography variant="body2">
+                                 <strong>基本價格:</strong> ${tariff.base_price}/kWh
+                             </Typography>
+                             {tariff.service_fee && (
+                                 <Typography variant="body2">
+                                     <strong>服務費:</strong> ${tariff.service_fee}
+                                 </Typography>
+                             )}
+                             {tariff.minimum_fee && (
+                                 <Typography variant="body2">
+                                     <strong>最低收費:</strong> ${tariff.minimum_fee}
+                                 </Typography>
+                             )}
+                             <Typography variant="body2">
+                                 <strong>建立時間:</strong> {formatDate(tariff.created_at)}
+                             </Typography>
+                         </Box>
+                     </Box>
+                 ) : (
+                     <Alert severity="info" sx={{ mb: 3 }}>
+                         請選擇一個費率方案以查看詳細資訊
+                     </Alert>
+                 )}
+
                  <Tabs 
                      value={activeTab} 
                      onChange={handleTabChange}
@@ -257,6 +339,7 @@ const ElectricityRateTableCard = () => {
                          variant="contained" 
                          color="error"
                          size="small"
+                         disabled={!tariff}
                      >
                          刪除
                      </Button>
@@ -264,6 +347,7 @@ const ElectricityRateTableCard = () => {
                          variant="contained" 
                          color="primary"
                          size="small"
+                         disabled={!tariff}
                      >
                          編輯
                      </Button>

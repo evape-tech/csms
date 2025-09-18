@@ -7,6 +7,7 @@ export { default as CPListCard } from './CPListCard';
 // Management Cards
 export { default as PowerOverviewCard } from './PowerOverviewCard';
 export { default as ElectricityRateTableCard } from './ElectricityRateTableCard';
+export { default as TariffDetailCard } from './TariffDetailCard';
 export { default as RevenueStatisticsCard } from './RevenueStatisticsCard';
 export { default as UsagePatternCard } from './UsagePatternCard';
 
