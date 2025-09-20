@@ -1,14 +1,14 @@
 import { getDatabaseClient } from './adapter.js';
 
 class DatabaseService {
-  
+
   // ===============================
   // CP Logs Operations
   // ===============================
-  
+
   async createCpLog(data) {
     const client = getDatabaseClient();
-    return await client.cp_logs.create({ 
+    return await client.cp_logs.create({
       data: {
         ...data,
         createdAt: data.createdAt || new Date(),
@@ -61,17 +61,47 @@ class DatabaseService {
   async getGuns(filter) {
     const client = getDatabaseClient();
     // console.log(`🔍 [DatabaseService] getGuns() called with filter:`, filter);
-    return await client.guns.findMany({ where: filter });
+    return await client.guns.findMany({ 
+      where: filter,
+      include: {
+        gun_tariffs: {
+          include: {
+            tariffs: true
+          },
+          orderBy: { priority: 'asc' }
+        }
+      }
+    });
   }
 
   async getGunById(id) {
     const client = getDatabaseClient();
-    return await client.guns.findUnique({ where: { id } });
+    return await client.guns.findUnique({ 
+      where: { id },
+      include: {
+        gun_tariffs: {
+          include: {
+            tariffs: true
+          },
+          orderBy: { priority: 'asc' }
+        }
+      }
+    });
   }
 
   async getGunByCpsn(cpsn) {
     const client = getDatabaseClient();
-    return await client.guns.findFirst({ where: { cpsn } });
+    return await client.guns.findFirst({ 
+      where: { cpsn },
+      include: {
+        gun_tariffs: {
+          include: {
+            tariffs: true
+          },
+          orderBy: { priority: 'asc' }
+        }
+      }
+    });
   }
 
   async updateGun(id, data) {
@@ -144,7 +174,7 @@ class DatabaseService {
   
   async createTransaction(data) {
     const client = getDatabaseClient();
-    return await client.transactions.create({ 
+    return await client.charging_transactions.create({ 
       data: {
         ...data,
         createdAt: data.createdAt || new Date(),
@@ -156,7 +186,7 @@ class DatabaseService {
   async getTransactions(filter) {
     const client = getDatabaseClient();
     // 支援複雜查詢條件，如時間範圍查詢
-    return await client.transactions.findMany({ 
+    return await client.charging_transactions.findMany({ 
       where: filter,
       orderBy: { start_time: 'desc' }
     });
@@ -164,7 +194,7 @@ class DatabaseService {
 
   async getTransaction(transactionId) {
     const client = getDatabaseClient();
-    return await client.transactions.findUnique({ 
+    return await client.charging_transactions.findUnique({ 
       where: { transaction_id: transactionId } 
     });
   }
@@ -172,14 +202,14 @@ class DatabaseService {
   // 根據 OCPP 整數 ID 查找交易 (新增函數，主鍵查詢)
   async getTransactionById(ocppTransactionId) {
     const client = getDatabaseClient();
-    return await client.transactions.findUnique({ 
+    return await client.charging_transactions.findUnique({ 
       where: { id: BigInt(ocppTransactionId) } 
     });
   }
 
   async updateTransaction(transactionId, data) {
     const client = getDatabaseClient();
-    return await client.transactions.update({ 
+    return await client.charging_transactions.update({ 
       where: { transaction_id: transactionId }, 
       data: {
         ...data,
@@ -191,7 +221,7 @@ class DatabaseService {
   // 根據 OCPP 整數 ID 更新交易 (新增函數，主鍵更新)
   async updateTransactionById(ocppTransactionId, data) {
     const client = getDatabaseClient();
-    return await client.transactions.update({ 
+    return await client.charging_transactions.update({ 
       where: { id: BigInt(ocppTransactionId) }, 
       data: {
         ...data,
@@ -202,7 +232,7 @@ class DatabaseService {
 
   async deleteTransaction(transactionId) {
     const client = getDatabaseClient();
-    return await client.transactions.delete({ 
+    return await client.charging_transactions.delete({ 
       where: { transaction_id: transactionId } 
     });
   }
@@ -218,10 +248,17 @@ class DatabaseService {
       include: {
         meters: {
           include: {
-            guns: true
+            guns: {
+              include: {
+                gun_tariffs: {
+                  include: {
+                    tariffs: true
+                  }
+                }
+              }
+            }
           }
-        },
-        tariff: true
+        }
       }
     });
     return stations;
@@ -234,10 +271,17 @@ class DatabaseService {
       include: {
         meters: {
           include: {
-            guns: true
+            guns: {
+              include: {
+                gun_tariffs: {
+                  include: {
+                    tariffs: true
+                  }
+                }
+              }
+            }
           }
-        },
-        tariff: true
+        }
       }
     });
   }
@@ -254,10 +298,17 @@ class DatabaseService {
       include: {
         meters: {
           include: {
-            guns: true
+            guns: {
+              include: {
+                gun_tariffs: {
+                  include: {
+                    tariffs: true
+                  }
+                }
+              }
+            }
           }
-        },
-        tariff: true
+        }
       }
     });
   }
@@ -272,10 +323,17 @@ class DatabaseService {
       include: {
         meters: {
           include: {
-            guns: true
+            guns: {
+              include: {
+                gun_tariffs: {
+                  include: {
+                    tariffs: true
+                  }
+                }
+              }
+            }
           }
-        },
-        tariff: true
+        }
       }
     });
   }
@@ -462,7 +520,7 @@ class DatabaseService {
     const client = getDatabaseClient();
     
     // 查找已完成但未生成帳單的交易
-    return await client.transactions.findMany({
+    return await client.charging_transactions.findMany({
       where: {
         status: 'COMPLETED',
         end_time: { not: null },
@@ -478,6 +536,92 @@ class DatabaseService {
       },
       orderBy: { end_time: 'asc' },
       take: limit
+    });
+  }
+
+  // ===============================
+  // Gun Tariffs Operations
+  // ===============================
+
+  async createGunTariff(data) {
+    const client = getDatabaseClient();
+    return await client.gun_tariffs.create({
+      data: {
+        ...data,
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date()
+      }
+    });
+  }
+
+  async getGunTariffs(gunId) {
+    const client = getDatabaseClient();
+    return await client.gun_tariffs.findMany({
+      where: { gun_id: gunId },
+      include: {
+        tariffs: true
+      },
+      orderBy: [
+        { priority: 'asc' },
+        { createdAt: 'desc' }
+      ]
+    });
+  }
+
+  async getGunTariffById(id) {
+    const client = getDatabaseClient();
+    return await client.gun_tariffs.findUnique({
+      where: { id },
+      include: {
+        tariffs: true
+      }
+    });
+  }
+
+  async updateGunTariff(gunId, tariffId, data) {
+    const client = getDatabaseClient();
+    return await client.gun_tariffs.update({
+      where: {
+        gun_id_tariff_id: {
+          gun_id: gunId,
+          tariff_id: tariffId
+        }
+      },
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async deleteGunTariff(gunId, tariffId) {
+    const client = getDatabaseClient();
+    try {
+      await client.gun_tariffs.delete({
+        where: {
+          gun_id_tariff_id: {
+            gun_id: gunId,
+            tariff_id: tariffId
+          }
+        }
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getActiveGunTariffs(gunId) {
+    const client = getDatabaseClient();
+    return await client.gun_tariffs.findMany({
+      where: {
+        gun_id: gunId,
+        is_active: true
+      },
+      include: {
+        tariffs: true
+      },
+      orderBy: { priority: 'asc' }
     });
   }
 }

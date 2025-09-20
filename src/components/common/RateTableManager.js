@@ -95,9 +95,39 @@ const RateTableManager = ({ onRateTableSelect, selectedRateTable }) => {
             'FIXED_RATE': '固定費率',
             'TIME_OF_USE': '時間電價',
             'PROGRESSIVE': '累進費率',
-            'SPECIAL_PROMOTION': '特殊優惠'
+            'SPECIAL_PROMOTION': '特殊優惠',
+            'MEMBERSHIP': '會員費率',
+            'CUSTOM': '自訂費率'
         };
         return typeMap[type] || type;
+    };
+
+    const getSeasonTypeLabel = (seasonType) => {
+        const seasonMap = {
+            'ALL_YEAR': '全年適用',
+            'SUMMER': '夏季',
+            'NON_SUMMER': '非夏季',
+            'CUSTOM': '自訂季節'
+        };
+        return seasonMap[seasonType] || seasonType;
+    };
+
+    const getSeasonMonthsDisplay = (tariff) => {
+        if (!tariff.season_start_month && !tariff.season_end_month) {
+            return '';
+        }
+        
+        if (tariff.season_start_month && tariff.season_end_month) {
+            return `${tariff.season_start_month}-${tariff.season_end_month}月`;
+        }
+        
+        return '';
+    };
+
+    const getChargeTypeLabel = (tariff) => {
+        if (tariff.ac_only) return 'AC專用';
+        if (tariff.dc_only) return 'DC專用';
+        return '通用';
     };
 
     const formatDate = (dateString) => {
@@ -246,6 +276,30 @@ const RateTableManager = ({ onRateTableSelect, selectedRateTable }) => {
                                                     <Typography variant="caption" color="text.secondary" display="block">
                                                         基本價格: ${tariff.base_price}/kWh
                                                     </Typography>
+                                                    {tariff.charging_parking_fee > 0 && (
+                                                        <Typography variant="caption" color="text.secondary" display="block">
+                                                            充電期間停車費: ${tariff.charging_parking_fee}
+                                                        </Typography>
+                                                    )}
+                                                    {tariff.penalty_rate_per_hour > 0 && (
+                                                        <Typography variant="caption" color="text.secondary" display="block">
+                                                            超時罰款: ${tariff.penalty_rate_per_hour}/小時
+                                                        </Typography>
+                                                    )}
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        適用季節: {getSeasonTypeLabel(tariff.season_type)}
+                                                        {getSeasonMonthsDisplay(tariff) && ` (${getSeasonMonthsDisplay(tariff)})`}
+                                                    </Typography>
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        充電類型: {getChargeTypeLabel(tariff)}
+                                                        {tariff.membership_required && ' • 需會員'}
+                                                        {tariff.grace_period_minutes && ` • 寬限${tariff.grace_period_minutes}分鐘`}
+                                                    </Typography>
+                                                    {(tariff.valid_from || tariff.valid_to) && (
+                                                        <Typography variant="caption" color="text.secondary" display="block">
+                                                            有效期: {tariff.valid_from ? formatDate(tariff.valid_from) : '不限'} - {tariff.valid_to ? formatDate(tariff.valid_to) : '不限'}
+                                                        </Typography>
+                                                    )}
                                                     <Typography variant="caption" color="text.secondary">
                                                         建立時間: {formatDate(tariff.created_at)}
                                                     </Typography>

@@ -183,23 +183,16 @@ const TariffDetailCard: React.FC<TariffDetailCardProps> = ({ tariff, loading = f
                             </Typography>
                         </Paper>
                         
-                        <Paper elevation={1} sx={{ p: 2, textAlign: 'center', flex: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                                服務費
-                            </Typography>
-                            <Typography variant="h6">
-                                {formatPrice(tariff.service_fee)}
-                            </Typography>
-                        </Paper>
-                        
-                        <Paper elevation={1} sx={{ p: 2, textAlign: 'center', flex: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                                最低收費
-                            </Typography>
-                            <Typography variant="h6">
-                                {formatPrice(tariff.minimum_fee)}
-                            </Typography>
-                        </Paper>
+                        {tariff.charging_parking_fee && (
+                            <Paper elevation={1} sx={{ p: 2, textAlign: 'center', flex: 1 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    充電期間停車費
+                                </Typography>
+                                <Typography variant="h6">
+                                    {formatPrice(tariff.charging_parking_fee)}
+                                </Typography>
+                            </Paper>
+                        )}
                     </Stack>
                 </Box>
 

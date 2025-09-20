@@ -302,14 +302,9 @@ const ElectricityRateTableCard = ({ tariff = null, loading = false }) => {
                              <Typography variant="body2">
                                  <strong>基本價格:</strong> ${tariff.base_price}/kWh
                              </Typography>
-                             {tariff.service_fee && (
+                             {tariff.charging_parking_fee && (
                                  <Typography variant="body2">
-                                     <strong>服務費:</strong> ${tariff.service_fee}
-                                 </Typography>
-                             )}
-                             {tariff.minimum_fee && (
-                                 <Typography variant="body2">
-                                     <strong>最低收費:</strong> ${tariff.minimum_fee}
+                                     <strong>充電期間停車費:</strong> ${tariff.charging_parking_fee}
                                  </Typography>
                              )}
                              <Typography variant="body2">

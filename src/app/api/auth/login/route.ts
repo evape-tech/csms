@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 // 使用統一的 database service
 import DatabaseUtils from '../../../../lib/database/utils.js';
 import { databaseService } from '../../../../lib/database/service.js';
+import { OperationLogger } from '../../../../lib/operationLogger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +27,18 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 [API /api/auth/login] Found user via databaseService:`, user ? { id: user.id, email: user.email } : null);
     
     if (!user) {
+      // 記錄登入失敗日誌 - 用戶不存在
+      try {
+        await OperationLogger.logAuthOperation(
+          'LOGIN',
+          email,
+          false,
+          `登入失敗: 用戶不存在 (IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
+        );
+      } catch (logError) {
+        console.error('記錄登入失敗日誌錯誤:', logError);
+      }
+      
       return NextResponse.json(
         { error: '帳號或密碼錯誤' },
         { status: 401 }
@@ -51,6 +64,18 @@ export async function POST(request: NextRequest) {
     }
     
     if (!isValidPassword) {
+      // 記錄登入失敗日誌
+      try {
+        await OperationLogger.logAuthOperation(
+          'LOGIN',
+          email,
+          false,
+          `登入失敗: 密碼錯誤 (IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
+        );
+      } catch (logError) {
+        console.error('記錄登入失敗日誌錯誤:', logError);
+      }
+      
       return NextResponse.json(
         { error: '帳號或密碼錯誤' },
         { status: 401 }
@@ -60,9 +85,11 @@ export async function POST(request: NextRequest) {
     // Create JWT token
     const token = jwt.sign(
       { 
-        userId: user.id, 
+        userId: user.uuid, // 使用 UUID 而不是數字 ID，因為外鍵約束需要 UUID
         email: user.email, 
-        role: user.role 
+        role: user.role,
+        firstName: user.first_name || user.firstName || null,
+        lastName: user.last_name || user.lastName || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
@@ -72,7 +99,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       user: {
-        id: user.id,
+        id: user.uuid, // 使用 UUID 保持一致性
         email: user.email,
         role: user.role
       }
@@ -86,10 +113,38 @@ export async function POST(request: NextRequest) {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
+    // 記錄登入成功日誌
+    try {
+      await OperationLogger.logAuthOperation(
+        'LOGIN',
+        user.email,
+        true,
+        `管理員登入成功 (IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
+      );
+    } catch (logError) {
+      console.error('記錄登入成功日誌錯誤:', logError);
+      // 登入成功但日誌記錄失敗，不影響登入流程
+    }
+
     return response;
 
   } catch (error) {
     console.error('Login error:', error);
+    
+    // 記錄系統錯誤導致的登入失敗
+    try {
+      const { email } = await request.json().catch(() => ({ email: 'unknown' }));
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await OperationLogger.logAuthOperation(
+        'LOGIN',
+        email,
+        false,
+        `登入失敗: 系統錯誤 - ${errorMessage} (IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
+      );
+    } catch (logError) {
+      console.error('記錄系統錯誤日誌失敗:', logError);
+    }
+    
     return NextResponse.json(
       { error: '登入失敗，請稍後再試' },
       { status: 500 }

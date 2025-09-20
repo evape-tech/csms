@@ -21,6 +21,8 @@ export async function createGunAction(formData) {
     const maxKw = formData.get('max_kw');
     const gunsMemo1 = formData.get('guns_memo1');
     const meterId = formData.get('meter_id');
+    const tariffIdsStr = formData.get('tariff_ids');
+    const tariffDataStr = formData.get('tariff_data');
     
     // 建構資料物件
     const data = {};
@@ -45,6 +47,55 @@ export async function createGunAction(formData) {
     // 建立新的充電槍
     const created = await databaseService.createGun(data);
     console.log(`✅ [createGunAction] Created gun:`, created.id);
+    
+    // 如果提供了費率資料，創建gun-tariff關聯
+    if (tariffDataStr) {
+      try {
+        const tariffData = JSON.parse(tariffDataStr);
+        if (Array.isArray(tariffData) && tariffData.length > 0) {
+          for (const item of tariffData) {
+            const tariffId = parseInt(item.tariffId);
+            const priority = parseInt(item.priority) || 1;
+            if (!isNaN(tariffId)) {
+              await databaseService.createGunTariff({
+                gun_id: created.id,
+                tariff_id: tariffId,
+                priority: priority,
+                is_active: true
+              });
+              console.log(`✅ [createGunAction] Created gun-tariff association: gun ${created.id} -> tariff ${tariffId} (priority: ${priority})`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to create gun-tariff associations:', error);
+        // 不阻擋槍的創建，只記錄錯誤
+      }
+    }
+    
+    // 向後兼容：如果提供了舊格式的tariff_ids，也處理
+    if (tariffIdsStr && !tariffDataStr) {
+      try {
+        const tariffIds = JSON.parse(tariffIdsStr);
+        if (Array.isArray(tariffIds) && tariffIds.length > 0) {
+          for (let i = 0; i < tariffIds.length; i++) {
+            const tariffId = parseInt(tariffIds[i]);
+            if (!isNaN(tariffId)) {
+              await databaseService.createGunTariff({
+                gun_id: created.id,
+                tariff_id: tariffId,
+                priority: i + 1, // 按選擇順序設置優先級
+                is_active: true
+              });
+              console.log(`✅ [createGunAction] Created gun-tariff association (legacy): gun ${created.id} -> tariff ${tariffId}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to create gun-tariff associations (legacy):', error);
+        // 不阻擋槍的創建，只記錄錯誤
+      }
+    }
     
     // 將 Decimal 等物件轉換為可序列化的格式
     const serializedData = {
@@ -108,6 +159,7 @@ export async function updateGunAction(formData) {
     const maxKw = formData.get('max_kw');
     const gunsMemo1 = formData.get('guns_memo1');
     const gunsStatus = formData.get('guns_status');
+    const tariffDataStr = formData.get('tariff_data');
     
     if (cpid !== null) data.cpid = cpid;
     if (connector !== null) data.connector = connector;
@@ -117,16 +169,62 @@ export async function updateGunAction(formData) {
     if (gunsMemo1 !== null) data.guns_memo1 = gunsMemo1;
     if (gunsStatus !== null) data.guns_status = gunsStatus;
     
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && !tariffDataStr) {
       return {
         success: false,
         error: '沒有提供更新資料'
       };
     }
     
-    // 更新充電槍
-    const updated = await databaseService.updateGun(gunId, data);
-    console.log(`✅ [updateGunAction] Updated gun:`, updated.id);
+    // 更新充電槍基本資料
+    let updated = null;
+    if (Object.keys(data).length > 0) {
+      updated = await databaseService.updateGun(gunId, data);
+      console.log(`✅ [updateGunAction] Updated gun:`, updated.id);
+    }
+    
+    // 處理費率配置更新
+    if (tariffDataStr) {
+      try {
+        // 先獲取現有的 gun-tariff 關聯，然後逐一刪除
+        const existingGunTariffs = await databaseService.getGunTariffs(gunId);
+        if (existingGunTariffs && existingGunTariffs.length > 0) {
+          for (const gunTariff of existingGunTariffs) {
+            await databaseService.deleteGunTariff(gunId, gunTariff.tariff_id);
+          }
+          console.log(`✅ [updateGunAction] Deleted ${existingGunTariffs.length} existing gun-tariff associations for gun ${gunId}`);
+        }
+        
+        // 創建新的 gun-tariff 關聯
+        const tariffData = JSON.parse(tariffDataStr);
+        if (Array.isArray(tariffData) && tariffData.length > 0) {
+          for (const item of tariffData) {
+            const tariffId = parseInt(item.tariffId);
+            const priority = parseInt(item.priority) || 1;
+            if (!isNaN(tariffId)) {
+              await databaseService.createGunTariff({
+                gun_id: gunId,
+                tariff_id: tariffId,
+                priority: priority,
+                is_active: true
+              });
+              console.log(`✅ [updateGunAction] Created gun-tariff association: gun ${gunId} -> tariff ${tariffId} (priority: ${priority})`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to update gun-tariff associations:', error);
+        return {
+          success: false,
+          error: '更新費率配置失敗: ' + error.message
+        };
+      }
+    }
+    
+    // 如果沒有更新基本資料，需要重新獲取充電槍資料
+    if (!updated) {
+      updated = await databaseService.getGunById(gunId);
+    }
     
     // 將 Decimal 等物件轉換為可序列化的格式
     const serializedData = {

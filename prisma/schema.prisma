@@ -20,28 +20,29 @@ model cp_logs {
 }
 
 model guns {
-  id               Int        @id @default(autoincrement())
-  connector        String?    @db.VarChar(45)
-  cpid             String?    @db.VarChar(255)
-  cpsn             String?    @db.VarChar(255)
-  guns_status      String?    @db.VarChar(45)
-  createdAt        DateTime?  @db.Date
-  updatedAt        DateTime?  @db.Date
-  guns_metervalue1 String?    @db.VarChar(255)
-  guns_metervalue2 String?    @db.VarChar(255)
-  guns_metervalue3 String?    @db.VarChar(255)
-  guns_metervalue4 String?    @db.VarChar(255)
-  guns_metervalue5 String?    @db.VarChar(255)
-  guns_metervalue6 String?    @db.VarChar(255)
-  guns_memo1       String?    @db.VarChar(255)
-  guns_memo2       String?    @db.VarChar(255)
-  transactionid    String?    @db.VarChar(255)
-  acdc             guns_acdc? @default(AC)
-  max_kw           Int?       @default(0)
+  id               Int           @id @default(autoincrement())
+  connector        String?       @db.VarChar(45)
+  cpid             String?       @db.VarChar(255)
+  cpsn             String?       @db.VarChar(255)
+  guns_status      String?       @db.VarChar(45)
+  createdAt        DateTime?     @db.Date
+  updatedAt        DateTime?     @db.Date
+  guns_metervalue1 String?       @db.VarChar(255)
+  guns_metervalue2 String?       @db.VarChar(255)
+  guns_metervalue3 String?       @db.VarChar(255)
+  guns_metervalue4 String?       @db.VarChar(255)
+  guns_metervalue5 String?       @db.VarChar(255)
+  guns_metervalue6 String?       @db.VarChar(255)
+  guns_memo1       String?       @db.VarChar(255)
+  guns_memo2       String?       @db.VarChar(255)
+  transactionid    String?       @db.VarChar(255)
+  acdc             guns_acdc?    @default(AC)
+  max_kw           Int?          @default(0)
   meter_id         Int
-  meter            meters     @relation("meter_guns", fields: [meter_id], references: [id], onDelete: Cascade, map: "fk_guns_meter")
+  gun_tariffs      gun_tariffs[]
+  meter            meters        @relation("meter_guns", fields: [meter_id], references: [id], onDelete: Cascade, map: "fk_guns_meter")
 
-  @@index([meter_id], map: "fk_guns_meter")
+  @@index([meter_id], map: "IX_guns_meter_id")
 }
 
 model stations {
@@ -51,12 +52,8 @@ model stations {
   address      String?  @db.VarChar(255)
   floor        String?  @db.VarChar(50)
   operator_id  String?  @db.VarChar(50)
-  tariff_id    Int?
   updated_at   DateTime @default(now()) @db.DateTime(0)
   meters       meters[] @relation("station_meters")
-  tariff       tariffs? @relation("StationTariff", fields: [tariff_id], references: [id], map: "fk_stations_tariff")
-
-  @@index([tariff_id], map: "IX_stations_tariff_id")
 }
 
 model meters {
@@ -75,79 +72,72 @@ model meters {
 }
 
 model users {
-  id        Int      @id @default(autoincrement())
-  email     String?  @db.VarChar(255)
-  password  String?  @db.VarChar(255)
-  role      String?  @db.VarChar(255)
-  createdAt DateTime @db.DateTime(0)
-  updatedAt DateTime @db.DateTime(0)
-}
+  id                    Int                     @id @default(autoincrement())
+  uuid                  String?                 @unique(map: "uk_users_uuid") @db.VarChar(36)
+  email                 String?                 @db.VarChar(255)
+  password              String?                 @db.VarChar(255)
+  role                  String?                 @db.VarChar(255)
+  first_name            String?                 @db.VarChar(50)
+  last_name             String?                 @db.VarChar(50)
+  phone                 String?                 @db.VarChar(20)
+  date_of_birth         DateTime?               @db.Date
+  email_verified        Boolean                 @default(false)
+  account_status        users_account_status    @default(ACTIVE)
+  last_login_at         DateTime?               @db.DateTime(0)
+  login_count           Int                     @default(0)
+  failed_login_attempts Int                     @default(0)
+  lockout_until         DateTime?               @db.DateTime(0)
+  createdAt             DateTime                @db.DateTime(0)
+  updatedAt             DateTime                @db.DateTime(0)
+  billing_records       billing_records[]
+  charging_transactions charging_transactions[]
+  operation_logs        operation_logs[]
+  rfid_cards            rfid_cards[]
+  user_wallets          user_wallets?
+  wallet_transactions   wallet_transactions[]
 
-model transactions {
-  id                BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
-  transaction_id    String             @unique(map: "transaction_id") @db.VarChar(50)
-  start_time        DateTime           @db.DateTime(0)
-  end_time          DateTime?          @db.DateTime(0)
-  cpid              String             @db.VarChar(255)
-  cpsn              String             @db.VarChar(255)
-  connector_id      Int
-  user_id           String?            @db.VarChar(100)
-  id_tag            String             @db.VarChar(20)
-  meter_start       Decimal?           @db.Decimal(10, 3)
-  meter_stop        Decimal?           @db.Decimal(10, 3)
-  energy_consumed   Decimal?           @db.Decimal(10, 3)
-  current_power     Decimal?           @db.Decimal(8, 3)
-  current_voltage   Decimal?           @db.Decimal(8, 2)
-  current_current   Decimal?           @db.Decimal(8, 2)
-  last_meter_update DateTime?          @db.DateTime(0)
-  charging_duration Int?
-  status            transaction_status @default(ACTIVE)
-  stop_reason       String?            @db.VarChar(100)
-  createdAt         DateTime           @db.DateTime(0)
-  updatedAt         DateTime           @db.DateTime(0)
-  billing_records   billing_records[]
-
-  @@index([cpid], map: "idx_cpid")
-  @@index([cpsn], map: "idx_cpsn")
-  @@index([end_time], map: "idx_end_time")
-  @@index([id_tag], map: "idx_id_tag")
-  @@index([start_time], map: "idx_start_time")
-  @@index([status], map: "idx_status")
-  @@index([transaction_id], map: "idx_transaction_id")
+  @@index([account_status], map: "idx_account_status")
+  @@index([email], map: "idx_email")
+  @@index([email_verified], map: "idx_email_verified")
+  @@index([last_login_at], map: "idx_last_login_at")
 }
 
 model tariffs {
-  id                  Int               @id @default(autoincrement())
-  name                String            @db.VarChar(100)
-  description         String?           @db.Text
-  tariff_type         tariff_type       @default(FIXED_RATE)
-  base_price          Decimal           @db.Decimal(10, 2)
-  service_fee         Decimal?          @db.Decimal(10, 2)
-  minimum_fee         Decimal?          @db.Decimal(10, 2)
-  peak_hours_start    String?           @db.VarChar(5)
-  peak_hours_end      String?           @db.VarChar(5)
-  peak_hours_price    Decimal?          @db.Decimal(10, 2)
-  off_peak_price      Decimal?          @db.Decimal(10, 2)
-  weekend_price       Decimal?          @db.Decimal(10, 2)
-  tier1_max_kwh       Decimal?          @db.Decimal(10, 2)
-  tier1_price         Decimal?          @db.Decimal(10, 2)
-  tier2_max_kwh       Decimal?          @db.Decimal(10, 2)
-  tier2_price         Decimal?          @db.Decimal(10, 2)
-  tier3_price         Decimal?          @db.Decimal(10, 2)
-  discount_percentage Decimal?          @db.Decimal(5, 2)
-  promotion_code      String?           @db.VarChar(50)
-  valid_from          DateTime?         @db.DateTime(0)
-  valid_to            DateTime?         @db.DateTime(0)
-  ac_only             Boolean           @default(false)
-  dc_only             Boolean           @default(false)
-  membership_required Boolean           @default(false)
-  is_active           Boolean           @default(true)
-  is_default          Boolean           @default(false)
-  created_by          String?           @db.VarChar(100)
-  createdAt           DateTime          @default(now()) @db.DateTime(0)
-  updatedAt           DateTime          @default(now()) @updatedAt @db.DateTime(0)
-  billing_records     billing_records[]
-  stations            stations[]        @relation("StationTariff")
+  id                    Int                  @id @default(autoincrement())
+  name                  String               @db.VarChar(100)
+  description           String?              @db.Text
+  tariff_type           tariffs_tariff_type  @default(FIXED_RATE)
+  base_price            Decimal              @db.Decimal(10, 2)
+  charging_parking_fee  Decimal?             @db.Decimal(10, 2)
+  peak_hours_start      String?              @db.VarChar(5)
+  peak_hours_end        String?              @db.VarChar(5)
+  peak_hours_price      Decimal?             @db.Decimal(10, 2)
+  off_peak_price        Decimal?             @db.Decimal(10, 2)
+  weekend_price         Decimal?             @db.Decimal(10, 2)
+  tier1_max_kwh         Decimal?             @db.Decimal(10, 2)
+  tier1_price           Decimal?             @db.Decimal(10, 2)
+  tier2_max_kwh         Decimal?             @db.Decimal(10, 2)
+  tier2_price           Decimal?             @db.Decimal(10, 2)
+  tier3_price           Decimal?             @db.Decimal(10, 2)
+  discount_percentage   Decimal?             @db.Decimal(5, 2)
+  promotion_code        String?              @db.VarChar(50)
+  valid_from            DateTime?            @db.DateTime(0)
+  valid_to              DateTime?            @db.DateTime(0)
+  season_start_month    Int?                 @db.TinyInt
+  season_end_month      Int?                 @db.TinyInt
+  season_type           tariffs_season_type? @default(ALL_YEAR)
+  grace_period_minutes  Int?                 @default(15)
+  penalty_rate_per_hour Decimal?             @db.Decimal(10, 2)
+  ac_only               Boolean              @default(false)
+  dc_only               Boolean              @default(false)
+  membership_required   Boolean              @default(false)
+  is_active             Boolean              @default(true)
+  is_default            Boolean              @default(false)
+  created_by            String?              @db.VarChar(100)
+  createdAt             DateTime             @default(now()) @db.DateTime(0)
+  updatedAt             DateTime             @default(now()) @updatedAt @db.DateTime(0)
+  billing_records       billing_records[]
+  gun_tariffs           gun_tariffs[]
 
   @@index([is_active], map: "idx_is_active")
   @@index([is_default], map: "idx_is_default")
@@ -156,39 +146,41 @@ model tariffs {
 }
 
 model billing_records {
-  id                BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
-  transaction_id    String            @db.VarChar(50)
-  transaction_ref   BigInt?           @db.UnsignedBigInt
-  tariff_id         Int
-  applied_price     Decimal           @db.Decimal(10, 2)
-  energy_consumed   Decimal           @db.Decimal(10, 3)
-  energy_fee        Decimal           @db.Decimal(10, 2)
-  service_fee       Decimal           @db.Decimal(10, 2)
-  discount_amount   Decimal?          @db.Decimal(10, 2)
-  tax_amount        Decimal?          @db.Decimal(10, 2)
-  total_amount      Decimal           @db.Decimal(10, 2)
-  currency          String            @default("TWD") @db.VarChar(3)
-  start_time        DateTime          @db.DateTime(0)
-  end_time          DateTime          @db.DateTime(0)
-  charging_duration Int
-  billing_details   String?           @db.Text
-  invoice_number    String?           @db.VarChar(20)
-  invoice_issued_at DateTime?         @db.DateTime(0)
-  payment_method    String?           @db.VarChar(50)
-  payment_reference String?           @db.VarChar(100)
-  payment_time      DateTime?         @db.DateTime(0)
-  user_id           String?           @db.VarChar(100)
-  id_tag            String            @db.VarChar(20)
-  cpid              String            @db.VarChar(255)
-  cpsn              String            @db.VarChar(255)
-  connector_id      Int
-  status            billing_status    @default(CALCULATED)
-  remark            String?           @db.Text
-  createdAt         DateTime          @default(now()) @db.DateTime(0)
-  updatedAt         DateTime          @default(now()) @updatedAt @db.DateTime(0)
-  billing_channels  billing_channels? @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
-  tariff            tariffs           @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
-  transactions      transactions?     @relation(fields: [transaction_ref], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_ref")
+  id                  BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_id      String                 @db.VarChar(50)
+  transaction_ref     BigInt?                @db.UnsignedBigInt
+  tariff_id           Int
+  applied_price       Decimal                @db.Decimal(10, 2)
+  energy_consumed     Decimal                @db.Decimal(10, 3)
+  energy_fee          Decimal                @db.Decimal(10, 2)
+  service_fee         Decimal                @db.Decimal(10, 2)
+  discount_amount     Decimal?               @db.Decimal(10, 2)
+  tax_amount          Decimal?               @db.Decimal(10, 2)
+  total_amount        Decimal                @db.Decimal(10, 2)
+  currency            String                 @default("TWD") @db.VarChar(3)
+  start_time          DateTime               @db.DateTime(0)
+  end_time            DateTime               @db.DateTime(0)
+  charging_duration   Int
+  billing_details     String?                @db.Text
+  invoice_number      String?                @db.VarChar(20)
+  invoice_issued_at   DateTime?              @db.DateTime(0)
+  payment_method      String?                @db.VarChar(50)
+  payment_reference   String?                @db.VarChar(100)
+  payment_time        DateTime?              @db.DateTime(0)
+  user_id             String?                @db.VarChar(36)
+  id_tag              String                 @db.VarChar(20)
+  cpid                String                 @db.VarChar(255)
+  cpsn                String                 @db.VarChar(255)
+  connector_id        Int
+  status              billing_status         @default(CALCULATED)
+  remark              String?                @db.Text
+  createdAt           DateTime               @default(now()) @db.DateTime(0)
+  updatedAt           DateTime               @default(now()) @updatedAt @db.DateTime(0)
+  billing_channels    billing_channels?      @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
+  tariff              tariffs                @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
+  transactions        charging_transactions? @relation(fields: [transaction_ref], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_ref")
+  users               users?                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_user_uuid")
+  wallet_transactions wallet_transactions[]
 
   @@index([payment_method], map: "fk_billing_records_payment_method")
   @@index([transaction_ref], map: "fk_billing_records_transaction_ref")
@@ -204,36 +196,163 @@ model billing_records {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model billing_channels {
-  id              Int               @id @default(autoincrement()) @db.UnsignedInt
-  name            String            @db.VarChar(50)
-  code            String            @unique(map: "code") @db.VarChar(30)
-  status          Int               @default(1) @db.TinyInt
-  config          Json?
-  createdAt       DateTime          @default(now()) @db.DateTime(0)
-  updatedAt       DateTime          @default(now()) @db.DateTime(0)
-  billing_records billing_records[]
+  id                  Int                   @id @default(autoincrement()) @db.UnsignedInt
+  name                String                @db.VarChar(50)
+  code                String                @unique(map: "code") @db.VarChar(30)
+  status              Int                   @default(1) @db.TinyInt
+  config              Json?
+  createdAt           DateTime              @default(now()) @db.DateTime(0)
+  updatedAt           DateTime              @default(now()) @db.DateTime(0)
+  billing_records     billing_records[]
+  wallet_transactions wallet_transactions[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model charging_transactions {
+  id                  BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_id      String                       @unique(map: "transaction_id") @db.VarChar(50)
+  start_time          DateTime                     @db.DateTime(0)
+  end_time            DateTime?                    @db.DateTime(0)
+  cpid                String                       @db.VarChar(255)
+  cpsn                String                       @db.VarChar(255)
+  connector_id        Int
+  user_id             String?                      @db.VarChar(36)
+  id_tag              String                       @db.VarChar(20)
+  meter_start         Decimal?                     @db.Decimal(10, 3)
+  meter_stop          Decimal?                     @db.Decimal(10, 3)
+  energy_consumed     Decimal?                     @db.Decimal(10, 3)
+  current_power       Decimal?                     @db.Decimal(8, 3)
+  current_voltage     Decimal?                     @db.Decimal(8, 2)
+  current_current     Decimal?                     @db.Decimal(8, 2)
+  last_meter_update   DateTime?                    @db.DateTime(0)
+  charging_duration   Int?
+  status              charging_transactions_status @default(ACTIVE)
+  stop_reason         String?                      @db.VarChar(100)
+  createdAt           DateTime                     @db.DateTime(0)
+  updatedAt           DateTime                     @db.DateTime(0)
+  billing_records     billing_records[]
+  users               users?                       @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_charging_transactions_user_uuid")
+  wallet_transactions wallet_transactions[]
+
+  @@index([user_id], map: "fk_charging_transactions_user_uuid")
+  @@index([cpid], map: "idx_cpid")
+  @@index([cpsn], map: "idx_cpsn")
+  @@index([end_time], map: "idx_end_time")
+  @@index([id_tag], map: "idx_id_tag")
+  @@index([start_time], map: "idx_start_time")
+  @@index([status], map: "idx_status")
+  @@index([transaction_id], map: "idx_transaction_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rfid_cards {
+  id           Int               @id @default(autoincrement()) @db.UnsignedInt
+  card_number  String            @unique(map: "card_number") @db.VarChar(50)
+  user_id      String            @db.VarChar(36)
+  card_type    String            @default("RFID") @db.VarChar(20)
+  status       rfid_cards_status @default(ACTIVE)
+  issued_at    DateTime          @default(now()) @db.DateTime(0)
+  last_used_at DateTime?         @db.DateTime(0)
+  createdAt    DateTime          @default(now()) @db.DateTime(0)
+  updatedAt    DateTime          @default(now()) @db.DateTime(0)
+  users        users             @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_rfid_cards_user_uuid")
+
+  @@index([status], map: "idx_status")
+  @@index([user_id], map: "idx_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_wallets {
+  id                  Int                   @id @default(autoincrement()) @db.UnsignedInt
+  user_id             String                @unique(map: "uk_user_wallet") @db.VarChar(36)
+  balance             Decimal               @default(0.00) @db.Decimal(10, 2)
+  currency            String                @default("TWD") @db.VarChar(3)
+  status              user_wallets_status   @default(ACTIVE)
+  createdAt           DateTime              @default(now()) @db.DateTime(0)
+  updatedAt           DateTime              @default(now()) @db.DateTime(0)
+  users               users                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_user_wallets_user_uuid")
+  wallet_transactions wallet_transactions[]
+
+  @@index([status], map: "idx_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model wallet_transactions {
+  id                      BigInt                               @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id                 String                               @db.VarChar(36)
+  wallet_id               Int                                  @db.UnsignedInt
+  transaction_type        wallet_transactions_transaction_type
+  amount                  Decimal                              @db.Decimal(10, 2)
+  balance_before          Decimal                              @db.Decimal(10, 2)
+  balance_after           Decimal                              @db.Decimal(10, 2)
+  billing_record_id       BigInt?                              @db.UnsignedBigInt
+  charging_transaction_id String?                              @db.VarChar(50)
+  payment_method          String?                              @db.VarChar(50)
+  payment_reference       String?                              @db.VarChar(100)
+  description             String?                              @db.VarChar(255)
+  status                  wallet_transactions_status           @default(COMPLETED)
+  createdAt               DateTime                             @default(now()) @db.DateTime(0)
+  updatedAt               DateTime                             @default(now()) @db.DateTime(0)
+  billing_records         billing_records?                     @relation(fields: [billing_record_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_billing")
+  charging_transactions   charging_transactions?               @relation(fields: [charging_transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_charging_transaction")
+  billing_channels        billing_channels?                    @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_payment_method")
+  users                   users                                @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_user_uuid")
+  user_wallets            user_wallets                         @relation(fields: [wallet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_wallet")
+
+  @@index([payment_method], map: "fk_wallet_transactions_payment_method")
+  @@index([billing_record_id], map: "idx_billing_record_id")
+  @@index([charging_transaction_id], map: "idx_charging_transaction_id")
+  @@index([createdAt], map: "idx_created_at")
+  @@index([status], map: "idx_status")
+  @@index([transaction_type], map: "idx_transaction_type")
+  @@index([user_id], map: "idx_user_id")
+  @@index([wallet_id], map: "idx_wallet_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model operation_logs {
+  id          BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     String?                    @db.VarChar(36)
+  user_email  String?                    @db.VarChar(255)
+  user_name   String?                    @db.VarChar(100)
+  action_type operation_logs_action_type
+  entity_type operation_logs_entity_type
+  entity_id   String?                    @db.VarChar(100)
+  entity_name String?                    @db.VarChar(255)
+  description String?                    @db.VarChar(500)
+  status      operation_logs_status      @default(SUCCESS)
+  createdAt   DateTime                   @default(now()) @db.DateTime(0)
+  users       users?                     @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "fk_operation_logs_user_uuid")
+
+  @@index([action_type], map: "idx_action_type")
+  @@index([createdAt], map: "idx_created_at")
+  @@index([entity_type], map: "idx_entity_type")
+  @@index([user_email], map: "idx_user_email")
+  @@index([user_id], map: "idx_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model gun_tariffs {
+  id        Int      @id @default(autoincrement())
+  gun_id    Int
+  tariff_id Int
+  priority  Int?     @default(1)
+  is_active Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.DateTime(0)
+  updatedAt DateTime @default(now()) @db.DateTime(0)
+  guns      guns     @relation(fields: [gun_id], references: [id], onDelete: Cascade, map: "fk_gun_tariffs_gun")
+  tariffs   tariffs  @relation(fields: [tariff_id], references: [id], onDelete: Cascade, map: "fk_gun_tariffs_tariff")
+
+  @@unique([gun_id, tariff_id], map: "uniq_gun_tariff")
+  @@index([gun_id], map: "IX_gun_tariffs_gun_id")
+  @@index([is_active], map: "IX_gun_tariffs_is_active")
+  @@index([priority], map: "IX_gun_tariffs_priority")
+  @@index([tariff_id], map: "IX_gun_tariffs_tariff_id")
 }
 
 enum guns_acdc {
   AC
   DC
-}
-
-enum transaction_status {
-  ACTIVE
-  COMPLETED
-  STOPPED
-  ERROR
-  CANCELLED
-}
-
-enum tariff_type {
-  FIXED_RATE
-  TIME_OF_USE
-  PROGRESSIVE
-  SPECIAL_PROMOTION
-  MEMBERSHIP
-  CUSTOM
 }
 
 enum billing_status {
@@ -243,4 +362,96 @@ enum billing_status {
   PAID
   CANCELLED
   ERROR
+}
+
+enum wallet_transactions_transaction_type {
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+}
+
+enum rfid_cards_status {
+  ACTIVE
+  SUSPENDED
+  LOST
+  EXPIRED
+  BLOCKED
+}
+
+enum user_wallets_status {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum wallet_transactions_status {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum charging_transactions_status {
+  ACTIVE
+  COMPLETED
+  STOPPED
+  ERROR
+  CANCELLED
+}
+
+enum users_account_status {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  PENDING
+}
+
+enum operation_logs_action_type {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  IMPORT
+  APPROVE
+  REJECT
+  RESET
+}
+
+enum operation_logs_entity_type {
+  USER
+  STATION
+  METER
+  GUN
+  TARIFF
+  TRANSACTION
+  BILLING
+  WALLET
+  RFID_CARD
+  PAYMENT_CHANNEL
+  SYSTEM_CONFIG
+}
+
+enum operation_logs_status {
+  SUCCESS
+  FAILED
+}
+
+enum tariffs_season_type {
+  SUMMER
+  NON_SUMMER
+  ALL_YEAR
+  CUSTOM
+}
+
+enum tariffs_tariff_type {
+  FIXED_RATE
+  TIME_OF_USE
+  PROGRESSIVE
+  SPECIAL_PROMOTION
+  MEMBERSHIP
+  CUSTOM
 }

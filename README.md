@@ -12,7 +12,8 @@
     - 🎯 **即時響應**: 毫秒級的充電狀態變化響應
     - 📊 **多層架構**: 場域 → 電表 → 充電樁的階層式功率管理
 -   **多資料庫支援**: 支援 MSSQL 和 MySQL，使用 Prisma ORM 進行統一管理和自動生成客戶端。
--   **RESTful API**: 完整的 API 服務，涵蓋充電樁管理、使用者認證、支付處理、故障報告等模組。
+-   **完整的用戶管理**: 管理員與一般用戶分離、RFID 卡片管理、錢包系統、操作日誌追蹤。
+-   **RESTful API**: 完整的 API 服務，涵蓋充電樁管理、使用者認證、支付處理、故障報告、計費管理等模組。
 -   **實時監控**: WebSocket 連接監控、系統狀態追蹤和效能分析。
 -   **事件驅動架構 (進行中)**: RabbitMQ 消息隊列基礎架構已建立，正在逐步整合至各業務模組。
 
@@ -182,6 +183,41 @@ rabbitmq-server
 
 ## 📡 API 說明
 
+### Next.js API 端點 (http://localhost:3000)
+
+專案提供以下主要 API 端點：
+
+#### 🔐 認證與用戶管理
+-   `/api/login` - 使用者登入
+-   `/api/session` - 會話管理
+-   `/api/users` - 用戶管理 (CRUD)
+-   `/api/users/[id]/cards` - 用戶 RFID 卡片管理
+-   `/api/users/[id]/wallet` - 用戶錢包資訊
+-   `/api/users/[id]/transactions` - 用戶交易記錄
+
+#### 💳 錢包與卡片系統
+-   `/api/wallet/topup` - 錢包儲值
+-   `/api/wallet/deduct` - 錢包扣款
+-   `/api/cards` - RFID 卡片管理
+-   `/api/cards/all` - 所有卡片資訊
+
+#### 💰 計費與費率
+-   `/api/billing/channels` - 計費渠道管理
+-   `/api/pricing_management` - 費率管理
+
+#### 🏢 充電站與設備
+-   `/api/stations` - 充電站管理
+-   `/api/charging_status` - 充電狀態監控
+-   `/api/dashboard` - 儀表板資料
+
+#### 📊 系統管理
+-   `/api/operation-logs` - 操作日誌
+-   `/api/database` - 資料庫管理
+-   `/api/fault_report` - 故障報告
+-   `/api/hardware_maintenance` - 硬體維護
+-   `/api/power_analysis` - 功率分析
+-   `/api/reports` - 報告生成
+
 ### OCPP API 端點 (http://localhost:8089)
 
 #### 健康檢查與狀態
@@ -197,24 +233,9 @@ rabbitmq-server
 
 #### EMS 能源管理
 - `POST /ocpp/api/trigger_profile_update` - 手動觸發功率重新分配
+- `POST /ocpp/api/trigger_meter_reallocation` - 觸發電表級功率重新分配
+- `POST /ocpp/api/trigger_station_reallocation` - 觸發站點級功率重新分配
 - `GET /ocpp/api/see_connections` - 查看 WebSocket 連接狀態
-
-### Next.js API 端點 (http://localhost:3000)
-
-專案提供以下主要 API 端點：
-
--   `/api/charging_status` - 充電狀態管理
--   `/api/dashboard` - 儀表板資料
--   `/api/fault_report` - 故障報告
--   `/api/hardware_maintenance` - 硬體維護
--   `/api/login` - 使用者登入
--   `/api/payment_management` - 付款管理
--   `/api/power_analysis` - 功率分析
--   `/api/pricing_management` - 定價管理
--   `/api/reports` - 報告生成
--   `/api/security_log` - 安全日誌
--   `/api/user_management` - 使用者管理
--   `/api/stations` - 場域設定管理
 
 詳細的 API 文件請參考各個端點的實現或使用工具如 Postman 進行測試。
 
@@ -486,31 +507,65 @@ csms-nextjs/
 ├── src/
 │   ├── app/                  # Next.js 15 App Router 頁面和 API 路由
 │   │   ├── api/              # RESTful API 路由
+│   │   │   ├── billing/      # 計費管理 API
+│   │   │   ├── cards/        # RFID 卡片管理 API
 │   │   │   ├── charging_status/ # 充電狀態管理 API
 │   │   │   ├── dashboard/    # 儀表板資料 API
+│   │   │   ├── database/     # 資料庫管理 API
 │   │   │   ├── login/        # 認證相關 API
-│   │   │   ├── user_management/ # 用戶管理 API
+│   │   │   ├── operation-logs/ # 操作日誌 API
+│   │   │   ├── session/      # 會話管理 API
+│   │   │   ├── users/        # 用戶管理 API
+│   │   │   ├── wallet/       # 錢包系統 API
 │   │   │   └── ... (其他業務模組 API)
 │   │   ├── charging_status/  # 充電狀態監控頁面
 │   │   ├── dashboard/        # 系統儀表板頁面
 │   │   ├── database-management/ # 資料庫管理介面
+│   │   ├── fault_report/     # 故障報告頁面
+│   │   ├── hardware_maintenance/ # 硬體維護頁面
 │   │   ├── login/            # 用戶登入頁面
+│   │   ├── operation_log/    # 操作日誌頁面
+│   │   ├── power_analysis/   # 功率分析頁面
+│   │   ├── pricing_management/ # 費率管理頁面
+│   │   ├── reports/          # 報表中心頁面
+│   │   ├── security_log/     # 安全日誌頁面
+│   │   ├── user_management/  # 用戶管理頁面
 │   │   └── ... (其他功能頁面)
 │   ├── actions/              # Next.js Server Actions
 │   │   ├── authActions.js    # 認證相關動作
 │   │   ├── gunActions.js     # 充電槍操作動作
-│   │   └── stationActions.js # 場域管理動作
+│   │   ├── paymentActions.ts # 支付相關動作
+│   │   ├── stationActions.js # 場域管理動作
+│   │   ├── tariffActions.ts  # 費率管理動作
+│   │   └── userActions.ts    # 用戶管理動作
 │   ├── components/           # React 可重用組件
-│   │   ├── ui/               # 基礎 UI 組件
+│   │   ├── cards/            # 卡片組件
 │   │   ├── charts/           # 圖表組件
-│   │   ├── ChargingStatusCard.js # 充電狀態卡片
-│   │   ├── PowerOverviewCard.js  # 功率概覽組件
-│   │   └── ... (其他業務組件)
+│   │   ├── common/           # 通用組件
+│   │   ├── dialog/           # 對話框組件
+│   │   │   ├── CardManagementDialog.tsx # 卡片管理對話框
+│   │   │   ├── ResetPasswordDialog.tsx  # 重設密碼對話框
+│   │   │   ├── SiteDialog.tsx           # 場域選擇對話框
+│   │   │   └── UserDialog.tsx           # 用戶編輯對話框
+│   │   ├── layout/           # 佈局組件
+│   │   │   └── Sidebar.tsx   # 側邊欄組件
+│   │   ├── navigation/       # 導航組件
+│   │   ├── ui/               # 基礎 UI 組件
+│   │   └── ... (其他組件模組)
 │   ├── lib/                  # 輔助函式庫和工具
+│   │   ├── auth/             # 認證相關
+│   │   │   ├── auth.ts       # 認證工具類
+│   │   │   └── authMiddleware.ts # 認證中介軟體
 │   │   ├── database/         # 資料庫服務層
-│   │   │   └── service.js    # 統一資料庫服務介面
+│   │   │   ├── adapter.js    # 資料庫適配器
+│   │   │   ├── middleware.js # 資料庫中介軟體
+│   │   │   ├── service.js    # 統一資料庫服務介面
+│   │   │   └── utils.js      # 資料庫工具函式
+│   │   ├── services/         # 業務服務層
+│   │   │   └── billingService.js # 計費服務
 │   │   ├── emsAllocator.js   # EMS 核心分配演算法
 │   │   ├── logger.js         # 統一日誌管理
+│   │   ├── operationLogger.ts # 操作日誌記錄器
 │   │   └── utils.js          # 通用工具函式
 │   ├── models/               # 資料庫模型定義 (Sequelize)
 │   └── servers/              # 後端微服務架構
@@ -558,6 +613,8 @@ csms-nextjs/
 - **EMS 智能引擎**: 三觸發機制 + 事件驅動，確保功率分配的即時性和準確性
 - **事件驅動 (進行中)**: RabbitMQ 基礎設施就緒，正在逐步將同步業務邏輯遷移至非同步事件模式
 - **模組化設計**: 高內聚低耦合的組件設計，支援獨立開發和測試
+- **完整的認證系統**: JWT 認證、權限控制、操作日誌追蹤
+- **用戶管理系統**: 管理員/用戶分離、RFID 卡片綁定、錢包系統
 
 ---
 
@@ -570,19 +627,32 @@ csms-nextjs/
 - **多資料庫支援**: MySQL/MSSQL 雙資料庫架構，Prisma ORM 統一管理
 - **完整測試體系**: 86.7% 測試覆蓋率，涵蓋單元測試、整合測試、一致性測試
 - **前端管理系統**: Next.js 15 響應式介面，涵蓋充電站監控、用戶管理、報表分析等模組
+- **用戶管理系統**: 
+  - 管理員與一般用戶分離管理
+  - RFID 卡片綁定與管理
+  - 用戶錢包系統 (儲值/扣款)
+  - 用戶權限控制與帳戶狀態管理
+  - 密碼重設與帳戶安全機制
+- **操作日誌系統**: 完整的操作追蹤與審計功能
 - **資料庫日誌優化**: cp_logs 表僅記錄 OCPP JSON 消息，優化儲存效率
+- **認證與授權**: JWT 認證、權限中介軟體、會話管理
+- **計費管理**: 費率設定、計費渠道管理、交易記錄
 
 ### 🚧 正在開發
 - **事件驅動架構完整整合**: RabbitMQ 基礎設施已建立，正在將核心業務邏輯遷移至事件驅動模式
 - **效能監控增強**: WebSocket 連接監控、系統資源追蹤、告警機制
 - **OCPP 2.0.1 支援**: 新版協議研究和實現規劃
 - **進階 EMS 演算法**: 基於歷史數據的機器學習功率預測和優化
+- **支付系統整合**: 第三方支付接口整合
+- **行動端應用**: 管理員行動應用開發
 
 ### 📋 規劃功能
 - **容器化部署**: Docker 和 Kubernetes 部署方案
 - **高可用性架構**: 負載均衡、故障切換、資料備份策略
 - **監控和告警**: Prometheus + Grafana 監控體系
 - **API 文檔**: Swagger/OpenAPI 自動生成文檔
+- **國際化支援**: 多語言界面支持
+- **進階報表**: 自定義報表生成器
 
 ### 📊 系統指標
 - **API 回應時間**: < 100ms (平均)
@@ -591,6 +661,7 @@ csms-nextjs/
 - **資料庫效能**: 支援高併發讀寫操作
 - **系統可用性**: 99.5+ (測試環境)
 - **測試覆蓋率**: 86.7% (EMS 核心模組)
+- **用戶並發**: 支援 100+ 管理員同時操作
 
 **技術特點**:
 - 基於 Node.js 18+ 和 Next.js 15 的現代化技術棧

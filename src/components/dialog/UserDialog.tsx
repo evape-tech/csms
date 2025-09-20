@@ -14,13 +14,20 @@ import {
 
 interface User {
   id: number;
+  uuid?: string;
   email: string;
   password?: string;
   role: string;
-  name?: string;
-  account?: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
-  status?: string;
+  date_of_birth?: string;
+  email_verified?: boolean;
+  account_status?: string;
+  last_login_at?: string;
+  login_count?: number;
+  failed_login_attempts?: number;
+  lockout_until?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,18 +61,18 @@ export default function UserDialog({
           <TextField
             autoFocus
             margin="dense"
-            label="姓名"
-            name="name"
+            label="名"
+            name="first_name"
             fullWidth
-            defaultValue={editingUser?.name || ''}
+            defaultValue={editingUser?.first_name || ''}
             sx={{ mb: 2, mt: 1 }}
           />
           <TextField
             margin="dense"
-            label="帳號"
-            name="account"
+            label="姓"
+            name="last_name"
             fullWidth
-            defaultValue={editingUser?.account || ''}
+            defaultValue={editingUser?.last_name || ''}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -97,6 +104,18 @@ export default function UserDialog({
             defaultValue={editingUser?.phone || ''}
             sx={{ mb: 2 }}
           />
+          <TextField
+            margin="dense"
+            label="生日"
+            name="date_of_birth"
+            type="date"
+            fullWidth
+            defaultValue={editingUser?.date_of_birth ? editingUser.date_of_birth.split('T')[0] : ''}
+            InputLabelProps={{
+              shrink: true,
+            }}
+            sx={{ mb: 2 }}
+          />
           <FormControl fullWidth margin="dense" sx={{ mb: 2 }}>
             <InputLabel id="role-label">權限</InputLabel>
             <Select
@@ -110,16 +129,30 @@ export default function UserDialog({
               <MenuItem value="user">一般用戶</MenuItem>
             </Select>
           </FormControl>
-          <FormControl fullWidth margin="dense" sx={{ mb: 1 }}>
-            <InputLabel id="status-label">狀態</InputLabel>
+          <FormControl fullWidth margin="dense" sx={{ mb: 2 }}>
+            <InputLabel id="account-status-label">帳戶狀態</InputLabel>
             <Select
-              labelId="status-label"
-              name="status"
-              defaultValue={editingUser?.status || 'active'}
-              label="狀態"
+              labelId="account-status-label"
+              name="account_status"
+              defaultValue={editingUser?.account_status || 'ACTIVE'}
+              label="帳戶狀態"
             >
-              <MenuItem value="active">啟用</MenuItem>
-              <MenuItem value="disabled">停用</MenuItem>
+              <MenuItem value="ACTIVE">啟用</MenuItem>
+              <MenuItem value="SUSPENDED">暫停</MenuItem>
+              <MenuItem value="BLOCKED">封鎖</MenuItem>
+              <MenuItem value="PENDING">待審核</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="dense" sx={{ mb: 1 }}>
+            <InputLabel id="email-verified-label">Email驗證狀態</InputLabel>
+            <Select
+              labelId="email-verified-label"
+              name="email_verified"
+              defaultValue={editingUser?.email_verified ? 'true' : 'false'}
+              label="Email驗證狀態"
+            >
+              <MenuItem value="true">已驗證</MenuItem>
+              <MenuItem value="false">未驗證</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>

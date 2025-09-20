@@ -15,10 +15,11 @@ export async function createUser(formData: FormData) {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     const role = formData.get('role') as string;
-    const name = formData.get('name') as string;
-    const account = formData.get('account') as string;
+    const firstName = formData.get('first_name') as string;
+    const lastName = formData.get('last_name') as string;
     const phone = formData.get('phone') as string;
-    const status = formData.get('status') as string;
+    const status = formData.get('account_status') as string;
+    const emailVerified = formData.get('email_verified') as string;
 
     if (!email || !password || !role) {
       throw new Error('Email、密碼和角色為必填項');
@@ -33,18 +34,25 @@ export async function createUser(formData: FormData) {
       throw new Error('Email 已存在');
     }
 
-    // 對於基本用戶表，我們只存儲 email, password, role
-    // 其他字段可能需要擴展用戶表結構
+    // 生成 UUID
+    const uuid = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // 對於基本用戶表，我們把所有相關欄位都帶入
     const newUser = await client.users.create({
       data: {
+        uuid,
         email,
         password, // 注意：實際應用中應該加密密碼
         role,
-        // 如果有擴展字段，可以添加：
-        // name,
-        // account,
-        // phone,
-        // status: status === 'active' ? 1 : 0,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        phone: phone || null,
+        email_verified: emailVerified === 'true',
+        account_status: (status === 'active' || status === 'ACTIVE') ? 'ACTIVE' : 'PENDING',
+        login_count: 0,
+        failed_login_attempts: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }
     });
 
@@ -66,10 +74,11 @@ export async function updateUser(userId: number, formData: FormData) {
 
     const email = formData.get('email') as string;
     const role = formData.get('role') as string;
-    const name = formData.get('name') as string;
-    const account = formData.get('account') as string;
+    const name = formData.get('first_name') as string;
+    const lastName = formData.get('last_name') as string;
     const phone = formData.get('phone') as string;
-    const status = formData.get('status') as string;
+    const status = formData.get('account_status') as string;
+    const emailVerified = formData.get('email_verified') as string;
 
     if (!email || !role) {
       throw new Error('Email 和角色為必填項');
@@ -80,11 +89,14 @@ export async function updateUser(userId: number, formData: FormData) {
       data: {
         email,
         role,
-        // 如果有擴展字段，可以更新：
-        // name,
-        // account,
-        // phone,
-        // status: status === 'active' ? 1 : 0,
+        first_name: name || null,
+        last_name: lastName || null,
+        phone: phone || null,
+        email_verified: emailVerified === 'true',
+        account_status: (status === 'active' || status === 'ACTIVE') ? 'ACTIVE' : 
+                       (status === 'suspended' || status === 'SUSPENDED') ? 'SUSPENDED' :
+                       (status === 'blocked' || status === 'BLOCKED') ? 'BLOCKED' : 'PENDING',
+        updatedAt: new Date(),
       }
     });
 
@@ -133,19 +145,19 @@ export async function toggleUserStatus(userId: number) {
       throw new Error('用戶不存在');
     }
 
-    // 注意：當前用戶表沒有 status 字段
-    // 如果需要狀態管理，需要擴展用戶表
-    // 這裡先返回錯誤，提示需要擴展表結構
-    throw new Error('用戶狀態管理需要擴展用戶表結構');
-
-    // 如果有 status 字段，可以這樣實現：
-    // const newStatus = user.status === 1 ? 0 : 1;
-    // const updatedUser = await client.users.update({
-    //   where: { id: userId },
-    //   data: { status: newStatus }
-    // });
-    // revalidatePath('/user_management');
-    // return { success: true, data: updatedUser };
+    // 切換用戶狀態：ACTIVE <-> SUSPENDED
+    const newStatus = user.account_status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    
+    const updatedUser = await client.users.update({
+      where: { id: userId },
+      data: { 
+        account_status: newStatus,
+        updatedAt: new Date()
+      }
+    });
+    
+    revalidatePath('/user_management');
+    return { success: true, data: updatedUser };
   } catch (error) {
     console.error('Error toggling user status:', error);
     return { success: false, error: error instanceof Error ? error.message : '操作失敗' };

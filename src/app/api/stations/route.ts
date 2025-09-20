@@ -105,7 +105,6 @@ export async function PATCH(req: Request) {
     if (Object.prototype.hasOwnProperty.call(body, 'address')) stationData.address = body.address;
     if (Object.prototype.hasOwnProperty.call(body, 'floor')) stationData.floor = body.floor;
     if (Object.prototype.hasOwnProperty.call(body, 'operator_id')) stationData.operator_id = body.operator_id;
-    if (Object.prototype.hasOwnProperty.call(body, 'tariff_id')) stationData.tariff_id = body.tariff_id;
     
     // EMS相關設定（現在在meters表中）
     if (Object.prototype.hasOwnProperty.call(body, 'ems_mode')) meterData.ems_mode = body.ems_mode;

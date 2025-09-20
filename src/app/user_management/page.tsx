@@ -35,26 +35,34 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import AddIcon from '@mui/icons-material/Add';
 import UserDialog from '../../components/dialog/UserDialog';
+import ResetPasswordDialog from '../../components/dialog/ResetPasswordDialog';
+import CardManagementDialog from '../../components/dialog/CardManagementDialog';
 import { createUser } from '../../actions/userActions';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
-  { label: '啟用', value: 'active' },
-  { label: '停用', value: 'disabled' },
-];
+  { label: '啟用', value: 'ACTIVE' },
+  { label: '暫停', value: 'SUSPENDED' },
+  { label: '封鎖', value: 'BLOCKED' },
+  { label: '待審核', value: 'PENDING' },
+] as const;
 
 export default function UserManagement() {
   const theme = useTheme();
-  const [status, setStatus] = useState('');
-  const [keyword, setKeyword] = useState('');
-  const [activeTab, setActiveTab] = useState(0); // 0 for administrators, 1 for users
-  const [administrators, setAdministrators] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<string>('');
+  const [keyword, setKeyword] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<number>(0); // 0 for administrators, 1 for users
+  const [administrators, setAdministrators] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
+  const [dialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState<boolean>(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
+  const [cardManagementDialogOpen, setCardManagementDialogOpen] = useState<boolean>(false);
+  const [cardManagementUser, setCardManagementUser] = useState<any>(null);
   
   // 從 API 獲取用戶數據
   const fetchUsers = async () => {
@@ -123,22 +131,85 @@ export default function UserManagement() {
   const handleSubmitUser = async (formData: FormData) => {
     setSubmitting(true);
     try {
-      const result = await createUser(formData);
+      let result;
+      if (editingUser) {
+        // 編輯模式
+        const { updateUser } = await import('../../actions/userActions');
+        result = await updateUser(editingUser.id, formData);
+      } else {
+        // 新增模式
+        result = await createUser(formData);
+      }
       
       if (result.success) {
         // 重新獲取用戶數據
         await fetchUsers();
         handleCloseDialog();
-        alert('用戶創建成功');
       } else {
-        alert('創建用戶失敗: ' + result.error);
+        alert((editingUser ? '更新用戶失敗: ' : '創建用戶失敗: ') + result.error);
       }
     } catch (error) {
       console.error('提交用戶表單失敗:', error);
-      alert('創建用戶失敗: ' + (error instanceof Error ? error.message : '未知錯誤'));
+      alert((editingUser ? '更新用戶失敗: ' : '創建用戶失敗: ') + (error instanceof Error ? error.message : '未知錯誤'));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 處理重設密碼
+  const handleResetPassword = (user: any) => {
+    setResetPasswordUser(user);
+    setResetPasswordDialogOpen(true);
+  };
+
+  // 處理關閉重設密碼對話框
+  const handleCloseResetPasswordDialog = () => {
+    setResetPasswordDialogOpen(false);
+    setResetPasswordUser(null);
+  };
+
+  // 處理提交重設密碼表單
+  const handleSubmitResetPassword = async (formData: FormData) => {
+    try {
+      // 這裡需要實作重設密碼的API調用
+      const headers = {
+        'X-API-Key': 'admin-secret-key'
+      };
+      
+      const response = await fetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: formData.get('userId'),
+          newPassword: formData.get('password')
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('重設密碼失敗');
+      }
+
+      alert('密碼重設成功');
+      handleCloseResetPasswordDialog();
+    } catch (error) {
+      console.error('重設密碼失敗:', error);
+      throw error;
+    }
+  };
+
+  // 處理卡片管理
+  const handleCardManagement = (user: any) => {
+    setCardManagementUser(user);
+    setCardManagementDialogOpen(true);
+  };
+
+  // 處理關閉卡片管理對話框
+  const handleCloseCardManagementDialog = () => {
+    setCardManagementDialogOpen(false);
+    setCardManagementUser(null);
   };
 
   // 獲取當前標籤頁的數據
@@ -147,18 +218,22 @@ export default function UserManagement() {
   // 計算統計數據
   const summary = {
     total: currentData.length,
-    active: currentData.filter((user: any) => user.status === 'active').length,
-    disabled: currentData.filter((user: any) => user.status === 'disabled').length,
+    active: currentData.filter((user: any) => user.account_status === 'ACTIVE').length,
+    suspended: currentData.filter((user: any) => user.account_status === 'SUSPENDED').length,
+    blocked: currentData.filter((user: any) => user.account_status === 'BLOCKED').length,
+    pending: currentData.filter((user: any) => user.account_status === 'PENDING').length,
+    emailVerified: currentData.filter((user: any) => user.email_verified === true).length,
   };
 
   // 過濾數據
   const filteredRows = currentData.filter((row: any) => {
     const matchesKeyword = !keyword || 
-      row.name?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.account?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.email?.toLowerCase().includes(keyword.toLowerCase());
+      row.first_name?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.last_name?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.email?.toLowerCase().includes(keyword.toLowerCase()) ||
+      row.phone?.toLowerCase().includes(keyword.toLowerCase());
     
-    const matchesStatus = !status || row.status === status;
+    const matchesStatus = !status || row.account_status === status;
     
     return matchesKeyword && matchesStatus;
   });
@@ -276,12 +351,12 @@ export default function UserManagement() {
         >
           <TextField
             label="關鍵字搜尋"
-            placeholder="輸入姓名、帳號或Email"
+            placeholder="輸入姓名、Email或電話"
             size="medium"
             value={keyword}
-            onChange={e => setKeyword(e.target.value)}
+            onChange={(e) => setKeyword(e.target.value)}
             sx={{ 
-              minWidth: { xs: '100%', md: 280 },
+              minWidth: { xs: '100%', md: 300 },
               '& .MuiOutlinedInput-root': {
                 borderRadius: 2,
                 bgcolor: theme.palette.background.default
@@ -300,7 +375,7 @@ export default function UserManagement() {
             label="狀態篩選"
             size="medium"
             value={status}
-            onChange={e => setStatus(e.target.value)}
+            onChange={(e) => setStatus(e.target.value)}
             sx={{ 
               minWidth: { xs: '100%', md: 160 },
               '& .MuiOutlinedInput-root': {
@@ -312,8 +387,10 @@ export default function UserManagement() {
             {statusOptions.map(opt => (
               <MenuItem key={opt.value} value={opt.value}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {opt.value === 'active' && <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1rem' }} />}
-                  {opt.value === 'disabled' && <CancelIcon sx={{ color: 'error.main', fontSize: '1rem' }} />}
+                  {opt.value === 'ACTIVE' && <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1rem' }} />}
+                  {opt.value === 'SUSPENDED' && <CancelIcon sx={{ color: 'warning.main', fontSize: '1rem' }} />}
+                  {opt.value === 'BLOCKED' && <CancelIcon sx={{ color: 'error.main', fontSize: '1rem' }} />}
+                  {opt.value === 'PENDING' && <CancelIcon sx={{ color: 'info.main', fontSize: '1rem' }} />}
                   {opt.label}
                 </Box>
               </MenuItem>
@@ -349,7 +426,7 @@ export default function UserManagement() {
           display: 'flex', 
           flexWrap: 'wrap', 
           gap: 3,
-          '& > *': { flex: '1 1 300px', minWidth: 280 }
+          '& > *': { flex: '1 1 280px', minWidth: 250 }
         }}>
           <Card 
             elevation={2} 
@@ -415,7 +492,7 @@ export default function UserManagement() {
                 </Avatar>
                 <Box>
                   <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    {activeTab === 0 ? '啟用管理者' : '啟用使用者'}
+                    啟用帳戶
                   </Typography>
                   <Typography variant="h4" sx={{ 
                     fontWeight: 700, 
@@ -433,8 +510,8 @@ export default function UserManagement() {
             elevation={2} 
             sx={{ 
               borderRadius: 3,
-              bgcolor: alpha(theme.palette.error.main, 0.05),
-              border: `1px solid ${alpha(theme.palette.error.main, 0.1)}`,
+              bgcolor: alpha(theme.palette.warning.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
               transition: 'all 0.3s ease-in-out',
               '&:hover': {
                 elevation: 4,
@@ -445,7 +522,7 @@ export default function UserManagement() {
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Avatar sx={{ 
-                  bgcolor: theme.palette.error.main, 
+                  bgcolor: theme.palette.warning.main, 
                   mr: 2,
                   width: 48,
                   height: 48
@@ -454,14 +531,53 @@ export default function UserManagement() {
                 </Avatar>
                 <Box>
                   <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    {activeTab === 0 ? '停用管理者' : '停用使用者'}
+                    暫停/封鎖帳戶
                   </Typography>
                   <Typography variant="h4" sx={{ 
                     fontWeight: 700, 
-                    color: theme.palette.error.main,
+                    color: theme.palette.warning.main,
                     lineHeight: 1
                   }}>
-                    {summary.disabled}
+                    {summary.suspended + summary.blocked}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card 
+            elevation={2} 
+            sx={{ 
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.info.main, 0.05),
+              border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                elevation: 4,
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{ 
+                  bgcolor: theme.palette.info.main, 
+                  mr: 2,
+                  width: 48,
+                  height: 48
+                }}>
+                  <CheckCircleIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                    Email已驗證
+                  </Typography>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 700, 
+                    color: theme.palette.info.main,
+                    lineHeight: 1
+                  }}>
+                    {summary.emailVerified}
                   </Typography>
                 </Box>
               </Box>
@@ -525,9 +641,6 @@ export default function UserManagement() {
                   姓名
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
-                  帳號
-                </TableCell>
-                <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
                   Email
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
@@ -537,10 +650,13 @@ export default function UserManagement() {
                   權限
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
-                  狀態
+                  帳戶狀態
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
-                  註冊日期
+                  Email驗證
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
+                  最後登入
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600, color: theme.palette.text.primary, py: 2 }}>
                   操作
@@ -561,26 +677,33 @@ export default function UserManagement() {
                   <TableCell sx={{ py: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
-                        {(row.name || '').charAt(0)}
+                        {(row.first_name || row.email || '').charAt(0).toUpperCase()}
                       </Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {row.name || ''}
-                      </Typography>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {`${row.first_name || ''} ${row.last_name || ''}`.trim() || '未設定'}
+                        </Typography>
+                        {row.first_name && row.last_name && (
+                          <Typography variant="caption" color="text.secondary">
+                            {row.first_name} {row.last_name}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {row.account}
-                    </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 2 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      {row.email}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {row.email || '未設定'}
+                      </Typography>
+                      {row.email_verified && (
+                        <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1rem' }} />
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
                     <Typography variant="body2">
-                      {row.phone}
+                      {row.phone || '未設定'}
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
@@ -593,22 +716,52 @@ export default function UserManagement() {
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
                     <Chip 
-                      label={row.status === 'active' ? '啟用' : '停用'} 
+                      label={
+                        row.account_status === 'ACTIVE' ? '啟用' :
+                        row.account_status === 'SUSPENDED' ? '暫停' :
+                        row.account_status === 'BLOCKED' ? '封鎖' :
+                        row.account_status === 'PENDING' ? '待審核' : '未知'
+                      } 
                       size="small"
-                      color={row.status === 'active' ? 'success' : 'error'}
+                      color={
+                        row.account_status === 'ACTIVE' ? 'success' :
+                        row.account_status === 'SUSPENDED' ? 'warning' :
+                        row.account_status === 'BLOCKED' ? 'error' :
+                        row.account_status === 'PENDING' ? 'info' : 'default'
+                      }
                       variant="filled"
                     />
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
+                    <Chip 
+                      label={row.email_verified ? '已驗證' : '未驗證'} 
+                      size="small"
+                      color={row.email_verified ? 'success' : 'warning'}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell sx={{ py: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      {row.createdAt || ''}
+                      {row.last_login_at ? new Date(row.last_login_at).toLocaleDateString('zh-TW', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : '從未登入'}
                     </Typography>
+                    {row.login_count > 0 && (
+                      <Typography variant="caption" color="text.secondary">
+                        登入次數: {row.login_count}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell sx={{ py: 2 }}>
                     <Stack direction="row" spacing={1}>
                       <Button 
                         size="small" 
                         variant="outlined" 
+                        onClick={() => handleEditUser(row)}
                         sx={{ 
                           minWidth: 'auto',
                           px: 2,
@@ -622,21 +775,8 @@ export default function UserManagement() {
                       <Button 
                         size="small" 
                         variant="outlined" 
-                        color={row.status === 'active' ? 'warning' : 'success'}
-                        sx={{ 
-                          minWidth: 'auto',
-                          px: 2,
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 500
-                        }}
-                      >
-                        {row.status === 'active' ? '停用' : '啟用'}
-                      </Button>
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        color="info"
+                        color="warning"
+                        onClick={() => handleResetPassword(row)}
                         sx={{ 
                           minWidth: 'auto',
                           px: 2,
@@ -647,6 +787,24 @@ export default function UserManagement() {
                       >
                         重設密碼
                       </Button>
+                      {/* 只有一般用戶才顯示卡片管理按鈕 */}
+                      {row.role === 'user' && (
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="success"
+                          onClick={() => handleCardManagement(row)}
+                          sx={{ 
+                            minWidth: 'auto',
+                            px: 2,
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 500
+                          }}
+                        >
+                          卡片管理
+                        </Button>
+                      )}
                     </Stack>
                   </TableCell>
                 </TableRow>
@@ -699,6 +857,21 @@ export default function UserManagement() {
         onClose={handleCloseDialog}
         onSubmit={handleSubmitUser}
         editingUser={editingUser}
+      />
+
+      {/* 重設密碼對話框 */}
+      <ResetPasswordDialog
+        open={resetPasswordDialogOpen}
+        onClose={handleCloseResetPasswordDialog}
+        onSubmit={handleSubmitResetPassword}
+        user={resetPasswordUser}
+      />
+
+      {/* 卡片管理對話框 */}
+      <CardManagementDialog
+        open={cardManagementDialogOpen}
+        onClose={handleCloseCardManagementDialog}
+        user={cardManagementUser}
       />
     </Container>
   );

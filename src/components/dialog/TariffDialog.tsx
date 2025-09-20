@@ -24,8 +24,7 @@ interface Tariff {
   description?: string;
   tariff_type: string;
   base_price: number;
-  service_fee?: number;
-  minimum_fee?: number;
+  charging_parking_fee?: number;
   peak_hours_start?: string;
   peak_hours_end?: string;
   peak_hours_price?: number;
@@ -40,6 +39,11 @@ interface Tariff {
   promotion_code?: string;
   valid_from?: string;
   valid_to?: string;
+  season_start_month?: number;
+  season_end_month?: number;
+  season_type: string;
+  grace_period_minutes?: number;
+  penalty_rate_per_hour?: number;
   ac_only: boolean;
   dc_only: boolean;
   membership_required: boolean;
@@ -53,7 +57,7 @@ interface Tariff {
 interface TariffDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (formData: globalThis.FormData) => Promise<void>;
+  onSuccess: () => void;
   editingTariff: Tariff | null;
 }
 
@@ -66,22 +70,79 @@ const tariffTypeOptions = [
   { value: 'CUSTOM', label: '自訂費率' },
 ];
 
+const seasonTypeOptions = [
+  { value: 'ALL_YEAR', label: '全年適用' },
+  { value: 'SUMMER', label: '夏季 (6-9月)' },
+  { value: 'NON_SUMMER', label: '非夏季 (10-5月)' },
+  { value: 'CUSTOM', label: '自訂月份' },
+];
+
+const monthOptions = [
+  { value: 1, label: '1月' },
+  { value: 2, label: '2月' },
+  { value: 3, label: '3月' },
+  { value: 4, label: '4月' },
+  { value: 5, label: '5月' },
+  { value: 6, label: '6月' },
+  { value: 7, label: '7月' },
+  { value: 8, label: '8月' },
+  { value: 9, label: '9月' },
+  { value: 10, label: '10月' },
+  { value: 11, label: '11月' },
+  { value: 12, label: '12月' },
+];
+
 export default function TariffDialog({
   open,
   onClose,
-  onSubmit,
+  onSuccess,
   editingTariff
 }: TariffDialogProps) {
   const [tariffType, setTariffType] = React.useState(editingTariff?.tariff_type || 'FIXED_RATE');
+  const [seasonType, setSeasonType] = React.useState(editingTariff?.season_type || 'ALL_YEAR');
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    await onSubmit(formData);
+    
+    try {
+      if (editingTariff) {
+        // 調用更新 API
+        const response = await fetch(`/api/tariffs/${editingTariff.id}`, {
+          method: 'PUT',
+          body: formData,
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.message || result.error);
+        }
+      } else {
+        // 調用創建 API
+        const response = await fetch('/api/tariffs', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.message || result.error);
+        }
+      }
+      
+      onSuccess();
+    } catch (error) {
+      console.error('提交失敗:', error);
+      alert(error instanceof Error ? error.message : '操作失敗');
+    }
   };
 
   const handleTariffTypeChange = (event: any) => {
     setTariffType(event.target.value);
+  };
+
+  const handleSeasonTypeChange = (event: any) => {
+    setSeasonType(event.target.value);
   };
 
   return (
@@ -92,6 +153,25 @@ export default function TariffDialog({
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
+            {/* 隱藏欄位處理季節類型的自動設定 */}
+            <input 
+              type="hidden" 
+              name="season_type" 
+              value={seasonType === 'SUMMER' ? 'SUMMER' : seasonType === 'NON_SUMMER' ? 'NON_SUMMER' : seasonType}
+            />
+            {seasonType === 'SUMMER' && (
+              <>
+                <input type="hidden" name="season_start_month" value="6" />
+                <input type="hidden" name="season_end_month" value="9" />
+              </>
+            )}
+            {seasonType === 'NON_SUMMER' && (
+              <>
+                <input type="hidden" name="season_start_month" value="10" />
+                <input type="hidden" name="season_end_month" value="5" />
+              </>
+            )}
+
             {/* 基本資訊 */}
             <Box>
               <Typography variant="h6" color="primary" gutterBottom>
@@ -151,19 +231,27 @@ export default function TariffDialog({
                   required
                 />
                 <TextField
-                  label="服務費 (元)"
-                  name="service_fee"
+                  label="充電期間停車費 (元)"
+                  name="charging_parking_fee"
                   type="number"
                   fullWidth
-                  defaultValue={editingTariff?.service_fee || ''}
+                  defaultValue={editingTariff?.charging_parking_fee || ''}
                   inputProps={{ step: 0.01, min: 0 }}
                 />
                 <TextField
-                  label="最低收費 (元)"
-                  name="minimum_fee"
+                  label="寬限時間 (分鐘)"
+                  name="grace_period_minutes"
                   type="number"
                   fullWidth
-                  defaultValue={editingTariff?.minimum_fee || ''}
+                  defaultValue={editingTariff?.grace_period_minutes || 15}
+                  inputProps={{ step: 1, min: 0 }}
+                />
+                <TextField
+                  label="超時罰款 (元/小時)"
+                  name="penalty_rate_per_hour"
+                  type="number"
+                  fullWidth
+                  defaultValue={editingTariff?.penalty_rate_per_hour || ''}
                   inputProps={{ step: 0.01, min: 0 }}
                 />
               </Stack>
@@ -283,7 +371,7 @@ export default function TariffDialog({
             )}
 
             {/* 特殊優惠設定 */}
-            {tariffType === 'SPECIAL_PROMOTION' && (
+            {(tariffType === 'SPECIAL_PROMOTION' || tariffType === 'MEMBERSHIP') && (
               <Box>
                 <Typography variant="h6" color="primary" gutterBottom>
                   優惠設定
@@ -306,24 +394,6 @@ export default function TariffDialog({
                       defaultValue={editingTariff?.promotion_code || ''}
                     />
                   </Stack>
-                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                    <TextField
-                      label="有效期限開始"
-                      name="valid_from"
-                      type="datetime-local"
-                      fullWidth
-                      defaultValue={editingTariff?.valid_from ? new Date(editingTariff.valid_from).toISOString().slice(0, 16) : ''}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                    <TextField
-                      label="有效期限結束"
-                      name="valid_to"
-                      type="datetime-local"
-                      fullWidth
-                      defaultValue={editingTariff?.valid_to ? new Date(editingTariff.valid_to).toISOString().slice(0, 16) : ''}
-                      InputLabelProps={{ shrink: true }}
-                    />
-                  </Stack>
                 </Stack>
               </Box>
             )}
@@ -331,7 +401,86 @@ export default function TariffDialog({
             {/* 設定選項 */}
             <Box>
               <Typography variant="h6" color="primary" gutterBottom>
-                設定選項
+                適用範圍與時間
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+              <Stack spacing={2}>
+                <FormControl fullWidth>
+                  <InputLabel>適用季節</InputLabel>
+                  <Select
+                    name="season_type"
+                    value={seasonType}
+                    onChange={handleSeasonTypeChange}
+                    label="適用季節"
+                  >
+                    {seasonTypeOptions.map(option => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                {seasonType === 'CUSTOM' && (
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                    <FormControl fullWidth>
+                      <InputLabel>開始月份</InputLabel>
+                      <Select
+                        name="season_start_month"
+                        defaultValue={editingTariff?.season_start_month || ''}
+                        label="開始月份"
+                      >
+                        {monthOptions.map(option => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <FormControl fullWidth>
+                      <InputLabel>結束月份</InputLabel>
+                      <Select
+                        name="season_end_month"
+                        defaultValue={editingTariff?.season_end_month || ''}
+                        label="結束月份"
+                      >
+                        {monthOptions.map(option => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Stack>
+                )}
+
+                {(tariffType === 'SPECIAL_PROMOTION' || editingTariff?.valid_from || editingTariff?.valid_to) && (
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                    <TextField
+                      label="有效期限開始"
+                      name="valid_from"
+                      type="date"
+                      fullWidth
+                      defaultValue={editingTariff?.valid_from ? new Date(editingTariff.valid_from).toISOString().slice(0, 10) : ''}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                      label="有效期限結束"
+                      name="valid_to"
+                      type="date"
+                      fullWidth
+                      defaultValue={editingTariff?.valid_to ? new Date(editingTariff.valid_to).toISOString().slice(0, 10) : ''}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Stack>
+                )}
+              </Stack>
+            </Box>
+
+            {/* 系統設定 */}
+            <Box>
+              <Typography variant="h6" color="primary" gutterBottom>
+                系統設定
               </Typography>
               <Divider sx={{ mb: 2 }} />
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>

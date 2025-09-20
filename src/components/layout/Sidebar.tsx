@@ -55,7 +55,7 @@ const groupedMenuItems = [
     items: [
       { label: '故障回報協調', path: '/fault_report', icon: ReportProblemIcon },
       { label: '硬體維護', path: '/hardware_maintenance', icon: BuildIcon },
-      { label: '安全日誌', path: '/security_log', icon: SecurityIcon },
+      { label: '操作日誌', path: '/operation_log', icon: SecurityIcon },
       { label: '報表中心', path: '/reports', icon: DescriptionIcon },
     ],
   },

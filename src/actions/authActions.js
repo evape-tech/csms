@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 // 直接使用資料庫服務
 import DatabaseUtils from '../lib/database/utils.js';
 import { databaseService } from '../lib/database/service.js';
+import { OperationLogger } from '../lib/operationLogger';
 
 export async function loginAction(formData) {
   try {
@@ -32,6 +33,13 @@ export async function loginAction(formData) {
     console.log(`🔍 [loginAction] Found user:`, user ? { id: user.id, email: user.email } : null);
     
     if (!user) {
+      // 記錄登入失敗日誌
+      try {
+        await OperationLogger.logAuthOperation('LOGIN', email, false, `登入失敗: 用戶不存在`);
+      } catch (logError) {
+        console.error('登入失敗日誌記錄失敗:', logError);
+      }
+      
       return {
         success: false,
         error: '帳號或密碼錯誤'
@@ -55,6 +63,13 @@ export async function loginAction(formData) {
     }
     
     if (!isValidPassword) {
+      // 記錄登入失敗日誌
+      try {
+        await OperationLogger.logAuthOperation('LOGIN', email, false, `登入失敗: 密碼錯誤`);
+      } catch (logError) {
+        console.error('登入失敗日誌記錄失敗:', logError);
+      }
+      
       return {
         success: false,
         error: '帳號或密碼錯誤'
@@ -64,9 +79,11 @@ export async function loginAction(formData) {
     // 建立 JWT token
     const token = jwt.sign(
       { 
-        userId: user.id, 
+        userId: user.uuid, // 使用 UUID 而不是數字 ID，保持與 API route 一致
         email: user.email, 
-        role: user.role 
+        role: user.role,
+        firstName: user.first_name || user.firstName || null,
+        lastName: user.last_name || user.lastName || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
@@ -82,6 +99,14 @@ export async function loginAction(formData) {
     });
 
     console.log(`✅ [loginAction] Login successful for user: ${user.email}`);
+
+    // 記錄登入操作日誌
+    try {
+      await OperationLogger.logAuthOperation('LOGIN', user.email, true, `管理員登入成功`);
+    } catch (logError) {
+      console.error('登入日誌記錄失敗:', logError);
+      // 不要因為日誌失敗而影響登入流程
+    }
 
     // 成功後重定向
     redirect(redirectPath);
@@ -108,11 +133,32 @@ export async function loginAction(formData) {
 
 export async function logoutAction() {
   try {
-    // 清除 session cookie
+    // 獲取當前用戶信息以記錄日誌
     const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session');
+    let userEmail = 'unknown';
+    
+    if (sessionCookie?.value) {
+      try {
+        const decoded = jwt.verify(sessionCookie.value, process.env.JWT_SECRET || 'your-secret-key');
+        userEmail = decoded.email || 'unknown';
+      } catch (jwtError) {
+        console.warn('JWT 解析失敗:', jwtError);
+      }
+    }
+    
+    // 先記錄登出操作日誌（在清除 session 之前）
+    try {
+      await OperationLogger.logAuthOperation('LOGOUT', userEmail, true, `管理員登出`);
+    } catch (logError) {
+      console.error('登出日誌記錄失敗:', logError);
+      // 不要因為日誌失敗而影響登出流程
+    }
+    
+    // 然後清除 session cookie
     cookieStore.delete('session');
     
-    console.log(`✅ [logoutAction] User logged out successfully`);
+    console.log(`✅ [logoutAction] User logged out successfully: ${userEmail}`);
     
     // 重定向到登入頁面
     redirect('/login');

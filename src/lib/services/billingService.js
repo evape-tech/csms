@@ -206,8 +206,8 @@ class BillingService {
             description: tariff.description,
             tariff_type: tariffTypeString, // 使用字符串版本
             base_price: tariff.base_price,
-            service_fee: tariff.service_fee,
-            minimum_fee: tariff.minimum_fee,
+            service_fee: 0, // 移除對 tariff.service_fee 的引用
+            minimum_fee: 0, // 移除對 tariff.minimum_fee 的引用
             peak_hours_start: tariff.peak_hours_start,
             peak_hours_end: tariff.peak_hours_end,
             peak_hours_price: tariff.peak_hours_price,
@@ -240,8 +240,8 @@ class BillingService {
             description: tariff.description,
             tariff_type: tariffTypeString, // 使用字符串版本
             base_price: tariff.base_price,
-            service_fee: tariff.service_fee,
-            minimum_fee: tariff.minimum_fee,
+            service_fee: 0, // 移除對 tariff.service_fee 的引用
+            minimum_fee: 0, // 移除對 tariff.minimum_fee 的引用
             peak_hours_start: tariff.peak_hours_start,
             peak_hours_end: tariff.peak_hours_end,
             peak_hours_price: tariff.peak_hours_price,
@@ -284,7 +284,7 @@ class BillingService {
   async generateBillingForTransaction(transactionId, options = {}) {
     try {
       // 获取交易记录
-      const transaction = await this.mysqlPrisma.transactions.findUnique({
+      const transaction = await this.mysqlPrisma.charging_transactions.findUnique({
         where: { transaction_id: transactionId }
       });
 
@@ -315,9 +315,13 @@ class BillingService {
           throw new Error(`费率方案 ID ${tariffId} 不存在`);
         }
       } else {
-        // 获取默认费率方案
-        const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
-        tariff = await this.getDefaultTariff({ isAC, isDC: !isAC });
+        // 根据枪的tariff关联获取费率方案
+        tariff = await this.getTariffForGun(transaction.cpid, transaction.cpsn);
+        if (!tariff) {
+          // 如果没有找到枪的tariff关联，使用默认费率方案
+          const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
+          tariff = await this.getDefaultTariff({ isAC, isDC: !isAC });
+        }
       }
 
       if (!tariff) {
@@ -339,6 +343,48 @@ class BillingService {
     } catch (error) {
       console.error(`为交易生成账单失败: ${error.message}`);
       throw new Error(`为交易生成账单失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 根据枪的ID获取适用的费率方案
+   * @param {string} cpid - 充电桩ID
+   * @param {string} cpsn - 充电桩序号
+   * @returns {Promise<Object|null>} 费率方案对象或null
+   */
+  async getTariffForGun(cpid, cpsn) {
+    try {
+      // 首先找到对应的枪
+      const gun = await this.mysqlPrisma.guns.findFirst({
+        where: {
+          cpid,
+          cpsn
+        },
+        include: {
+          gun_tariffs: {
+            where: {
+              is_active: true
+            },
+            include: {
+              tariffs: true
+            },
+            orderBy: {
+              priority: 'asc' // 优先级高的排在前面
+            }
+          }
+        }
+      });
+
+      if (!gun || !gun.gun_tariffs || gun.gun_tariffs.length === 0) {
+        return null;
+      }
+
+      // 返回优先级最高的活跃tariff
+      const activeTariffAssociation = gun.gun_tariffs[0];
+      return activeTariffAssociation.tariffs;
+    } catch (error) {
+      console.error(`获取枪的费率方案失败: ${error.message}`);
+      return null;
     }
   }
 
@@ -379,7 +425,7 @@ class BillingService {
       const energyConsumed = parseFloat(transaction.energy_consumed);
       let appliedPrice = parseFloat(tariff.base_price);
       let energyFee = 0;
-      let serviceFee = parseFloat(tariff.service_fee) || 0;
+      let serviceFee = 0; // 移除對 tariff.service_fee 的引用
       let discountAmount = 0;
       let taxAmount = 0;
       let totalAmount = 0;
@@ -508,17 +554,8 @@ class BillingService {
           };
       }
 
-      // 确保不低于最低消费
-      const minimumFee = parseFloat(tariff.minimum_fee) || 0;
-      if (minimumFee > 0 && (energyFee + serviceFee) < minimumFee) {
-        const originalTotal = energyFee + serviceFee;
-        energyFee = minimumFee - serviceFee;
-        
-        billingDetails.minimumFeeApplied = true;
-        billingDetails.originalTotal = originalTotal;
-        billingDetails.minimumFee = minimumFee;
-      }
-
+      // 移除最低消費邏輯
+      
       // 计算总额
       totalAmount = energyFee + serviceFee - discountAmount + taxAmount;
 

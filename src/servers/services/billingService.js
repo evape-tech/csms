@@ -21,22 +21,30 @@ async function getTariffs(whereClause = {}) {
 }
 
 /**
- * 取得預設費率方案
- * @returns {Promise<Object|null>} 預設費率方案
+ * 根據槍的ID獲取適用的費率方案
+ * @param {string} cpid - 充電樁ID
+ * @param {string} cpsn - 充電樁序號
+ * @returns {Promise<Object|null>} 費率方案對象或null
  */
-async function getDefaultTariff() {
+async function getTariffForGun(cpid, cpsn) {
   try {
-    const tariffs = await databaseService.getTariffs({ is_default: true, is_active: true });
-    if (tariffs.length > 0) {
-      return tariffs[0];
+    // 首先找到對應的槍
+    const gun = await databaseService.getGunByCpsn(cpsn);
+    if (!gun) {
+      return null;
     }
-    
-    // 如果沒有預設方案，則取第一個啟用的方案
-    const activeTariffs = await databaseService.getTariffs({ is_active: true });
-    return activeTariffs.length > 0 ? activeTariffs[0] : null;
+
+    // 獲取槍的活躍tariff關聯
+    const gunTariffs = await databaseService.getActiveGunTariffs(gun.id);
+    if (!gunTariffs || gunTariffs.length === 0) {
+      return null;
+    }
+
+    // 返回優先級最高的活躍tariff
+    return gunTariffs[0].tariffs;
   } catch (error) {
-    logger.error('取得預設費率方案失敗:', error);
-    throw error;
+    logger.error(`獲取槍的費率方案失敗:`, error);
+    return null;
   }
 }
 
@@ -69,7 +77,7 @@ async function calculateBill(transaction, tariff = null) {
     let energyConsumed = parseFloat(transaction.energy_consumed);
     let appliedPrice = parseFloat(tariff.base_price);
     let energyFee = 0;
-    let serviceFee = parseFloat(tariff.service_fee || 0);
+    let serviceFee = 0; // 移除對 tariff.service_fee 的引用
     let discountAmount = 0;
     
     // 保存計費明細
@@ -237,21 +245,9 @@ async function calculateBill(transaction, tariff = null) {
         });
     }
     
-    // 處理最低消費金額
-    if (tariff.minimum_fee && (energyFee + serviceFee) < parseFloat(tariff.minimum_fee)) {
-      const minimumFee = parseFloat(tariff.minimum_fee);
-      const additionalFee = minimumFee - (energyFee + serviceFee);
-      
-      serviceFee += additionalFee;
-      
-      billingDetails.calculation.push({
-        type: 'MINIMUM_FEE',
-        minimumRequired: minimumFee,
-        additionalFee: additionalFee
-      });
-    }
+    // 移除最低消費金額處理邏輯
     
-    // 計算總金額（電費 + 服務費 - 折扣）
+    // 計算總金額（電費 - 折扣）
     const totalAmount = energyFee + serviceFee - discountAmount;
     
     // 創建帳單記錄
@@ -317,11 +313,16 @@ async function generateBillForTransaction(transactionId) {
       return existingBill[0];
     }
     
-    // 獲取預設費率方案
-    const defaultTariff = await getDefaultTariff();
+    // 根據槍的tariff關聯獲取費率方案
+    let tariff = await getTariffForGun(transaction.cpid, transaction.cpsn);
+    if (!tariff) {
+      // 如果沒有找到槍的tariff關聯，使用預設費率方案
+      tariff = await getDefaultTariff();
+    }
     
-    // 計算帳單
-    return await calculateBill(transaction, defaultTariff);
+    if (!tariff) {
+      throw new Error('找不到可用的費率方案');
+    }
   } catch (error) {
     logger.error(`為交易生成帳單失敗:`, error);
     throw error;
@@ -351,8 +352,20 @@ async function processUnbilledTransactions(batchSize = 50) {
           continue;
         }
         
-        // 生成帳單
-        await generateBillForTransaction(transaction.id);
+        // 根據槍的tariff關聯獲取費率方案
+        let tariff = await getTariffForGun(transaction.cpid, transaction.cpsn);
+        if (!tariff) {
+          // 如果沒有找到槍的tariff關聯，使用預設費率方案
+          tariff = await getDefaultTariff();
+        }
+        
+        if (!tariff) {
+          logger.warn(`交易 ${transaction.transaction_id} 找不到可用的費率方案，跳過計費`);
+          continue;
+        }
+        
+        // 計算帳單
+        await calculateBill(transaction, tariff);
         processedCount++;
       } catch (error) {
         logger.error(`處理交易 ${transaction.transaction_id} 帳單失敗:`, error);
@@ -403,6 +416,7 @@ function isWeekendDay(date) {
 module.exports = {
   getTariffs,
   getDefaultTariff,
+  getTariffForGun,
   calculateBill,
   generateBillForTransaction,
   processUnbilledTransactions

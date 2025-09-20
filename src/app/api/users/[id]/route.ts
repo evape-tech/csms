@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { databaseService } from '../../../../lib/database/service';
 import DatabaseUtils from '../../../../lib/database/utils';
+import { AuthUtils } from '@/lib/auth/auth';
 
-// 簡易身份驗證檢查 - 在實際環境中，應使用更安全的身份驗證方式
+// 簡易身份驗證檢查
 async function isAdmin(req: NextRequest) {
     try {
-        // 從請求頭獲取 API 密鑰
-        const apiKey = req.headers.get('X-API-Key');
-        
-        // 檢查 API 密鑰是否匹配管理員 API 密鑰
-        const adminApiKey = process.env.ADMIN_API_KEY || 'admin-secret-key';
-        
-        return apiKey === adminApiKey;
+        let currentUser;
+        try {
+            currentUser = await AuthUtils.getCurrentUser(req);
+        } catch (error) {
+            throw error;
+        }
+        return currentUser && AuthUtils.isAdmin(currentUser);
     } catch (error) {
         console.error('驗證管理員身份時出錯:', error);
         return false;
@@ -29,7 +30,12 @@ export async function GET(
 ) {
     try {
         // 檢查用戶是否是管理員
-        const adminStatus = await isAdmin(req);
+        let adminStatus;
+        try {
+            adminStatus = await isAdmin(req);
+        } catch (error) {
+            throw error;
+        }
         
         if (!adminStatus) {
             return NextResponse.json({

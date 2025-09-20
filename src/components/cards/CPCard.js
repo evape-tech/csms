@@ -32,7 +32,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BoltIcon from '@mui/icons-material/Bolt';
-import { AddChargerDialog, ChargerSettingsDialog, AddMeterDialog } from '../dialog';
+import { AddChargerDialog, AddMeterDialog } from '../dialog';
 import { deleteGunAction } from '../../actions/gunActions';
 import { updateBalanceMode, updateMaxPower } from '../../actions/stationActions';
 
@@ -140,6 +140,8 @@ export default function CPCard({ chargers, stations, meters }) {
       max_kw: gun.max_kw ?? gun.maxPower ?? (gun.power ? Math.round(gun.power / 1000) : null),
       // description mapping: guns_memo1 is 備註/描述
       desc: gun.guns_memo1 ?? gun.desc ?? gun.memo ?? null,
+      // tariff information
+      gun_tariffs: gun.gun_tariffs || [],
       // meter information
       meter_id: meter.id,
       meter: {
@@ -766,6 +768,12 @@ function MeterGroupCard({
                     onSave={onSave}
                     loadingMap={loadingMap}
                     isPendingDelete={isPendingDelete}
+                    stations={[{
+                      id: meterGroup.meter.station_id,
+                      name: meterGroup.meter.station_name,
+                      station_code: meterGroup.meter.station_code,
+                      meters: [meterGroup.meter]
+                    }]} // 構造包含當前電表的 stations 結構
                   />
                 </Box>
               ))}
@@ -778,20 +786,21 @@ function MeterGroupCard({
 }
 
 // 單一充電樁卡片
-function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSettings, onDelete, onSave, loadingMap = {}, isPendingDelete = false, layout = 'linear' }) {
+function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSettings, onDelete, onSave, loadingMap = {}, isPendingDelete = false, layout = 'linear', stations = [] }) {
    const theme = useTheme();
    const isLinear = layout === 'linear';
-   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-   // 單一充電樁設置Dialog
-   const handleSettingsClick = () => {
-     setSettingsDialogOpen(true);
+   const [editDialogOpen, setEditDialogOpen] = useState(false);
+   
+   // 單一充電樁編輯Dialog
+   const handleEditClick = () => {
+     setEditDialogOpen(true);
    };
    const isActionLoading = Boolean(loadingMap && loadingMap[charger.id]);
    return (
     <Card sx={{
       width: '100%',
-      height: isLinear ? 140 : 'auto',
-      minHeight: isLinear ? 140 : 160,
+      height: isLinear ? 'auto' : 'auto',
+      minHeight: isLinear ? 160 : 180,
       border: `2px solid ${getOcppStatusColor(charger.status)}`,
       borderRadius: 3,
       background: `linear-gradient(120deg, ${theme.palette.background.paper} 60%, ${getOcppStatusColor(charger.status)}11 100%)`,
@@ -873,22 +882,7 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
             </Typography>
           </Box>
           
-          {/* Show 所屬電表 */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
-            <Typography variant="body2" color="text.secondary">所屬電表</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Chip 
-                label={charger.meter ? (charger.meter.meter_no || `ID:${charger.meter.id}`) : '—'} 
-                size="small" 
-                variant="outlined" 
-                color="info" 
-                sx={{ fontSize: '0.7rem', height: 24 }}
-              />
-              <Typography variant="body2" fontWeight="bold" color="info.main" sx={{ fontSize: '1rem' }}>
-                {charger.meter ? (charger.meter.name || `電表 #${charger.meter.id}`) : '—'}
-              </Typography>
-            </Box>
-          </Box>
+
         </Box>
 
         {/* 額外描述：顯示 guns_memo1（mapping 到 charger.desc），以 KV 形式左右對齊 */}
@@ -910,6 +904,75 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
               >
                 {charger.desc}
               </Typography>
+            </Box>
+          </Box>
+        )}
+
+        {/* 費率方案展示 */}
+        {charger.gun_tariffs && charger.gun_tariffs.length > 0 && (
+          <Box sx={{ mt: 1.5, width: '100%' }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>費率方案</Typography>
+              <Box sx={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: 0.5, 
+                maxWidth: isLinear ? 250 : '65%',
+                justifyContent: isLinear ? 'flex-start' : 'flex-end',
+                alignItems: 'center'
+              }}>
+                {charger.gun_tariffs
+                  .sort((a, b) => (a.priority || 1) - (b.priority || 1))
+                  .map((gunTariff, index) => {
+                    const tariff = gunTariff.tariffs;
+                    if (!tariff) return null;
+                    
+                    const isPrimary = index === 0; // 優先級最高的為主要費率
+                    
+                    return (
+                      <Chip
+                        key={`tariff-${gunTariff.id || tariff.id}`}
+                        label={tariff.name}
+                        size="small"
+                        variant={isPrimary ? "filled" : "outlined"}
+                        color={isPrimary ? "primary" : "default"}
+                        sx={{
+                          fontWeight: isPrimary ? 600 : 400,
+                          borderRadius: 2,
+                          height: 24,
+                          fontSize: '0.75rem',
+                          transition: 'all 0.2s ease-in-out',
+                          '& .MuiChip-label': {
+                            px: 1.5,
+                            py: 0.5,
+                            lineHeight: 1.2
+                          },
+                          ...(isPrimary ? {
+                            backgroundColor: 'primary.main',
+                            color: 'primary.contrastText',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            '&:hover': {
+                              backgroundColor: 'primary.dark',
+                              boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+                              transform: 'translateY(-1px)'
+                            }
+                          } : {
+                            backgroundColor: 'background.paper',
+                            borderColor: 'divider',
+                            color: 'text.secondary',
+                            '&:hover': {
+                              backgroundColor: 'action.hover',
+                              borderColor: 'primary.main',
+                              color: 'primary.main'
+                            }
+                          })
+                        }}
+                      />
+                    );
+                  })
+                  .filter(Boolean)
+                }
+              </Box>
             </Box>
           </Box>
         )}
@@ -958,7 +1021,7 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
           variant="outlined"
           color="warning"
           startIcon={<EditIcon />}
-          onClick={handleSettingsClick}
+          onClick={handleEditClick}
           sx={{ textTransform: 'none', borderColor: '#ffb300', color: '#ff6f00' }}
         >
           編輯
@@ -976,8 +1039,14 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
           {isPendingDelete ? '刪除中...' : '刪除'}
         </Button>
 
-        {/* 設置 Dialog */}
-        <ChargerSettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} charger={charger} onSave={onSave} />
+        {/* 編輯 Dialog - 使用 AddChargerDialog 的編輯模式 */}
+        <AddChargerDialog 
+          open={editDialogOpen} 
+          onClose={() => setEditDialogOpen(false)} 
+          charger={charger} 
+          onSave={onSave}
+          stations={stations} // 傳遞 stations 數據
+        />
       </Box>
     </Card>
   );
