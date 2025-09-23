@@ -3,13 +3,10 @@
  * 处理能源管理系统(Energy Management System)相关接口和逻辑
  */
 
-const logger = require('../utils/logger');
-const connectionService = require('../services/connectionService');
-const chargePointRepository = require('../repositories/chargePointRepository');
-const ocppMessageService = require('../services/ocppMessageService');
-const emsService = require('../services/emsService');
-const { calculateEmsAllocation } = require('../../lib/emsAllocator');
-const { generateUniqueId } = require('../utils/helpers');
+const { logger, generateUniqueId } = require('../utils');
+const { connectionService, ocppMessageService, emsService } = require('../services');
+const { chargePointRepository } = require('../repositories');
+const { calculateEmsAllocation } = require('../../lib');
 
 /**
  * 全站功率重新分配调度器

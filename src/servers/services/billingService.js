@@ -1,423 +1,516 @@
 /**
- * 計費服務
- * 處理充電交易的計費功能
+ * 账单服务
+ * billingService.js
+ * 
+ * 这个模块专门负责账单相关功能:
+ * 1. 为充电交易生成账单记录 (billing_records)
+ * 2. 基于不同费率类型计算费用
+ * 3. 处理账单状态更新
+ * 4. 账单统计和查询
+ * 
+ * 费率管理已移至 tariffService.js 遵循单一职责原则
+ * 本服务完全通过数据库抽象层操作，不直接依赖任何特定数据库客户端
  */
 
-const logger = require('../utils/logger');
 const { databaseService } = require('../../lib/database/service.js');
+const tariffService = require('./tariffService.js');
 
 /**
- * 取得費率方案
- * @param {Object} whereClause 過濾條件
- * @returns {Promise<Array>} 費率方案列表
+ * 计费服务类
  */
-async function getTariffs(whereClause = {}) {
-  try {
-    return await databaseService.getTariffs(whereClause);
-  } catch (error) {
-    logger.error(`取得費率方案失敗:`, error);
-    throw error;
+class BillingService {
+  constructor() {
+    this.databaseService = databaseService;
+    this.tariffService = tariffService;
   }
-}
 
-/**
- * 根據槍的ID獲取適用的費率方案
- * @param {string} cpid - 充電樁ID
- * @param {string} cpsn - 充電樁序號
- * @returns {Promise<Object|null>} 費率方案對象或null
- */
-async function getTariffForGun(cpid, cpsn) {
-  try {
-    // 首先找到對應的槍
-    const gun = await databaseService.getGunByCpsn(cpsn);
-    if (!gun) {
-      return null;
-    }
+  /**
+   * 为完成的充电交易生成账单
+   * @param {string} transactionId - 交易ID
+   * @param {Object} options - 可选参数
+   * @param {number} options.tariffId - 指定费率方案ID
+   * @param {boolean} options.autoMode - 是否为自动模式（不抛出错误）
+   * @param {boolean} options.skipValidation - 跳过某些验证（如充电量检查）
+   * @returns {Promise<Object|null>} 创建的账单记录，自动模式下失败返回null
+   */
+  async generateBillingForTransaction(transactionId, options = {}) {
+    const { tariffId, autoMode = false, skipValidation = false } = options;
+    
+    try {
+      // 获取交易记录
+      const transaction = await this.databaseService.getTransactionById(transactionId);
 
-    // 獲取槍的活躍tariff關聯
-    const gunTariffs = await databaseService.getActiveGunTariffs(gun.id);
-    if (!gunTariffs || gunTariffs.length === 0) {
-      return null;
-    }
+      if (!transaction) {
+        const error = `交易 ${transactionId} 不存在`;
+        if (autoMode) {
+          console.warn(`[自动计费] ${error}`);
+          return null;
+        }
+        throw new Error(error);
+      }
 
-    // 返回優先級最高的活躍tariff
-    return gunTariffs[0].tariffs;
-  } catch (error) {
-    logger.error(`獲取槍的費率方案失敗:`, error);
-    return null;
-  }
-}
+      // 检查交易状态
+      if (!['COMPLETED', 'STOPPED', 'ERROR'].includes(transaction.status)) {
+        const error = `交易 ${transactionId} 状态为 ${transaction.status}，无法生成账单`;
+        if (autoMode) {
+          console.debug(`[自动计费] ${error}`);
+          return null;
+        }
+        throw new Error(error);
+      }
 
-/**
- * 根據交易計算帳單
- * @param {Object} transaction 交易資料
- * @param {Object} [tariff] 指定的費率方案，如果不提供則使用預設方案
- * @returns {Promise<Object>} 計算好的帳單記錄
- */
-async function calculateBill(transaction, tariff = null) {
-  try {
-    if (!transaction) {
-      throw new Error('未提供交易資料');
-    }
+      // 检查是否已存在账单
+      const existingBillings = await this.databaseService.getBillingRecords({
+        transaction_id: transactionId
+      });
 
-    if (!transaction.energy_consumed || transaction.energy_consumed <= 0) {
-      logger.warn(`交易 ${transaction.transaction_id} 沒有耗電量記錄，無法計費`);
-      return null;
-    }
+      if (existingBillings.length > 0) {
+        if (autoMode) {
+          console.debug(`[自动计费] 交易 ${transactionId} 已存在账单记录，跳过生成`);
+        }
+        return existingBillings[0];
+      }
 
-    // 如果沒有指定費率方案，使用預設方案
-    if (!tariff) {
-      tariff = await getDefaultTariff();
+      // 检查充电量（只在自动模式下进行此检查）
+      if (autoMode && !skipValidation) {
+        if (!transaction.energy_consumed || parseFloat(transaction.energy_consumed) <= 0) {
+          console.warn(`[自动计费] 交易 ${transactionId} 没有有效的充电量，不生成账单`);
+          return null;
+        }
+      }
+
+      // 获取适用的费率方案
+      let tariff;
+      
+      if (tariffId) {
+        tariff = await this.tariffService.getTariffById(tariffId);
+        if (!tariff) {
+          const error = `费率方案 ID ${tariffId} 不存在`;
+          if (autoMode) {
+            console.error(`[自动计费] ${error}`);
+            return null;
+          }
+          throw new Error(error);
+        }
+      } else {
+        // 根据枪的tariff关联获取费率方案
+        const gunId = await this.getGunIdFromCpidCpsn(transaction.cpid, transaction.cpsn);
+        tariff = await this.tariffService.getTariffForGun(gunId);
+        
+        if (!tariff) {
+          // 如果没有找到枪的tariff关联，使用默认费率方案
+          const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
+          tariff = await this.tariffService.getDefaultTariff({ isAC, isDC: !isAC });
+        }
+      }
+
       if (!tariff) {
-        throw new Error('找不到可用的費率方案');
+        const error = '未找到合适的费率方案';
+        if (autoMode) {
+          console.error(`[自动计费] 交易 ${transactionId}: ${error}`);
+          return null;
+        }
+        throw new Error(error);
+      }
+
+      // 计算费用
+      const billing = await this.calculateBilling(transaction, tariff);
+
+      // 保存账单记录
+      const billingRecord = await this.databaseService.createBillingRecord(billing);
+
+      if (autoMode) {
+        console.info(`[自动计费] 已为交易 ${transactionId} 生成账单记录 #${billingRecord.id}`);
+      }
+
+      return billingRecord;
+    } catch (error) {
+      const errorMsg = `为交易 ${transactionId} 生成账单失败: ${error.message}`;
+      
+      if (autoMode) {
+        console.error(`[自动计费] ${errorMsg}`);
+        return null;
+      } else {
+        console.error(errorMsg);
+        throw new Error(errorMsg);
       }
     }
+  }
 
-    // 計算基本電費
-    let energyConsumed = parseFloat(transaction.energy_consumed);
-    let appliedPrice = parseFloat(tariff.base_price);
-    let energyFee = 0;
-    let serviceFee = 0; // 移除對 tariff.service_fee 的引用
-    let discountAmount = 0;
-    
-    // 保存計費明細
-    const billingDetails = {
-      tariffName: tariff.name,
-      tariffType: tariff.tariff_type,
-      calculation: []
-    };
+  /**
+   * 获取充电桩类型 (AC/DC)
+   * @param {string} cpid - 充电桩ID
+   * @param {string} cpsn - 充电桩序号
+   * @returns {Promise<string>} 充电桩类型 ('AC' 或 'DC')
+   */
+  async getChargerType(cpid, cpsn) {
+    try {
+      const guns = await this.databaseService.getGuns({
+        cpid,
+        cpsn
+      });
+      
+      return guns.length > 0 ? (guns[0].acdc || 'AC') : 'AC'; // 默认为AC
+    } catch (error) {
+      console.error(`获取充电桩类型失败: ${error.message}`);
+      return 'AC'; // 出错时默认为AC
+    }
+  }
 
-    // 根據費率類型計算電費
-    switch (tariff.tariff_type) {
-      case 'FIXED_RATE':
-        // 固定費率：單一價格
-        energyFee = energyConsumed * appliedPrice;
-        billingDetails.calculation.push({
-          type: 'FIXED_RATE',
-          kwh: energyConsumed,
-          price: appliedPrice,
-          amount: energyFee
-        });
-        break;
-        
-      case 'TIME_OF_USE':
-        // 分時費率：需要分析充電發生的時段
-        // 這裡僅實作簡化版，實際應用需要分析具體時段用量
-        const startHour = new Date(transaction.start_time).getHours();
-        const isPeak = isPeakHour(startHour, tariff.peak_hours_start, tariff.peak_hours_end);
-        const isWeekend = isWeekendDay(new Date(transaction.start_time));
-        
-        if (isWeekend && tariff.weekend_price) {
-          appliedPrice = parseFloat(tariff.weekend_price);
-          billingDetails.calculation.push({
-            type: 'WEEKEND',
-            kwh: energyConsumed,
-            price: appliedPrice,
-            amount: energyConsumed * appliedPrice
-          });
-        } else if (isPeak && tariff.peak_hours_price) {
-          appliedPrice = parseFloat(tariff.peak_hours_price);
-          billingDetails.calculation.push({
-            type: 'PEAK',
-            kwh: energyConsumed,
-            price: appliedPrice,
-            amount: energyConsumed * appliedPrice
-          });
-        } else if (!isPeak && tariff.off_peak_price) {
-          appliedPrice = parseFloat(tariff.off_peak_price);
-          billingDetails.calculation.push({
-            type: 'OFF_PEAK',
-            kwh: energyConsumed,
-            price: appliedPrice,
-            amount: energyConsumed * appliedPrice
-          });
-        } else {
-          // 使用基本價格
-          billingDetails.calculation.push({
-            type: 'DEFAULT',
-            kwh: energyConsumed,
-            price: appliedPrice,
-            amount: energyConsumed * appliedPrice
-          });
-        }
-        
-        energyFee = energyConsumed * appliedPrice;
-        break;
-        
-      case 'PROGRESSIVE':
-        // 累進費率：根據用電量應用不同費率
-        let remainingKwh = energyConsumed;
-        energyFee = 0;
-        
-        // 第一階梯
-        if (tariff.tier1_max_kwh && remainingKwh > 0) {
-          const tier1Kwh = Math.min(remainingKwh, parseFloat(tariff.tier1_max_kwh));
-          const tier1Price = parseFloat(tariff.tier1_price || tariff.base_price);
-          const tier1Amount = tier1Kwh * tier1Price;
+  /**
+   * 通过 CPID 和 CPSN 获取枪的ID
+   * @param {string} cpid - 充电桩ID
+   * @param {string} cpsn - 充电桩序号
+   * @returns {Promise<number|null>} 枪的ID
+   */
+  async getGunIdFromCpidCpsn(cpid, cpsn) {
+    try {
+      const guns = await this.databaseService.getGuns({
+        cpid,
+        cpsn
+      });
+      
+      return guns.length > 0 ? guns[0].id : null;
+    } catch (error) {
+      console.error(`获取枪ID失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 计算账单金额
+   * @param {Object} transaction - 交易记录
+   * @param {Object} tariff - 费率方案
+   * @returns {Promise<Object>} 账单数据
+   */
+  async calculateBilling(transaction, tariff) {
+    try {
+      if (!transaction.energy_consumed) {
+        throw new Error('交易缺少用电量数据，无法计算账单');
+      }
+
+      const energyConsumed = parseFloat(transaction.energy_consumed);
+      let appliedPrice = parseFloat(tariff.base_price);
+      let energyFee = 0;
+      let serviceFee = 0;
+      let discountAmount = 0;
+      let taxAmount = 0;
+      let totalAmount = 0;
+      let billingDetails = {};
+
+      // 根据不同费率类型计算
+      switch (tariff.tariff_type) {
+        case 'FIXED_RATE':
+          // 固定费率
+          energyFee = energyConsumed * appliedPrice;
+          billingDetails = {
+            rateType: 'FIXED_RATE',
+            unitPrice: appliedPrice,
+            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
+          };
+          break;
+
+        case 'TIME_OF_USE':
+          // 分时费率 (这里简化处理，实际应按照充电的具体时段分别计费)
+          const chargingStartHour = transaction.start_time.getHours();
+          const chargingEndHour = transaction.end_time.getHours();
           
-          energyFee += tier1Amount;
-          remainingKwh -= tier1Kwh;
+          const peakStartHour = parseInt(tariff.peak_hours_start?.split(':')[0] || '9');
+          const peakEndHour = parseInt(tariff.peak_hours_end?.split(':')[0] || '18');
           
-          billingDetails.calculation.push({
-            type: 'TIER1',
-            kwh: tier1Kwh,
-            price: tier1Price,
-            amount: tier1Amount
-          });
-        }
-        
-        // 第二階梯
-        if (tariff.tier2_max_kwh && remainingKwh > 0) {
-          const tier2Max = parseFloat(tariff.tier2_max_kwh);
-          const tier1Max = parseFloat(tariff.tier1_max_kwh || 0);
-          const tier2Limit = tier2Max - tier1Max;
-          const tier2Kwh = Math.min(remainingKwh, tier2Limit);
-          const tier2Price = parseFloat(tariff.tier2_price || tariff.base_price);
-          const tier2Amount = tier2Kwh * tier2Price;
+          // 简化计算，检查是否在尖峰时段
+          const isPeakTime = (chargingStartHour >= peakStartHour && chargingStartHour < peakEndHour);
           
-          energyFee += tier2Amount;
-          remainingKwh -= tier2Kwh;
+          if (isPeakTime) {
+            appliedPrice = parseFloat(tariff.peak_hours_price) || appliedPrice;
+            billingDetails.rateType = 'PEAK_HOURS';
+          } else {
+            appliedPrice = parseFloat(tariff.off_peak_price) || appliedPrice;
+            billingDetails.rateType = 'OFF_PEAK_HOURS';
+          }
           
-          billingDetails.calculation.push({
-            type: 'TIER2',
-            kwh: tier2Kwh,
-            price: tier2Price,
-            amount: tier2Amount
-          });
-        }
-        
-        // 第三階梯（或更高）
-        if (remainingKwh > 0) {
-          const tier3Price = parseFloat(tariff.tier3_price || tariff.base_price);
-          const tier3Amount = remainingKwh * tier3Price;
+          energyFee = energyConsumed * appliedPrice;
+          billingDetails = {
+            ...billingDetails,
+            unitPrice: appliedPrice,
+            timeFrame: isPeakTime ? '尖峰时段' : '离峰时段',
+            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
+          };
+          break;
+
+        case 'PROGRESSIVE':
+          // 累进费率
+          const tier1Max = parseFloat(tariff.tier1_max_kwh) || 0;
+          const tier2Max = parseFloat(tariff.tier2_max_kwh) || 0;
+          const tier1Price = parseFloat(tariff.tier1_price) || appliedPrice;
+          const tier2Price = parseFloat(tariff.tier2_price) || appliedPrice;
+          const tier3Price = parseFloat(tariff.tier3_price) || appliedPrice;
           
-          energyFee += tier3Amount;
+          let remainingEnergy = energyConsumed;
+          let tier1Energy = 0;
+          let tier2Energy = 0;
+          let tier3Energy = 0;
+          let tier1Cost = 0;
+          let tier2Cost = 0;
+          let tier3Cost = 0;
           
-          billingDetails.calculation.push({
-            type: 'TIER3',
-            kwh: remainingKwh,
-            price: tier3Price,
-            amount: tier3Amount
-          });
-        }
-        
-        // 這裡的 appliedPrice 是一個計算後的平均價格
-        appliedPrice = energyFee / energyConsumed;
-        break;
-        
-      case 'SPECIAL_PROMOTION':
-      case 'MEMBERSHIP':
-      case 'CUSTOM':
-        // 其他方案基於基本費率，但可能包含折扣
-        energyFee = energyConsumed * appliedPrice;
-        
-        // 處理折扣
-        if (tariff.discount_percentage) {
-          const discount = parseFloat(tariff.discount_percentage);
-          discountAmount = energyFee * (discount / 100);
-          energyFee -= discountAmount;
+          if (remainingEnergy > 0 && tier1Max > 0) {
+            tier1Energy = Math.min(remainingEnergy, tier1Max);
+            tier1Cost = tier1Energy * tier1Price;
+            remainingEnergy -= tier1Energy;
+          }
           
-          billingDetails.calculation.push({
-            type: 'DISCOUNT',
-            percentage: discount,
+          if (remainingEnergy > 0 && tier2Max > tier1Max) {
+            tier2Energy = Math.min(remainingEnergy, tier2Max - tier1Max);
+            tier2Cost = tier2Energy * tier2Price;
+            remainingEnergy -= tier2Energy;
+          }
+          
+          if (remainingEnergy > 0) {
+            tier3Energy = remainingEnergy;
+            tier3Cost = tier3Energy * tier3Price;
+          }
+          
+          energyFee = tier1Cost + tier2Cost + tier3Cost;
+          appliedPrice = energyFee / energyConsumed; // 平均单价
+          
+          billingDetails = {
+            rateType: 'PROGRESSIVE',
+            tiers: [
+              { maxKwh: tier1Max, price: tier1Price, energy: tier1Energy, cost: tier1Cost },
+              { maxKwh: tier2Max, price: tier2Price, energy: tier2Energy, cost: tier2Cost },
+              { price: tier3Price, energy: tier3Energy, cost: tier3Cost }
+            ],
+            calculation: `阶梯1: ${tier1Energy.toFixed(2)} kWh × ${tier1Price} = ${tier1Cost.toFixed(2)}\n` +
+                         `阶梯2: ${tier2Energy.toFixed(2)} kWh × ${tier2Price} = ${tier2Cost.toFixed(2)}\n` +
+                         `阶梯3: ${tier3Energy.toFixed(2)} kWh × ${tier3Price} = ${tier3Cost.toFixed(2)}\n` +
+                         `总计: ${energyFee.toFixed(2)}`
+          };
+          break;
+
+        case 'SPECIAL_PROMOTION':
+        case 'MEMBERSHIP':
+          // 特殊促销或会员费率
+          energyFee = energyConsumed * appliedPrice;
+          
+          // 应用折扣
+          if (tariff.discount_percentage && tariff.discount_percentage > 0) {
+            discountAmount = (energyFee * parseFloat(tariff.discount_percentage)) / 100;
+            energyFee -= discountAmount;
+          }
+          
+          billingDetails = {
+            rateType: tariff.tariff_type,
+            unitPrice: appliedPrice,
+            discountPercentage: tariff.discount_percentage,
             originalAmount: energyConsumed * appliedPrice,
-            discountAmount: discountAmount,
-            finalAmount: energyFee
-          });
-        } else {
-          billingDetails.calculation.push({
-            type: 'CUSTOM',
-            kwh: energyConsumed,
-            price: appliedPrice,
-            amount: energyFee
-          });
-        }
-        break;
-        
-      default:
-        // 預設使用基本費率
-        energyFee = energyConsumed * appliedPrice;
-        billingDetails.calculation.push({
-          type: 'DEFAULT',
-          kwh: energyConsumed,
-          price: appliedPrice,
-          amount: energyFee
-        });
-    }
-    
-    // 移除最低消費金額處理邏輯
-    
-    // 計算總金額（電費 - 折扣）
-    const totalAmount = energyFee + serviceFee - discountAmount;
-    
-    // 創建帳單記錄
-    const billingRecord = {
-      transaction_id: transaction.transaction_id,
-      transaction_ref: transaction.id,
-      tariff_id: tariff.id,
-      applied_price: appliedPrice,
-      energy_consumed: energyConsumed,
-      energy_fee: energyFee,
-      service_fee: serviceFee,
-      discount_amount: discountAmount,
-      tax_amount: 0,  // 稅金預設為 0，可根據需要調整
-      total_amount: totalAmount,
-      start_time: new Date(transaction.start_time),
-      end_time: new Date(transaction.end_time || transaction.updatedAt),
-      charging_duration: transaction.charging_duration || 0,
-      billing_details: JSON.stringify(billingDetails),
-      user_id: transaction.user_id,
-      id_tag: transaction.id_tag,
-      cpid: transaction.cpid,
-      cpsn: transaction.cpsn,
-      connector_id: transaction.connector_id,
-      status: 'CALCULATED'
-    };
-    
-    // 保存帳單記錄
-    const savedBilling = await databaseService.createBillingRecord(billingRecord);
-    logger.info(`交易 ${transaction.transaction_id} 的帳單已計算完成，總金額: ${totalAmount}元`);
-    
-    return savedBilling;
-  } catch (error) {
-    logger.error(`計算帳單失敗:`, error);
-    throw error;
-  }
-}
+            discountAmount,
+            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${(energyConsumed * appliedPrice).toFixed(2)}\n` +
+                         `折扣: ${tariff.discount_percentage}% = ${discountAmount.toFixed(2)}\n` +
+                         `折后金额: ${energyFee.toFixed(2)}`
+          };
+          break;
 
-/**
- * 為完成的交易生成帳單
- * @param {string} transactionId 交易ID
- * @returns {Promise<Object>} 生成的帳單記錄
- */
-async function generateBillForTransaction(transactionId) {
-  try {
-    // 查詢交易記錄
-    const transaction = await databaseService.getTransactionById(transactionId);
-    
-    if (!transaction) {
-      throw new Error(`找不到交易記錄 ID: ${transactionId}`);
-    }
-    
-    if (transaction.status !== 'COMPLETED') {
-      throw new Error(`交易 ${transactionId} 尚未完成，無法生成帳單`);
-    }
-    
-    // 檢查是否已有帳單記錄
-    const existingBill = await databaseService.getBillingRecords({
-      transaction_id: transaction.transaction_id
-    });
-    
-    if (existingBill.length > 0) {
-      logger.info(`交易 ${transaction.transaction_id} 已有帳單記錄，返回現有記錄`);
-      return existingBill[0];
-    }
-    
-    // 根據槍的tariff關聯獲取費率方案
-    let tariff = await getTariffForGun(transaction.cpid, transaction.cpsn);
-    if (!tariff) {
-      // 如果沒有找到槍的tariff關聯，使用預設費率方案
-      tariff = await getDefaultTariff();
-    }
-    
-    if (!tariff) {
-      throw new Error('找不到可用的費率方案');
-    }
-  } catch (error) {
-    logger.error(`為交易生成帳單失敗:`, error);
-    throw error;
-  }
-}
-
-/**
- * 批次處理未計費的已完成交易
- * @param {number} batchSize 一次處理的數量
- * @returns {Promise<number>} 處理的交易數量
- */
-async function processUnbilledTransactions(batchSize = 50) {
-  try {
-    // 查詢狀態為 COMPLETED 但未生成帳單的交易
-    const transactions = await databaseService.getUnbilledCompletedTransactions(batchSize);
-    
-    logger.info(`找到 ${transactions.length} 筆未計費的已完成交易`);
-    
-    let processedCount = 0;
-    
-    // 批次處理交易
-    for (const transaction of transactions) {
-      try {
-        // 檢查是否有足夠資料計算帳單
-        if (!transaction.energy_consumed || transaction.energy_consumed <= 0) {
-          logger.warn(`交易 ${transaction.transaction_id} 缺少耗電量資料，無法計費`);
-          continue;
-        }
-        
-        // 根據槍的tariff關聯獲取費率方案
-        let tariff = await getTariffForGun(transaction.cpid, transaction.cpsn);
-        if (!tariff) {
-          // 如果沒有找到槍的tariff關聯，使用預設費率方案
-          tariff = await getDefaultTariff();
-        }
-        
-        if (!tariff) {
-          logger.warn(`交易 ${transaction.transaction_id} 找不到可用的費率方案，跳過計費`);
-          continue;
-        }
-        
-        // 計算帳單
-        await calculateBill(transaction, tariff);
-        processedCount++;
-      } catch (error) {
-        logger.error(`處理交易 ${transaction.transaction_id} 帳單失敗:`, error);
-        // 繼續處理下一筆
+        default:
+          // 自定义费率或其他
+          energyFee = energyConsumed * appliedPrice;
+          billingDetails = {
+            rateType: 'CUSTOM',
+            unitPrice: appliedPrice,
+            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
+          };
       }
+      
+      // 计算总额
+      totalAmount = energyFee + serviceFee - discountAmount + taxAmount;
+
+      return {
+        transaction_id: transaction.transaction_id,
+        transaction_ref: transaction.id,
+        tariff_id: tariff.id,
+        applied_price: appliedPrice,
+        energy_consumed: energyConsumed,
+        energy_fee: energyFee,
+        service_fee: serviceFee,
+        discount_amount: discountAmount,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        start_time: transaction.start_time,
+        end_time: transaction.end_time,
+        charging_duration: transaction.charging_duration || 0,
+        billing_details: JSON.stringify(billingDetails),
+        user_id: transaction.user_id,
+        id_tag: transaction.id_tag,
+        cpid: transaction.cpid,
+        cpsn: transaction.cpsn,
+        connector_id: transaction.connector_id,
+        status: 'CALCULATED'
+      };
+    } catch (error) {
+      console.error(`计算账单金额失败: ${error.message}`);
+      throw new Error(`计算账单金额失败: ${error.message}`);
     }
-    
-    logger.info(`成功處理 ${processedCount} 筆交易的帳單`);
-    return processedCount;
-  } catch (error) {
-    logger.error(`批次處理未計費交易失敗:`, error);
-    throw error;
+  }
+
+  /**
+   * 更新账单状态
+   * @param {number} id - 账单记录ID
+   * @param {string} status - 新状态
+   * @param {Object} additionalData - 额外更新数据
+   * @returns {Promise<Object>} 更新后的账单记录
+   */
+  async updateBillingStatus(id, status, additionalData = {}) {
+    try {
+      // 验证状态是否有效
+      const validStatuses = ['PENDING', 'CALCULATED', 'INVOICED', 'PAID', 'CANCELLED', 'ERROR'];
+      if (!validStatuses.includes(status)) {
+        throw new Error(`无效的账单状态: ${status}`);
+      }
+
+      // 更新账单状态
+      const updatedBilling = await this.databaseService.updateBillingRecord(id, {
+        status,
+        ...additionalData,
+        updated_at: new Date()
+      });
+
+      return updatedBilling;
+    } catch (error) {
+      console.error(`更新账单状态失败: ${error.message}`);
+      throw new Error(`更新账单状态失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 生成账单列表
+   * @param {Object} filters - 过滤条件
+   * @param {Object} pagination - 分页参数
+   * @returns {Promise<Array>} 账单记录列表
+   */
+  async getBillingList(filters = {}, pagination = { page: 1, limit: 10 }) {
+    try {
+      const { page, limit } = pagination;
+      const skip = (page - 1) * limit;
+
+      const where = {};
+
+      // 构建过滤条件
+      if (filters.transactionId) {
+        where.transaction_id = { contains: filters.transactionId };
+      }
+      
+      if (filters.userId) {
+        where.user_id = { contains: filters.userId };
+      }
+      
+      if (filters.idTag) {
+        where.id_tag = { contains: filters.idTag };
+      }
+      
+      if (filters.cpid) {
+        where.cpid = { contains: filters.cpid };
+      }
+      
+      if (filters.status) {
+        where.status = filters.status;
+      }
+      
+      if (filters.startDateFrom && filters.startDateTo) {
+        where.start_time = {
+          gte: new Date(filters.startDateFrom),
+          lte: new Date(filters.startDateTo)
+        };
+      } else if (filters.startDateFrom) {
+        where.start_time = { gte: new Date(filters.startDateFrom) };
+      } else if (filters.startDateTo) {
+        where.start_time = { lte: new Date(filters.startDateTo) };
+      }
+
+      // 查询数据
+      const billings = await this.databaseService.getBillingRecords(where);
+
+      // 獲取總數和分頁處理
+      const total = billings.length;
+      const paginatedBillings = billings.slice(skip, skip + limit);
+
+      return {
+        data: paginatedBillings,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      };
+    } catch (error) {
+      console.error(`获取账单列表失败: ${error.message}`);
+      throw new Error(`获取账单列表失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取账单统计信息
+   * @param {Object} filters - 过滤条件
+   * @returns {Promise<Object>} 统计信息
+   */
+  async getBillingStatistics(filters = {}) {
+    try {
+      const where = {};
+
+      // 构建过滤条件
+      if (filters.startDate && filters.endDate) {
+        where.start_time = {
+          gte: new Date(filters.startDate),
+          lte: new Date(filters.endDate)
+        };
+      }
+
+      if (filters.cpid) {
+        where.cpid = filters.cpid;
+      }
+
+      if (filters.status) {
+        where.status = filters.status;
+      }
+
+      // 获取账单记录
+      const billings = await this.databaseService.getBillingRecords(where);
+
+      // 计算统计信息
+      const totalRecords = billings.length;
+      const totalAmount = billings.reduce((sum, billing) => sum + parseFloat(billing.total_amount || 0), 0);
+      const totalEnergyConsumed = billings.reduce((sum, billing) => sum + parseFloat(billing.energy_consumed || 0), 0);
+      const totalEnergyFee = billings.reduce((sum, billing) => sum + parseFloat(billing.energy_fee || 0), 0);
+      const totalDiscountAmount = billings.reduce((sum, billing) => sum + parseFloat(billing.discount_amount || 0), 0);
+
+      // 按状态分组统计
+      const statusStats = {};
+      billings.forEach(billing => {
+        const status = billing.status || 'UNKNOWN';
+        if (!statusStats[status]) {
+          statusStats[status] = { count: 0, amount: 0 };
+        }
+        statusStats[status].count++;
+        statusStats[status].amount += parseFloat(billing.total_amount || 0);
+      });
+
+      return {
+        totalRecords,
+        totalAmount: parseFloat(totalAmount.toFixed(2)),
+        totalEnergyConsumed: parseFloat(totalEnergyConsumed.toFixed(2)),
+        totalEnergyFee: parseFloat(totalEnergyFee.toFixed(2)),
+        totalDiscountAmount: parseFloat(totalDiscountAmount.toFixed(2)),
+        averageAmount: totalRecords > 0 ? parseFloat((totalAmount / totalRecords).toFixed(2)) : 0,
+        averageEnergyConsumed: totalRecords > 0 ? parseFloat((totalEnergyConsumed / totalRecords).toFixed(2)) : 0,
+        statusStats
+      };
+    } catch (error) {
+      console.error(`获取账单统计信息失败: ${error.message}`);
+      throw new Error(`获取账单统计信息失败: ${error.message}`);
+    }
   }
 }
 
-/**
- * 判斷是否為尖峰時段
- * @param {number} hour 小時 (0-23)
- * @param {string} peakStart 尖峰開始時間 (HH:MM)
- * @param {string} peakEnd 尖峰結束時間 (HH:MM)
- * @returns {boolean} 是否為尖峰時段
- */
-function isPeakHour(hour, peakStart, peakEnd) {
-  if (!peakStart || !peakEnd) return false;
-  
-  const startHour = parseInt(peakStart.split(':')[0]);
-  const endHour = parseInt(peakEnd.split(':')[0]);
-  
-  if (startHour <= endHour) {
-    // 同一天內的時段 (例如 09:00-17:00)
-    return hour >= startHour && hour < endHour;
-  } else {
-    // 跨日的時段 (例如 22:00-06:00)
-    return hour >= startHour || hour < endHour;
-  }
-}
-
-/**
- * 判斷是否為週末
- * @param {Date} date 日期
- * @returns {boolean} 是否為週末
- */
-function isWeekendDay(date) {
-  const day = date.getDay();
-  return day === 0 || day === 6; // 0=週日, 6=週六
-}
-
-module.exports = {
-  getTariffs,
-  getDefaultTariff,
-  getTariffForGun,
-  calculateBill,
-  generateBillForTransaction,
-  processUnbilledTransactions
-};
+// 导出单例实例
+const billingService = new BillingService();
+module.exports = billingService;

@@ -3,9 +3,10 @@
  * 管理WebSocket连接和充电站状态
  */
 
-const logger = require('../utils/logger');
-const chargePointRepository = require('../repositories/chargePointRepository');
-const { MQ_ENABLED } = require('../config/mqConfig');
+const { logger } = require('../utils');
+const { chargePointRepository } = require('../repositories');
+const { mqConfig } = require('../config');
+const { MQ_ENABLED } = mqConfig;
 
 // WebSocket客户端池
 const wsClients = {};
@@ -43,19 +44,49 @@ async function registerConnection(cpsn, ws) {
  * @returns {Promise<void>}
  */
 async function removeConnection(cpsn, ws) {
-  logger.info(`充电站 ${cpsn} 断开连接`);
+  logger.info(`🔌 充电站 ${cpsn} 断开连接 (WebSocket 断开事件)`);
   
   if (wsClients[cpsn]) {
-    // 从连接池中移除
+    // 从连接池中移除指定的 WebSocket 实例
     const index = wsClients[cpsn].indexOf(ws);
     if (index !== -1) {
       wsClients[cpsn].splice(index, 1);
+      logger.info(`✅ 成功从连接池中移除 ${cpsn} 的 WebSocket 连接，索引: ${index}`);
+    } else {
+      logger.warn(`⚠️  未在连接池中找到 ${cpsn} 的 WebSocket 实例`);
     }
     
-    // 如果没有更多连接，更新状态为离线
-    if (wsClients[cpsn].length === 0) {
-      await updateStationOfflineStatus(cpsn);
+    // 清理无效连接（readyState 不是 OPEN 的连接）
+    const originalLength = wsClients[cpsn].length;
+    wsClients[cpsn] = wsClients[cpsn].filter(client => 
+      client.readyState === client.OPEN
+    );
+    const cleanedLength = wsClients[cpsn].length;
+    
+    if (originalLength !== cleanedLength) {
+      logger.info(`🧹 清理了 ${originalLength - cleanedLength} 个无效连接`);
     }
+    
+    logger.info(`📊 ${cpsn} 当前剩余连接数: ${wsClients[cpsn].length}`);
+    
+    // 如果没有更多有效连接，更新状态为离线
+    if (wsClients[cpsn].length === 0) {
+      logger.info(`🔴 ${cpsn} 没有剩余连接，开始更新为离线状态`);
+      await updateStationOfflineStatus(cpsn);
+      
+      // 清理 WebSocket 数据缓存
+      if (wsCpdatas[cpsn]) {
+        logger.debug(`🧹 清理 ${cpsn} 的 WebSocket 数据缓存`);
+        // 保留数据结构但标记为离线
+        if (wsCpdatas[cpsn][0]) {
+          wsCpdatas[cpsn][0].cp_online = "offline";
+        }
+      }
+    } else {
+      logger.info(`🟡 ${cpsn} 仍有其他连接存在，保持在线状态`);
+    }
+  } else {
+    logger.warn(`❌ 连接池中未找到 ${cpsn} 的记录`);
   }
 }
 
@@ -201,17 +232,22 @@ async function updateStationOnlineStatus(cpsn) {
  */
 async function updateStationOfflineStatus(cpsn) {
   try {
-    logger.info(`更新充电站 ${cpsn} 离线状态`);
+    logger.info(`🔴 开始更新充电站 ${cpsn} 离线状态`);
     
     // 查找该充电站下的所有充电桩
     const guns = await chargePointRepository.getAllGuns({ cpsn });
     
     if (guns.length === 0) {
-      logger.warn(`未找到充电站 ${cpsn} 的充电桩记录`);
+      logger.warn(`❌ 未找到充电站 ${cpsn} 的充电桩记录`);
       return [];
     }
     
-    logger.info(`找到 ${guns.length} 个充电桩需要更新状态`);
+    logger.info(`📋 找到 ${guns.length} 个充电桩需要更新状态`);
+    
+    // 记录更新前的状态
+    guns.forEach(gun => {
+      logger.info(`📝 更新前 - CPID:${gun.cpid} | 连接器:${gun.connector} | 当前状态: ${gun.guns_status}`);
+    });
     
     // 批量更新所有充电桩状态为 Unavailable (离线)
     const updateResult = await chargePointRepository.updateGunStatus(
@@ -219,16 +255,17 @@ async function updateStationOfflineStatus(cpsn) {
       'Unavailable'
     );
     
-    logger.info(`成功更新 ${updateResult[0]} 个充电桩状态为 Unavailable`);
+    logger.info(`✅ 成功更新 ${updateResult[0]} 个充电桩状态为 Unavailable`);
     
-    // 记录每个充电桩的状态变更
-    for (const gun of guns) {
-      logger.info(`CPID:${gun.cpid} | 连接器:${gun.connector} | 状态: ${gun.guns_status} -> Unavailable`);
-    }
+    // 重新查询验证更新结果
+    const updatedGuns = await chargePointRepository.getAllGuns({ cpsn });
+    updatedGuns.forEach(gun => {
+      logger.info(`🔍 更新后 - CPID:${gun.cpid} | 连接器:${gun.connector} | 新状态: ${gun.guns_status}`);
+    });
     
-    return guns;
+    return updatedGuns;
   } catch (error) {
-    logger.error(`更新充电站 ${cpsn} 离线状态失败`, error);
+    logger.error(`❌ 更新充电站 ${cpsn} 离线状态失败`, error);
     throw error;
   }
 }
@@ -247,6 +284,13 @@ async function getOnlineCpids() {
     );
     
     logger.debug(`找到 ${onlineCSPNs.length} 个在线设备序号 (CPSN): [${onlineCSPNs.join(', ')}]`);
+    
+    // 调试信息：显示每个 CPSN 的连接数
+    for (const cpsn of Object.keys(wsClients)) {
+      const connections = wsClients[cpsn] || [];
+      const validConnections = connections.filter(ws => ws.readyState === ws.OPEN);
+      logger.debug(`CPSN ${cpsn}: 总连接数=${connections.length}, 有效连接数=${validConnections.length}`);
+    }
     
     if (onlineCSPNs.length === 0) {
       // logger.info('没有在线的充电站');

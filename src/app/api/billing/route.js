@@ -1,8 +1,7 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { NextResponse } from 'next/server';
-import billingService from '@/lib/services/billingService';
+import { getBillingRecords, generateBillingRecord, getBillingStatistics } from '@/actions/billingActions';
 import { AuthUtils } from '@/lib/auth/auth';
 
 // 簡單的認證檢查函數
@@ -22,81 +21,11 @@ async function checkAuth(request) {
 }
 
 /**
- * 获取所有费率方案
- * @returns {Promise<Object>} 费率方案列表
- */
-export async function getTariffs(request) {
-  try {
-    const session = await checkAuth(request);
-    if (!session) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 });
-    }
-
-    const tariffs = await billingService.mysqlPrisma.tariffs.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
-    
-    return NextResponse.json({ tariffs });
-  } catch (error) {
-    console.error(`获取费率方案失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-/**
- * 创建新费率方案
- * @param {Object} request - 请求对象
- * @returns {Promise<Object>} 创建的费率方案
- */
-export async function createTariff(request) {
-  try {
-    const session = await checkAuth(request);
-    if (!session || session.user.role !== 'admin') {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
-    }
-
-    const data = await request.json();
-    const tariff = await billingService.createTariff(data);
-    
-    revalidatePath('/billing/tariffs');
-    return NextResponse.json({ tariff });
-  } catch (error) {
-    console.error(`创建费率方案失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-/**
- * 更新费率方案
- * @param {Object} request - 请求对象
- * @param {Object} params - 路径参数
- * @returns {Promise<Object>} 更新后的费率方案
- */
-export async function updateTariff(request, { params }) {
-  try {
-    const session = await checkAuth(request);
-    if (!session || session.user.role !== 'admin') {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
-    }
-
-    const { id } = params;
-    const data = await request.json();
-    const tariff = await billingService.updateTariff(parseInt(id), data);
-    
-    revalidatePath('/billing/tariffs');
-    return NextResponse.json({ tariff });
-  } catch (error) {
-    console.error(`更新费率方案失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-/**
  * 获取账单记录
  * @param {Object} request - 请求对象
  * @returns {Promise<Object>} 账单记录列表
  */
-export async function getBillingRecords(request) {
+export async function GET(request) {
   try {
     const session = await checkAuth(request);
     if (!session) {
@@ -109,19 +38,28 @@ export async function getBillingRecords(request) {
     const status = searchParams.get('status');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const cpid = searchParams.get('cpid');
+    const transactionId = searchParams.get('transactionId');
+    const userId = searchParams.get('userId');
+    const idTag = searchParams.get('idTag');
 
-    const records = await billingService.getBillingRecords({
-      page,
-      limit,
+    const result = await getBillingRecords({
       status,
-      startDate,
-      endDate
-    });
+      startDateFrom: startDate,
+      startDateTo: endDate,
+      cpid,
+      transactionId,
+      userId,
+      idTag
+    }, { page, limit });
     
-    return NextResponse.json({ records });
+    return NextResponse.json(result);
   } catch (error) {
     console.error(`获取账单记录失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      success: false,
+      error: error.message 
+    }, { status: 500 });
   }
 }
 
@@ -130,7 +68,7 @@ export async function getBillingRecords(request) {
  * @param {Object} request - 请求对象
  * @returns {Promise<Object>} 生成的账单
  */
-export async function generateBilling(request) {
+export async function POST(request) {
   try {
     const session = await checkAuth(request);
     if (!session || session.user.role !== 'admin') {
@@ -138,39 +76,14 @@ export async function generateBilling(request) {
     }
 
     const data = await request.json();
-    const billing = await billingService.generateBilling(data);
+    const result = await generateBillingRecord(data.transactionId, data.options);
     
-    revalidatePath('/billing/records');
-    return NextResponse.json({ billing });
+    return NextResponse.json(result);
   } catch (error) {
     console.error(`生成账单失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-/**
- * 更新账单状态
- * @param {Object} request - 请求对象
- * @param {Object} params - 路径参数
- * @returns {Promise<Object>} 更新后的账单
- */
-export async function updateBillingStatus(request, { params }) {
-  try {
-    const session = await checkAuth(request);
-    if (!session || session.user.role !== 'admin') {
-      return NextResponse.json({ error: '需要管理员权限' }, { status: 403 });
-    }
-
-    const { id } = params;
-    const data = await request.json();
-    const { status, ...additionalData } = data;
-
-    const billing = await billingService.updateBillingStatus(parseInt(id), status, additionalData);
-    
-    revalidatePath('/billing/records');
-    return NextResponse.json({ billing });
-  } catch (error) {
-    console.error(`更新账单状态失败: ${error.message}`);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      success: false,
+      error: error.message 
+    }, { status: 500 });
   }
 }

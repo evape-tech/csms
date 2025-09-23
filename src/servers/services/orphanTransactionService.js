@@ -3,8 +3,8 @@
  * 負責監控和處理因斷電、網路中斷等原因產生的孤兒交易
  */
 
-const logger = require('../utils/logger');
-const chargePointRepository = require('../repositories/chargePointRepository');
+const { logger } = require('../utils');
+const { chargePointRepository } = require('../repositories');
 
 class OrphanTransactionService {
   constructor() {

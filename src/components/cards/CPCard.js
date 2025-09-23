@@ -226,6 +226,7 @@ export default function CPCard({ chargers, stations, meters }) {
         apikey: undefined,
         cmd: 'cmd_start_charging',
         cp_id: targetCharger.cpid,
+        connectorId: targetCharger.connector, // 使用充電樁的實際 connector 欄位，預設為1
       };
       await callOcppEndpoint(id, body);
 
@@ -259,6 +260,7 @@ export default function CPCard({ chargers, stations, meters }) {
         apikey: undefined,
         cmd: 'cmd_stop_charging',
         cp_id: targetCharger.cpid,
+        connectorId: targetCharger.connector ? parseInt(targetCharger.connector, 10) : 1, // 使用充電樁的實際 connector 欄位，預設為1
       };
       await callOcppEndpoint(id, body);
 
@@ -879,6 +881,14 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
             <Typography variant="body2" color="text.secondary">最大功率(kW)</Typography>
             <Typography variant="body2" fontWeight="bold" color={charger.maxPower || charger.max_kw || charger.power ? 'primary.main' : 'text.secondary'} sx={{ fontSize: '1rem', ml: 1 }}>
               {charger.maxPower ? `${charger.maxPower} kW` : charger.max_kw ? `${charger.max_kw} kW` : (charger.power ? `${(charger.power/1000).toFixed(1)} kW` : '—')}
+            </Typography>
+          </Box>
+
+          {/* Show 連接器ID */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
+            <Typography variant="body2" color="text.secondary">連接器ID</Typography>
+            <Typography variant="body2" fontWeight="bold" color="info.main" sx={{ fontSize: '1rem', ml: 1 }}>
+              {charger.connector ?? '—'}
             </Typography>
           </Box>
           

@@ -6,13 +6,13 @@
  */
 const mqService = require('./mqService');
 const { EXCHANGES } = require('../mqServer');
-const logger = require('../utils/logger');
-const chargePointRepository = require('../repositories/chargePointRepository');
+const { logger } = require('../utils');
+const { chargePointRepository } = require('../repositories');
 const connectionService = require('./connectionService');
 const ocppMessageService = require('./ocppMessageService');
 
 // 引入EMS分配算法
-const { calculateEmsAllocation, isCharging } = require('../../lib/emsAllocator');
+const { calculateEmsAllocation } = require('../../lib');
 
 // 电表和充电枪相关辅助函数
 let databaseService;

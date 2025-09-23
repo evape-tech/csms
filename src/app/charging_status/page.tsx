@@ -87,9 +87,9 @@ export default async function ChargingStatus() {
     // 處理 meters 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
     metersFromDb = metersRows.map((r: Record<string, unknown>) => serializeData(r));
     
-    console.log(`✅ [Page /charging_status] Loaded guns via databaseService:`, gunsFromDb.length);
-    console.log(`✅ [Page /charging_status] Loaded stations via databaseService:`, stationsFromDb.length);
-    console.log(`✅ [Page /charging_status] Loaded meters via databaseService:`, metersFromDb.length);
+    // console.log(`✅ [Page /charging_status] Loaded guns via databaseService:`, gunsFromDb.length);
+    // console.log(`✅ [Page /charging_status] Loaded stations via databaseService:`, stationsFromDb.length);
+    // console.log(`✅ [Page /charging_status] Loaded meters via databaseService:`, metersFromDb.length);
     
     // 最後一次驗證確保所有數據都被序列化為純 JavaScript 對象
     gunsFromDb = JSON.parse(JSON.stringify(gunsFromDb));

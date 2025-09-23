@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       // 使用新的遠程停止 API
       apiEndpoint = `${OCPP_BASE_URL}/api/v1/chargepoints/${gun.cpsn}/remotestop`;
       requestBody = {
+        connectorId: body.connectorId || 1, // 加入連接器ID參數
         transactionId: body.transactionId || gun.transactionid || 1 // 使用正確的欄位名稱
       };
     } else {

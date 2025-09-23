@@ -4,10 +4,11 @@
  */
 
 const WebSocket = require('ws');
-const logger = require('../utils/logger');
-const connectionService = require('../services/connectionService');
-const ocppMessageService = require('../services/ocppMessageService');
-const { MQ_ENABLED } = require('../config/mqConfig');
+const { logger } = require('../utils');
+const { connectionService, ocppMessageService } = require('../services');
+const { chargePointRepository } = require('../repositories');
+const { mqConfig } = require('../config');
+const { MQ_ENABLED } = mqConfig;
 
 // OCPP消息类型常量
 const CALL_MESSAGE = 2;
@@ -67,11 +68,10 @@ async function handleMessage(cpsn, ws, message) {
   
   // 记录原始消息到数据库 - 这是与原始代码保持一致的关键
   try {
-    const { createCpLog } = await require('../repositories/chargePointRepository').loadDatabaseModules();
+    const { createCpLog } = await chargePointRepository.loadDatabaseModules();
     // 使用充电站的主要CPID或fallback到CPSN
-    const connService = require('../services/connectionService');
-    const cpid = connService.getStationPrimaryCpid ? 
-      connService.getStationPrimaryCpid(cpsn) : cpsn;
+    const cpid = connectionService.getStationPrimaryCpid ? 
+      connectionService.getStationPrimaryCpid(cpsn) : cpsn;
     
     // 记录原始消息到数据库
     await createCpLog({
@@ -212,11 +212,10 @@ async function handleCallMessage(cpsn, ws, messageId, action, payload) {
     
     // 发送响应前先记录到数据库
     try {
-      const { createCpLog } = await require('../repositories/chargePointRepository').loadDatabaseModules();
+      const { createCpLog } = await chargePointRepository.loadDatabaseModules();
       // 使用充电站的主要CPID或fallback到CPSN
-      const connService = require('../services/connectionService');
-      const cpid = connService.getStationPrimaryCpid ? 
-        connService.getStationPrimaryCpid(cpsn) : cpsn;
+      const cpid = connectionService.getStationPrimaryCpid ? 
+        connectionService.getStationPrimaryCpid(cpsn) : cpsn;
       
       // 记录响应消息到数据库
       await createCpLog({
@@ -249,11 +248,10 @@ async function handleCallMessage(cpsn, ws, messageId, action, payload) {
     
     // 发送错误响应前先记录到数据库
     try {
-      const { createCpLog } = await require('../repositories/chargePointRepository').loadDatabaseModules();
+      const { createCpLog } = await chargePointRepository.loadDatabaseModules();
       // 使用充电站的主要CPID或fallback到CPSN
-      const connService = require('../services/connectionService');
-      const cpid = connService.getStationPrimaryCpid ? 
-        connService.getStationPrimaryCpid(cpsn) : cpsn;
+      const cpid = connectionService.getStationPrimaryCpid ? 
+        connectionService.getStationPrimaryCpid(cpsn) : cpsn;
       
       // 记录错误响应到数据库
       await createCpLog({

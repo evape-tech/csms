@@ -9,7 +9,7 @@ let databaseService;
 let createCpLog;
 
 // 导入日志工具
-const logger = require('../utils/logger');
+const { logger } = require('../utils');
 
 // 数据库初始化标志
 let isDbInitialized = false;
@@ -445,6 +445,10 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     // 確保 ocppTransactionId 為整數
     const transactionIdInt = parseInt(ocppTransactionId);
     
+    // 獲取原始交易記錄以檢查狀態變更
+    const originalTransaction = await findTransactionById(transactionIdInt);
+    const originalStatus = originalTransaction ? originalTransaction.status : null;
+    
     // 準備更新數據
     const updateFields = {
       ...updateData,
@@ -461,8 +465,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     if (updateData.meter_stop !== undefined) {
       updateFields.meter_stop = parseFloat(updateData.meter_stop);
       
-      // 查找原始記錄以計算消耗電量
-      const originalTransaction = await findTransactionById(transactionIdInt);
+      // 使用原始記錄計算消耗電量
       if (originalTransaction && originalTransaction.meter_start !== null) {
         updateFields.energy_consumed = Math.max(0, 
           parseFloat(updateData.meter_stop) - parseFloat(originalTransaction.meter_start)
@@ -476,6 +479,29 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     }
     
     const transaction = await dbService.updateTransactionById(transactionIdInt, updateFields);
+    
+    // 檢查狀態是否變更為已完成或錯誤，如果是則自動生成billing記錄
+    const newStatus = updateFields.status || originalStatus;
+    const statusChanged = originalStatus !== newStatus;
+    
+    if (statusChanged && ['COMPLETED', 'ERROR'].includes(newStatus)) {
+      try {
+        // 導入billing服務並自動生成billing記錄
+        const billingService = require('../services/billingService.js');
+        const billing = await billingService.generateBillingForTransaction(
+          transaction.transaction_id, 
+          { autoMode: true }
+        );
+        
+        if (billing) {
+          logger.info(`已為交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+        }
+      } catch (billingError) {
+        logger.error(`為交易 ${transaction.transaction_id} 自動生成billing失敗:`, billingError);
+        // 不拋出錯誤，避免影響主要的交易更新流程
+      }
+    }
+    
     // logger.info(`更新交易記錄成功: OCPP ID=${transactionIdInt}`);
     return transaction;
   } catch (error) {
@@ -672,6 +698,22 @@ async function handleOrphanTransaction(transaction) {
     await ensureDbInitialized();
     const { databaseService: dbService } = await loadDatabaseModules();
     const updatedTransaction = await dbService.updateTransaction(transaction.transaction_id, updateData);
+    
+    // 為孤兒交易自動生成billing記錄
+    try {
+      const billingService = require('../services/billingService.js');
+      const billing = await billingService.generateBillingForTransaction(
+        transaction.transaction_id, 
+        { autoMode: true }
+      );
+      
+      if (billing) {
+        logger.info(`已為孤兒交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+      }
+    } catch (billingError) {
+      logger.error(`為孤兒交易 ${transaction.transaction_id} 自動生成billing失敗:`, billingError);
+      // 不拋出錯誤，避免影響孤兒交易處理流程
+    }
     
     // 注意：不更新充電樁狀態，因為孤兒交易通常由斷電/網路中斷造成
     // 充電樁可能：

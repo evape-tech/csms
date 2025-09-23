@@ -3,11 +3,10 @@
  * 处理OCPP协议消息的发送和接收
  */
 
-const logger = require('../utils/logger');
+const { logger, generateUniqueId } = require('../utils');
 const connectionService = require('./connectionService');
-const chargePointRepository = require('../repositories/chargePointRepository');
+const { chargePointRepository } = require('../repositories');
 // 移除對emsController的直接引用，打破循環依賴
-const { generateUniqueId } = require('../utils/helpers');
 const EventEmitter = require('events');
 
 /**

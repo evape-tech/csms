@@ -511,7 +511,7 @@ function applyDcLimits(gun, limit, logs) {
   return limit;
 }
 
-export {
+module.exports = {
   calculateEmsAllocation,
   isCharging,
   applyAcLimits,

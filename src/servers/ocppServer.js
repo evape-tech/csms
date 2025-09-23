@@ -9,11 +9,12 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
-const logger = require('./utils/logger');
+const { logger } = require('./utils');
 
 // 引入配置
-const { SERVER } = require('./config/envConfig');
-const { MQ_ENABLED } = require('./config/mqConfig');
+const { envConfig, mqConfig } = require('./config');
+const { SERVER } = envConfig;
+const { MQ_ENABLED } = mqConfig;
 
 // 创建Express应用
 const app = express();
@@ -55,21 +56,13 @@ const wss = new WebSocket.Server({
 });
 
 // 引入控制器 (在wss初始化之后)
-const ocppController = require('./controllers/ocppController');
+const { ocppController, emsController } = require('./controllers');
 
 // 引入MQ服务 (如果启用)
 const mqServer = MQ_ENABLED ? require('./mqServer') : null;
-const ocppEventPublisher = MQ_ENABLED ? require('./publishers/ocppEventPublisher') : null;
-const ocppEventConsumer = MQ_ENABLED ? require('./consumers/ocppEventConsumer') : null;
-const emsEventConsumer = MQ_ENABLED ? require('./consumers/emsEventConsumer') : null;
-const notificationService = MQ_ENABLED ? require('./services/notificationService') : null;
-const systemStatusService = MQ_ENABLED ? require('./services/systemStatusService') : null;
-
-// 引入孤兒交易監控服務
-const { orphanTransactionService } = require('./services/orphanTransactionService');
-
-// 引入健康監控服務
-const { healthMonitoringService } = require('./services/healthMonitoringService');
+const { ocppEventPublisher } = MQ_ENABLED ? require('./publishers') : { ocppEventPublisher: null };
+const { ocppEventConsumer, emsEventConsumer } = MQ_ENABLED ? require('./consumers') : { ocppEventConsumer: null, emsEventConsumer: null };
+const { notificationService, systemStatusService, orphanTransactionService, healthMonitoringService } = require('./services');
 
 /**
  * 发布充电桩连接状态事件到MQ
@@ -277,7 +270,6 @@ function initializeRoutes() {
   app.post('/ocpp/api/trigger_profile_update', async (req, res) => {
     try {
       // 使用新架构中的emsController代替旧的ocppController
-      const emsController = require('./controllers/emsController');
       await emsController.trigger_profile_update(req, res);
     } catch (err) {
       logger.error('触发全站功率重新分配失败', err);
@@ -288,7 +280,6 @@ function initializeRoutes() {
   // 添加触发电表级功率重新分配的API
   app.post('/ocpp/api/trigger_meter_reallocation', async (req, res) => {
     try {
-      const emsController = require('./controllers/emsController');
       await emsController.trigger_meter_reallocation(req, res);
     } catch (err) {
       logger.error('触发电表级功率重新分配失败', err);
@@ -299,7 +290,6 @@ function initializeRoutes() {
   // 添加触发站点级功率重新分配的API
   app.post('/ocpp/api/trigger_station_reallocation', async (req, res) => {
     try {
-      const emsController = require('./controllers/emsController');
       await emsController.trigger_station_reallocation(req, res);
     } catch (err) {
       logger.error('触发站点级功率重新分配失败', err);
@@ -593,7 +583,6 @@ async function initializeServices() {
   
   // 初始化EMS系统
   try {
-    const emsController = require('./controllers/emsController');
     emsController.initializeEmsSystem();
     logger.info('⚡ EMS能源管理系统初始化完成');
   } catch (error) {
