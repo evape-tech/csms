@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 /**
  * 手動觸發功率重新分配 API 依據參數來判定顆粒度
  * POST /api/trigger-power-reallocation
@@ -41,17 +44,17 @@ export async function POST(request: NextRequest) {
         // 根據參數決定觸發範圍
         if (meter_id) {
             // 針對特定電表重新分配
-            triggerUrl = `${ocppServerUrl}/ocpp/api/trigger_meter_reallocation`;
+            triggerUrl = `${ocppServerUrl}/ocpp/api/v1/trigger_meter_reallocation`;
             triggerBody.meter_id = meter_id;
             console.log(`[API] 針對電表 ${meter_id} 觸發功率重新分配`);
         } else if (station_id) {
             // 針對特定站點重新分配
-            triggerUrl = `${ocppServerUrl}/ocpp/api/trigger_station_reallocation`;
+            triggerUrl = `${ocppServerUrl}/ocpp/api/v1/trigger_station_reallocation`;
             triggerBody.station_id = station_id;
             console.log(`[API] 針對站點 ${station_id} 觸發功率重新分配`);
         } else {
             // 全站重新分配
-            triggerUrl = `${ocppServerUrl}/ocpp/api/trigger_profile_update`;
+            triggerUrl = `${ocppServerUrl}/ocpp/api/v1/trigger_profile_update`;
             console.log(`[API] 觸發全站功率重新分配`);
         }
         

@@ -3,6 +3,9 @@ import { getDatabaseClient } from '@/lib/database/adapter';
 import { OperationLogger } from '@/lib/operationLogger';
 import { withAdminAuth } from '@/lib/auth/authMiddleware';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 async function handleDeduct(request: NextRequest) {
   try {
     const { userId, amount, reason, note } = await request.json();

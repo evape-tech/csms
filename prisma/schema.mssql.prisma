@@ -8,19 +8,8 @@ datasource db {
   url      = env("DATABASE_URL_MSSQL")
 }
 
-model cp_logs {
-  id        BigInt    @id(map: "PK__cp_logs__3213E83F8802BF6F") @default(autoincrement())
-  cpid      String?   @db.NVarChar(255)
-  cpsn      String?   @db.NVarChar(255)
-  log       String?   @db.NVarChar(Max)
-  inout     String?   @db.NVarChar(45)
-  time      DateTime?
-  createdAt DateTime?
-  updatedAt DateTime?
-}
-
 model guns {
-  id               Int           @id(map: "PK__guns__3213E83FCADF0972") @default(autoincrement())
+  id               Int           @id(map: "PK__guns__3213E83FF693C421") @default(autoincrement())
   connector        String?       @db.NVarChar(45)
   cpid             String?       @db.NVarChar(255)
   cpsn             String?       @db.NVarChar(255)
@@ -51,7 +40,7 @@ model guns {
 }
 
 model stations {
-  id           Int      @id(map: "PK__stations__3213E83F4E3D6D92") @default(autoincrement())
+  id           Int      @id(map: "PK__stations__3213E83FA9A30629") @default(autoincrement())
   station_code String   @unique(map: "UQ_stations_station_code") @db.NVarChar(50)
   name         String?  @db.NVarChar(100)
   address      String?  @db.NVarChar(255)
@@ -62,7 +51,7 @@ model stations {
 }
 
 model meters {
-  id           Int      @id(map: "PK__meters__3213E83F49BDF137") @default(autoincrement())
+  id           Int      @id(map: "PK__meters__3213E83F94ABA4E4") @default(autoincrement())
   station_id   Int
   meter_no     String   @db.NVarChar(50)
   ems_mode     String   @default("N'static'", map: "DF__meters__ems_mode__49C3F6B7") @db.NVarChar(32)
@@ -81,40 +70,39 @@ model meters {
 }
 
 model tariffs {
-  id                    Int               @id(map: "PK__tariffs__3213E83FA377DDEB") @default(autoincrement())
-  name                  String            @db.NVarChar(100)
-  description           String?           @db.NVarChar(Max)
-  tariff_type           String            @default("N'FIXED_RATE'", map: "DF__tariffs__tariff___37A5467C") @db.NVarChar(20)
-  base_price            Decimal           @db.Decimal(10, 2)
-  charging_parking_fee  Decimal?          @db.Decimal(10, 2)
-  peak_hours_start      String?           @db.NVarChar(5)
-  peak_hours_end        String?           @db.NVarChar(5)
-  peak_hours_price      Decimal?          @db.Decimal(10, 2)
-  off_peak_price        Decimal?          @db.Decimal(10, 2)
-  weekend_price         Decimal?          @db.Decimal(10, 2)
-  tier1_max_kwh         Decimal?          @db.Decimal(10, 2)
-  tier1_price           Decimal?          @db.Decimal(10, 2)
-  tier2_max_kwh         Decimal?          @db.Decimal(10, 2)
-  tier2_price           Decimal?          @db.Decimal(10, 2)
-  tier3_price           Decimal?          @db.Decimal(10, 2)
-  discount_percentage   Decimal?          @db.Decimal(5, 2)
-  promotion_code        String?           @db.NVarChar(50)
+  id                    Int           @id(map: "PK__tariffs__3213E83FE6F01567") @default(autoincrement())
+  name                  String        @db.NVarChar(100)
+  description           String?       @db.NVarChar(Max)
+  tariff_type           String        @default("N'FIXED_RATE'", map: "DF__tariffs__tariff___37A5467C") @db.NVarChar(20)
+  base_price            Decimal       @db.Decimal(10, 2)
+  charging_parking_fee  Decimal?      @db.Decimal(10, 2)
+  peak_hours_start      String?       @db.NVarChar(5)
+  peak_hours_end        String?       @db.NVarChar(5)
+  peak_hours_price      Decimal?      @db.Decimal(10, 2)
+  off_peak_price        Decimal?      @db.Decimal(10, 2)
+  weekend_price         Decimal?      @db.Decimal(10, 2)
+  tier1_max_kwh         Decimal?      @db.Decimal(10, 2)
+  tier1_price           Decimal?      @db.Decimal(10, 2)
+  tier2_max_kwh         Decimal?      @db.Decimal(10, 2)
+  tier2_price           Decimal?      @db.Decimal(10, 2)
+  tier3_price           Decimal?      @db.Decimal(10, 2)
+  discount_percentage   Decimal?      @db.Decimal(5, 2)
+  promotion_code        String?       @db.NVarChar(50)
   valid_from            DateTime?
   valid_to              DateTime?
-  season_start_month    Int?              @db.TinyInt
-  season_end_month      Int?              @db.TinyInt
-  season_type           String            @default("N'ALL_YEAR'", map: "DF__tariffs__season___398D8EEE") @db.NVarChar(20)
+  season_start_month    Int?          @db.TinyInt
+  season_end_month      Int?          @db.TinyInt
+  season_type           String        @default("N'ALL_YEAR'", map: "DF__tariffs__season___398D8EEE") @db.NVarChar(20)
   grace_period_minutes  Int?
-  penalty_rate_per_hour Decimal?          @db.Decimal(10, 2)
-  ac_only               Boolean           @default(false, map: "DF__tariffs__ac_only__3B75D760")
-  dc_only               Boolean           @default(false, map: "DF__tariffs__dc_only__3C69FB99")
-  membership_required   Boolean           @default(false, map: "DF__tariffs__members__3D5E1FD2")
-  is_active             Boolean           @default(true, map: "DF__tariffs__is_acti__3E52440B")
-  is_default            Boolean           @default(false, map: "DF__tariffs__is_defa__3F466844")
-  created_by            String?           @db.NVarChar(100)
-  createdAt             DateTime          @default(now(), map: "DF__tariffs__created__403A8C7D")
-  updatedAt             DateTime          @default(now(), map: "DF__tariffs__updated__412EB0B6") @updatedAt
-  billing_records       billing_records[]
+  penalty_rate_per_hour Decimal?      @db.Decimal(10, 2)
+  ac_only               Boolean       @default(false, map: "DF__tariffs__ac_only__3B75D760")
+  dc_only               Boolean       @default(false, map: "DF__tariffs__dc_only__3C69FB99")
+  membership_required   Boolean       @default(false, map: "DF__tariffs__members__3D5E1FD2")
+  is_active             Boolean       @default(true, map: "DF__tariffs__is_acti__3E52440B")
+  is_default            Boolean       @default(false, map: "DF__tariffs__is_defa__3F466844")
+  created_by            String?       @db.NVarChar(100)
+  createdAt             DateTime      @default(now(), map: "DF__tariffs__created__403A8C7D")
+  updatedAt             DateTime      @default(now(), map: "DF__tariffs__updated__412EB0B6") @updatedAt
   gun_tariffs           gun_tariffs[]
 
   @@index([is_active], map: "IX_tariffs_is_active")
@@ -123,214 +111,8 @@ model tariffs {
   @@index([tariff_type], map: "IX_tariffs_tariff_type")
 }
 
-model billing_channels {
-  id                  Int                   @id(map: "PK__billing___3213E83F66478EBA") @default(autoincrement())
-  name                String                @db.NVarChar(50)
-  code                String                @unique(map: "UQ__billing___357D4CF949C3E77A") @db.NVarChar(50)
-  status              Int                   @default(1, map: "DF__billing_c__statu__6E01572D") @db.TinyInt
-  config              String?               @db.NVarChar(Max)
-  createdAt           DateTime              @default(now(), map: "DF__billing_c__creat__6EF57B66")
-  updatedAt           DateTime              @default(now(), map: "DF__billing_c__updat__6FE99F9F")
-  billing_records     billing_records[]
-  wallet_transactions wallet_transactions[]
-}
-
-model billing_records {
-  id                    BigInt                 @id(map: "PK__billing___3213E83F0BE5E3CD") @default(autoincrement())
-  transaction_id        String                 @db.NVarChar(50)
-  transaction_ref       BigInt?
-  tariff_id             Int
-  applied_price         Decimal                @db.Decimal(10, 2)
-  energy_consumed       Decimal                @db.Decimal(10, 3)
-  energy_fee            Decimal                @db.Decimal(10, 2)
-  service_fee           Decimal                @db.Decimal(10, 2)
-  discount_amount       Decimal?               @db.Decimal(10, 2)
-  tax_amount            Decimal?               @db.Decimal(10, 2)
-  total_amount          Decimal                @db.Decimal(10, 2)
-  currency              String                 @default("N'TWD'", map: "DF__billing_r__curre__72C60C4A") @db.NVarChar(3)
-  start_time            DateTime
-  end_time              DateTime
-  charging_duration     Int
-  billing_details       String?                @db.NVarChar(Max)
-  invoice_number        String?                @db.NVarChar(20)
-  invoice_issued_at     DateTime?
-  payment_method        String?                @db.NVarChar(50)
-  payment_reference     String?                @db.NVarChar(100)
-  payment_time          DateTime?
-  user_id               String?                @db.NVarChar(36)
-  id_tag                String                 @db.NVarChar(20)
-  cpid                  String                 @db.NVarChar(255)
-  cpsn                  String                 @db.NVarChar(255)
-  connector_id          Int
-  status                String                 @default("N'CALCULATED'", map: "DF__billing_r__statu__73BA3083") @db.NVarChar(20)
-  remark                String?                @db.NVarChar(Max)
-  createdAt             DateTime               @default(now(), map: "DF__billing_r__creat__75A278F5")
-  updatedAt             DateTime               @default(now(), map: "DF__billing_r__updat__76969D2E")
-  billing_channels      billing_channels?      @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "FK_billing_records_payment_method")
-  tariffs               tariffs                @relation(fields: [tariff_id], references: [id], onUpdate: NoAction, map: "FK_billing_records_tariff_id")
-  charging_transactions charging_transactions? @relation(fields: [transaction_ref], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_billing_records_transaction_ref")
-  users                 users?                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "FK_billing_records_user_uuid")
-  wallet_transactions   wallet_transactions[]
-
-  @@index([cpid], map: "IX_billing_records_cpid")
-  @@index([id_tag], map: "IX_billing_records_id_tag")
-  @@index([invoice_number], map: "IX_billing_records_invoice_number")
-  @@index([start_time], map: "IX_billing_records_start_time")
-  @@index([status], map: "IX_billing_records_status")
-  @@index([tariff_id], map: "IX_billing_records_tariff_id")
-  @@index([transaction_id], map: "IX_billing_records_transaction_id")
-  @@index([user_id], map: "IX_billing_records_user_id")
-}
-
-model charging_transactions {
-  id                  BigInt                @id(map: "PK__charging__3213E83F93EF8339") @default(autoincrement())
-  transaction_id      String                @unique(map: "UQ__charging__85C600AEB47A7704") @db.NVarChar(50)
-  start_time          DateTime
-  end_time            DateTime?
-  cpid                String                @db.NVarChar(255)
-  cpsn                String                @db.NVarChar(255)
-  connector_id        Int
-  user_id             String?               @db.NVarChar(36)
-  id_tag              String                @db.NVarChar(20)
-  meter_start         Decimal?              @db.Decimal(10, 3)
-  meter_stop          Decimal?              @db.Decimal(10, 3)
-  energy_consumed     Decimal?              @db.Decimal(10, 3)
-  current_power       Decimal?              @db.Decimal(8, 3)
-  current_voltage     Decimal?              @db.Decimal(8, 2)
-  current_current     Decimal?              @db.Decimal(8, 2)
-  last_meter_update   DateTime?
-  charging_duration   Int?
-  status              String                @default("N'ACTIVE'", map: "DF__charging___statu__68487DD7") @db.NVarChar(20)
-  stop_reason         String?               @db.NVarChar(100)
-  createdAt           DateTime
-  updatedAt           DateTime
-  billing_records     billing_records[]
-  users               users?                @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "FK_charging_transactions_user_uuid")
-  wallet_transactions wallet_transactions[]
-
-  @@index([cpid], map: "IX_charging_transactions_cpid")
-  @@index([cpsn], map: "IX_charging_transactions_cpsn")
-  @@index([end_time], map: "IX_charging_transactions_end_time")
-  @@index([id_tag], map: "IX_charging_transactions_id_tag")
-  @@index([start_time], map: "IX_charging_transactions_start_time")
-  @@index([status], map: "IX_charging_transactions_status")
-}
-
-model rfid_cards {
-  id          Int      @id(map: "PK__rfid_car__3213E83F8825BF8A") @default(autoincrement())
-  user_id     String   @db.NVarChar(36)
-  card_number String   @unique(map: "UQ__rfid_car__1E6E0AF4594DB748") @db.NVarChar(50)
-  card_type   String   @default("RFID", map: "DF__rfid_card__card___07C12930") @db.NVarChar(20)
-  status      String   @default("ACTIVE", map: "DF__rfid_card__statu__08B54D69") @db.NVarChar(20)
-  issued_at   DateTime @default(now(), map: "DF__rfid_card__issue__0A9D95DB")
-  createdAt   DateTime @default(now(), map: "DF__rfid_card__creat__0B91BA14")
-  updatedAt   DateTime @default(now(), map: "DF__rfid_card__updat__0C85DE4D")
-  users       users    @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "FK_rfid_cards_user_uuid")
-
-  @@index([card_number], map: "IX_rfid_cards_card_number")
-  @@index([status], map: "IX_rfid_cards_status")
-  @@index([user_id], map: "IX_rfid_cards_user_id")
-}
-
-model user_wallets {
-  id                  Int                   @id(map: "PK__user_wal__3213E83F19BD77C6") @default(autoincrement())
-  user_id             String                @unique(map: "UQ__user_wal__B9BE370E6CEA9AAD") @db.NVarChar(36)
-  balance             Decimal               @default(0.00, map: "DF__user_wall__balan__00200768") @db.Decimal(10, 2)
-  currency            String                @default("TWD", map: "DF__user_wall__curre__01142BA1") @db.NVarChar(3)
-  createdAt           DateTime              @default(now(), map: "DF__user_wall__creat__02084FDA")
-  updatedAt           DateTime              @default(now(), map: "DF__user_wall__updat__02FC7413")
-  users               users                 @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "FK_user_wallets_user_uuid")
-  wallet_transactions wallet_transactions[]
-
-  @@index([user_id], map: "IX_user_wallets_user_id")
-}
-
-model users {
-  id                    Int                     @id(map: "PK__users__3213E83FCB89CD91") @default(autoincrement())
-  uuid                  String?                 @unique(map: "UQ__users__7F4279318F7B603A") @db.NVarChar(36)
-  email                 String?                 @db.NVarChar(255)
-  password              String?                 @db.NVarChar(255)
-  role                  String?                 @db.NVarChar(255)
-  first_name            String?                 @db.NVarChar(50)
-  last_name             String?                 @db.NVarChar(50)
-  phone                 String?                 @db.NVarChar(20)
-  date_of_birth         DateTime?               @db.Date
-  email_verified        Int                     @default(0, map: "DF__users__email_ver__5FB337D6") @db.TinyInt
-  account_status        String                  @default("N'ACTIVE'", map: "DF__users__account_s__60A75C0F") @db.NVarChar(20)
-  last_login_at         DateTime?
-  login_count           Int                     @default(0, map: "DF__users__login_cou__628FA481")
-  failed_login_attempts Int                     @default(0, map: "DF__users__failed_lo__6383C8BA")
-  lockout_until         DateTime?
-  createdAt             DateTime
-  updatedAt             DateTime
-  billing_records       billing_records[]
-  charging_transactions charging_transactions[]
-  operation_logs        operation_logs[]
-  rfid_cards            rfid_cards[]
-  user_wallets          user_wallets?
-  wallet_transactions   wallet_transactions[]
-
-  @@index([account_status], map: "IX_users_account_status")
-  @@index([email], map: "IX_users_email")
-  @@index([email_verified], map: "IX_users_email_verified")
-  @@index([last_login_at], map: "IX_users_last_login_at")
-}
-
-model wallet_transactions {
-  id                      BigInt                 @id(map: "PK__wallet_t__3213E83F7F71E790") @default(autoincrement())
-  user_id                 String                 @db.NVarChar(36)
-  wallet_id               Int
-  transaction_type        String                 @db.NVarChar(20)
-  amount                  Decimal                @db.Decimal(10, 2)
-  balance_before          Decimal                @db.Decimal(10, 2)
-  balance_after           Decimal                @db.Decimal(10, 2)
-  currency                String                 @default("TWD", map: "DF__wallet_tr__curre__114A936A") @db.NVarChar(3)
-  description             String?                @db.NVarChar(255)
-  billing_record_id       BigInt?
-  charging_transaction_id String?                @db.NVarChar(50)
-  reference_id            String?                @db.NVarChar(100)
-  payment_method          String?                @db.NVarChar(50)
-  status                  String                 @default("COMPLETED", map: "DF__wallet_tr__statu__123EB7A3") @db.NVarChar(20)
-  createdAt               DateTime               @default(now(), map: "DF__wallet_tr__creat__14270015")
-  updatedAt               DateTime               @default(now(), map: "DF__wallet_tr__updat__151B244E")
-  billing_records         billing_records?       @relation(fields: [billing_record_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_wallet_transactions_billing")
-  charging_transactions   charging_transactions? @relation(fields: [charging_transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "FK_wallet_transactions_charging_transaction")
-  billing_channels        billing_channels?      @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "FK_wallet_transactions_payment_method")
-  users                   users                  @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "FK_wallet_transactions_user_uuid")
-  user_wallets            user_wallets           @relation(fields: [wallet_id], references: [id], onUpdate: NoAction, map: "FK_wallet_transactions_wallet")
-
-  @@index([billing_record_id], map: "IX_wallet_transactions_billing_record_id")
-  @@index([charging_transaction_id], map: "IX_wallet_transactions_charging_transaction_id")
-  @@index([createdAt], map: "IX_wallet_transactions_createdAt")
-  @@index([status], map: "IX_wallet_transactions_status")
-  @@index([transaction_type], map: "IX_wallet_transactions_transaction_type")
-  @@index([user_id], map: "IX_wallet_transactions_user_id")
-  @@index([wallet_id], map: "IX_wallet_transactions_wallet_id")
-}
-
-model operation_logs {
-  id          BigInt   @id(map: "PK__operatio__3213E83F144AA71C") @default(autoincrement())
-  user_id     String?  @db.NVarChar(36)
-  user_email  String?  @db.NVarChar(255)
-  user_name   String?  @db.NVarChar(100)
-  action_type String   @db.NVarChar(20)
-  entity_type String   @db.NVarChar(20)
-  entity_id   String?  @db.NVarChar(100)
-  entity_name String?  @db.NVarChar(255)
-  description String?  @db.NVarChar(500)
-  status      String   @default("N'SUCCESS'", map: "DF__operation__statu__1EA48E88") @db.NVarChar(10)
-  createdAt   DateTime @default(now(), map: "DF__operation__creat__208CD6FA")
-  users       users?   @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "FK_operation_logs_user_uuid")
-
-  @@index([action_type], map: "IX_operation_logs_action_type")
-  @@index([createdAt], map: "IX_operation_logs_created_at")
-  @@index([entity_type], map: "IX_operation_logs_entity_type")
-  @@index([user_email], map: "IX_operation_logs_user_email")
-  @@index([user_id], map: "IX_operation_logs_user_id")
-}
-
 model gun_tariffs {
-  id        Int      @id(map: "PK__gun_tari__3213E83F201BFB05") @default(autoincrement())
+  id        Int      @id(map: "PK__gun_tari__3213E83FA051E2DB") @default(autoincrement())
   gun_id    Int
   tariff_id Int
   priority  Int?     @default(1, map: "DF__gun_tarif__prior__5629CD9C")

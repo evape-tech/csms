@@ -6,10 +6,10 @@ import AnimatedNumber from '../common/AnimatedNumber';
 
 export default function ErrorMonitorCard() {
   const errorData = {
-    faultCount: { label: '今日異常樁數', value: 3, unit: '台', color: '#ff6b6b' },
-    errorCountToday: { label: '今日異常次數', value: 7, unit: '次', color: '#feca57' },
-    longestDuration: { label: '今日最長故障', value: 42, unit: '分鐘', color: '#48dbfb' },
-    avgResolutionTime: { label: '今日平均修復', value: 15, unit: '分鐘', color: '#4ecdc4' },
+    faultCount: { label: '異常樁數', value: 3, unit: '台', color: '#ff6b6b' },
+    errorCountToday: { label: '異常次數', value: 7, unit: '次', color: '#feca57' },
+    longestDuration: { label: '最長故障', value: 42, unit: '分鐘', color: '#48dbfb' },
+    avgResolutionTime: { label: '平均修復', value: 15, unit: '分鐘', color: '#4ecdc4' },
   };
 
   return (

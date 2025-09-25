@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createTariff, getTariffs } from '../../../actions/tariffActions';
 import { AuthUtils } from '../../../lib/auth/auth';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 // 檢查管理員權限
 async function isAdmin(req: NextRequest) {
     try {

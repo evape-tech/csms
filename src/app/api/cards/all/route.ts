@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/database/adapter';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 const ADMIN_SECRET_KEY = 'admin-secret-key';
 
 export async function GET(request: NextRequest) {

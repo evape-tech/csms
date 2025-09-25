@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -20,14 +20,18 @@ import AnimatedNumber from '../common/AnimatedNumber';
 import { calculateEmsAllocation, isCharging } from '../../lib/emsAllocator';
 
 /**
- * 充電樁列表卡片組件
+ * 充電樁列表卡片組件 - 以電表為單位進行EMS分配
  * @param {Object} props
- * @param {Array} props.chargers - 充電樁數據
- * @param {Array} props.stations - 站點設定數據
+ * @param {Array} props.chargers - 扁平的充電樁數據 (向後兼容)
+ * @param {Array} props.stations - 站點數據結構 (包含 meters 和 guns 的完整嵌套數據)
  */
 export default function CPListCard({ chargers = [], stations = [] }) {
   // 重啟狀態管理
   const [restartingIds, setRestartingIds] = useState(new Set());
+  // 電表展開/收合狀態管理
+  const [expandedMeters, setExpandedMeters] = useState(new Set());
+  // 全部展開/收合狀態
+  const [expandAll, setExpandAll] = useState(false);
 
   // 重啟充電樁處理函數
   const handleRestart = async (chargerId) => {
@@ -64,73 +68,238 @@ export default function CPListCard({ chargers = [], stations = [] }) {
       });
     }
   };
-  // 計算整個場域的 EMS 分配
-  const emsResult = useMemo(() => {
-    if (!chargers || chargers.length === 0 || !stations || stations.length === 0) {
-      return null;
+
+  // 切換電表展開狀態
+  const toggleMeterExpansion = (meterId) => {
+    setExpandedMeters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(meterId)) {
+        newSet.delete(meterId);
+      } else {
+        newSet.add(meterId);
+      }
+      return newSet;
+    });
+  };
+
+  // 全部展開/收合
+  const toggleExpandAll = () => {
+    const allMeterIds = Object.keys(meterEmsResults);
+    if (expandAll) {
+      setExpandedMeters(new Set());
+    } else {
+      setExpandedMeters(new Set(allMeterIds));
     }
-    
-    try {
-      // 準備 siteSetting 數據
-      const siteSetting = stations[0]; // 使用第一個設定
+    setExpandAll(!expandAll);
+  };
+
+  // 處理數據結構：優先使用 stations 的完整數據，必要時使用 chargers 作為補充
+  const processedChargers = useMemo(() => {
+    // 優先使用 stations 數據（包含完整的嵌套結構）
+    if (stations.length > 0) {
+      const flattenedGuns = [];
       
-      // 準備所有充電槍的數據
-      const gunsForAllocation = chargers.map((gun, index) => {
-        const id = gun.cpid || gun.cpsn || `CP-${gun.id || index + 1}`;
-        return {
-          cpid: id,
-          cpsn: gun.cpsn || id,
-          connector: gun.connector || `Connector-${index % 2 + 1}`,
-          acdc: gun.acdc || 'AC',
-          max_kw: gun.max_kw || (gun.acdc === 'DC' ? 120 : 7), // 根據 AC/DC 類型設置默認功率
-          guns_status: gun.guns_status || 'Available'
-        };
+      stations.forEach(station => {
+        station.meters?.forEach(meter => {
+          meter.guns?.forEach(gun => {
+            // 為每個 gun 添加完整的 meter 和 station 資訊
+            flattenedGuns.push({
+              ...gun,
+              meter_id: meter.id,
+              meter: {
+                id: meter.id,
+                meter_no: meter.meter_no,
+                ems_mode: meter.ems_mode,
+                max_power_kw: parseFloat(meter.max_power_kw) || 480,
+                billing_mode: meter.billing_mode,
+                station_id: meter.station_id
+              },
+              station: {
+                id: station.id,
+                station_code: station.station_code,
+                name: station.name,
+                address: station.address,
+                floor: station.floor,
+                operator_id: station.operator_id
+              }
+            });
+          });
+        });
       });
       
-      // 獲取所有在線充電樁 ID
-      const onlineCpids = chargers
-        .filter(gun => gun.guns_status && !gun.guns_status.toLowerCase().includes('offline'))
-        .map(gun => gun.cpsn || gun.cpid);
-      
-      // 對整個場域進行一次 EMS 分配計算
-      const result = calculateEmsAllocation(siteSetting, gunsForAllocation, onlineCpids);
-      // console.log('EMS 計算結果:', result);
-      return result;
-    } catch (error) {
-      console.error('整體 EMS 計算失敗:', error);
-      return null;
+      console.log('使用 stations 數據結構，提取到', flattenedGuns.length, '個充電槍');
+      return flattenedGuns;
     }
-  }, [chargers, stations]);
+    
+    // 如果 stations 沒有數據但有 chargers 數據，使用 chargers 作為後備
+    if (chargers.length > 0) {
+      console.log('使用 chargers 數據結構作為後備，共', chargers.length, '個充電槍');
+      return chargers;
+    }
+    
+    console.log('無可用數據');
+    return [];
+  }, [stations, chargers]);
+
+  // 根據電表分組充電樁並計算各電表的 EMS 分配
+  const meterEmsResults = useMemo(() => {
+    if (!processedChargers || processedChargers.length === 0) {
+      return {};
+    }
+    
+    // 根據 meter_id 分組充電樁
+    const meterGroups = {};
+    processedChargers.forEach(gun => {
+      const meterId = gun.meter_id || gun.meter?.id;
+      if (!meterId) {
+        console.warn('充電樁缺少 meter_id:', gun);
+        return;
+      }
+      
+      if (!meterGroups[meterId]) {
+        // 優先使用 gun.meter 中的完整電表資訊
+        const meterInfo = gun.meter || { 
+          id: meterId, 
+          meter_no: `METER-${meterId}`,
+          ems_mode: 'static',
+          max_power_kw: 480 
+        };
+        
+        meterGroups[meterId] = {
+          meter: meterInfo,
+          guns: [],
+          station: gun.station // 保存站點資訊
+        };
+      }
+      meterGroups[meterId].guns.push(gun);
+    });
+    
+    // 對每個電表分別計算 EMS 分配
+    const results = {};
+    Object.entries(meterGroups).forEach(([meterId, meterGroup]) => {
+      try {
+        // 準備電表設定數據
+        const meterSetting = {
+          ems_mode: meterGroup.meter.ems_mode || 'static',
+          max_power_kw: meterGroup.meter.max_power_kw || 480
+        };
+        
+        // 準備該電表下所有充電槍的數據
+        const gunsForAllocation = meterGroup.guns.map((gun, index) => {
+          const id = gun.cpid || gun.cpsn || `CP-${gun.id || index + 1}`;
+          return {
+            cpid: id,
+            cpsn: gun.cpsn || id,
+            connector: gun.connector || `Connector-${index % 2 + 1}`,
+            acdc: gun.acdc || 'AC',
+            max_kw: gun.max_kw || (gun.acdc === 'DC' ? 120 : 7), // 根據 AC/DC 類型設置默認功率
+            guns_status: gun.guns_status || 'Available'
+          };
+        });
+        
+        // 獲取該電表下所有正在充電的充電樁 ID (使用與 gunsForAllocation 相同的 ID 邏輯)
+        const chargingCpids = meterGroup.guns
+          .filter(gun => isCharging(gun.guns_status))
+          .map(gun => gun.cpid || gun.cpsn || `CP-${gun.id}`); // 使用相同的 ID 邏輯
+        
+        console.log(`電表 ${meterId} CPID 對應關係:`, {
+          guns數據: meterGroup.guns.map(g => ({
+            原始: { cpid: g.cpid, cpsn: g.cpsn, id: g.id },
+            算法用ID: g.cpid || g.cpsn || `CP-${g.id}`,
+            狀態: g.guns_status,
+            isCharging: isCharging(g.guns_status)
+          })),
+          算法輸入: gunsForAllocation.map(g => ({ cpid: g.cpid, status: g.guns_status })),
+          充電中的槍ID: chargingCpids
+        });
+        
+        // 對該電表進行 EMS 分配計算
+        const result = calculateEmsAllocation(meterSetting, gunsForAllocation, chargingCpids);
+        
+        // 詳細記錄 EMS 計算結果
+        console.log(`電表 ${meterId} (${meterGroup.meter.meter_no}) EMS 計算結果:`, {
+          電表設定: meterSetting,
+          充電槍數量: gunsForAllocation.length,
+          充電中的槍數量: chargingCpids.length,
+          充電中的槍ID: chargingCpids,
+          分配結果: result?.allocations?.map(alloc => ({
+            cpid: alloc.cpid,
+            acdc: alloc.acdc,
+            allocated_kw: alloc.allocated_kw,
+            limit: alloc.limit,
+            unit: alloc.unit
+          })),
+          總結: result?.summary ? {
+            charging_guns: result.summary.charging_guns,
+            total_allocated_kw: result.summary.total_allocated_kw,
+            total_allocated_ac_kw: result.summary.total_allocated_ac_kw,
+            total_allocated_dc_kw: result.summary.total_allocated_dc_kw,
+            within_limit: result.summary.within_limit
+          } : null
+        });
+        
+        results[meterId] = {
+          meter: meterGroup.meter,
+          guns: meterGroup.guns,
+          emsResult: result
+        };
+      } catch (error) {
+        console.error(`電表 ${meterId} EMS 計算失敗:`, error);
+        results[meterId] = {
+          meter: meterGroup.meter,
+          guns: meterGroup.guns,
+          emsResult: null
+        };
+      }
+    });
+    
+    return results;
+  }, [processedChargers]);
+
+  // 同步展開狀態
+  useEffect(() => {
+    const allMeterIds = Object.keys(meterEmsResults);
+    
+    // 如果只有一個電表，自動展開
+    if (allMeterIds.length === 1 && expandedMeters.size === 0) {
+      setExpandedMeters(new Set(allMeterIds));
+    }
+    
+    setExpandAll(allMeterIds.length > 0 && allMeterIds.every(id => expandedMeters.has(id)));
+  }, [expandedMeters, meterEmsResults]);
   
-  // 處理充電樁數據
+  // 處理充電樁數據 - 基於電表 EMS 分配結果
   const cpList = useMemo(() => {
-    if (!chargers || chargers.length === 0) {
+    if (!processedChargers || processedChargers.length === 0) {
       return [];
     }
     
-    // 從 guns 數據轉換為 CP 列表格式
-    // 增強數據轉換邏輯，更好地匹配 Prisma schema 中的 guns 表結構
-    return chargers.map((gun, index) => {
+    // 從 guns 數據轉換為 CP 列表格式，並與對應電表的 EMS 分配結果關聯
+    return processedChargers.map((gun, index) => {
       
       // 嘗試找到充電樁 ID - 優先使用 cpid，如果不存在則嘗試其他字段
-      // 參考 Prisma schema: guns 表有 cpid, cpsn, id 字段
-      const id = gun.cpid || gun.cpsn || 
-                `CP-${gun.id || index + 1}`;
+      const id = gun.cpid || gun.cpsn || `CP-${gun.id || index + 1}`;
       
-      // 嘗試找到連接器信息 - guns 表有 connector 字段
-      const connector = gun.connector || 
-                       `Connector-${index % 2 + 1}`; // 如果沒有連接器信息，根據索引模擬
+      // 嘗試找到連接器信息
+      const connector = gun.connector || `Connector-${index % 2 + 1}`;
       
-      // 查找該充電樁的 EMS 分配結果
+      // 查找該充電樁所屬電表的 EMS 分配結果
       let allocatedPower = 0;
       let emsAllocation = null;
+      let meterInfo = null;
       
-      if (emsResult && emsResult.allocations) {
-        // 從整體計算結果中找到對應該充電樁的分配
-        const allocation = emsResult.allocations.find(a => a.cpid === id);
-        if (allocation) {
-          emsAllocation = allocation;
-          allocatedPower = allocation.allocated_kw || 0;
+      const meterId = gun.meter_id || gun.meter?.id;
+      if (meterId && meterEmsResults[meterId]) {
+        const meterResult = meterEmsResults[meterId];
+        meterInfo = meterResult.meter;
+        
+        if (meterResult.emsResult && meterResult.emsResult.allocations) {
+          // 從該電表的 EMS 分配結果中找到對應該充電樁的分配
+          const allocation = meterResult.emsResult.allocations.find(a => a.cpid === id);
+          if (allocation) {
+            emsAllocation = allocation;
+            allocatedPower = allocation.allocated_kw || 0;
+          }
         }
       }
       
@@ -211,11 +380,6 @@ export default function CPListCard({ chargers = [], stations = [] }) {
         }
       }
       
-      // 直接從站點設定中獲取 EMS 模式，而不是從計算結果中獲取
-      const emsMode = stations && stations[0] && stations[0].ems_mode 
-        ? stations[0].ems_mode === 'dynamic' ? 'dynamic' : 'static'
-        : '靜態模式'; // 默認為靜態模式
-      
       return { 
         id, 
         connector, 
@@ -223,12 +387,13 @@ export default function CPListCard({ chargers = [], stations = [] }) {
         status, 
         statusColor,
         emsAllocation, // 包含 EMS 分配的詳細信息
+        meterInfo, // 包含電表資訊
         acdc: gun.acdc || 'AC', // 保存原始的 AC/DC 類型信息
         isCharging: chargingStatus, // 使用 emsAllocator 中的 isCharging 函數判斷的充電狀態
-        emsMode // 記錄 EMS 模式
+        meterId // 記錄電表 ID
       };
     });
-  }, [chargers, stations]);
+  }, [processedChargers, meterEmsResults]);
   return (
     <Card sx={{ width: '100%', height: '100%' }}>
       <CardContent sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -244,161 +409,293 @@ export default function CPListCard({ chargers = [], stations = [] }) {
           }}>
             <EvStationIcon sx={{ color: 'primary.main', fontSize: '1.5rem' }} />
           </Box>
-          <Typography variant="h6">充電樁狀態</Typography>
-          {stations && stations[0] && (
-            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+          <Box>
+            <Typography variant="h6">電表管理系統</Typography>
+            {/* 顯示站點資訊 */}
+            {processedChargers.length > 0 && processedChargers[0]?.station && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                📍 {processedChargers[0].station.name} - {processedChargers[0].station.address}
+                {processedChargers[0].station.floor && ` ${processedChargers[0].station.floor}`}
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+            {Object.keys(meterEmsResults).length > 1 && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={toggleExpandAll}
+                sx={{ fontSize: '0.75rem', minWidth: '80px' }}
+              >
+                {expandAll ? '全部收合' : '全部展開'}
+              </Button>
+            )}
+            <Chip 
+              label={`${Object.keys(meterEmsResults).length} 個電表`} 
+              size="small" 
+              color="info"
+              variant="filled"
+            />
+            <Chip 
+              label={`${cpList.length} 個充電樁`} 
+              size="small" 
+              color="secondary"
+              variant="filled"
+            />
+            {Object.keys(meterEmsResults).length > 0 && (
               <Chip 
-                label={`EMS模式: ${stations[0].ems_mode === 'dynamic' ? '動態' : '靜態'}`} 
+                label={Object.values(meterEmsResults).reduce((sum, meter) => 
+                  sum + (meter.emsResult?.summary?.charging_guns || 0), 0) + ' 個充電中'} 
                 size="small" 
-                color="info"
-                sx={{ mr: 1 }}
+                color="warning"
+                variant="outlined"
               />
-              {emsResult && emsResult.summary && (
-                <Chip 
-                  label={`總功率: ${emsResult.summary.total_allocated_kw.toFixed(2)}kW/${emsResult.summary.max_power_kw}kW`} 
-                  size="small" 
-                  color={emsResult.summary.within_limit ? "success" : "error"}
-                />
-              )}
-              {(!emsResult || !emsResult.summary) && stations[0].max_power_kw && (
-                <Chip 
-                  label={`場域限制: ${stations[0].max_power_kw}kW`}
-                  size="small" 
-                  color="secondary"
-                />
-              )}
-            </Box>
-          )}
+            )}
+          </Box>
         </Box>
         <Box sx={{ flex: 1, overflow: 'auto' }}>
-          <List>
-            <ListItem sx={{ py: 2, px: 1 }} key="header" disablePadding>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {/* 佔位，讓內容對齊 */}
-                <EvStationIcon sx={{ opacity: 0 }} />
-              </ListItemIcon>
-              <ListItemText
-                primary={
-                  <Box sx={{ display: 'flex', fontWeight: 'bold', fontSize: '1rem', color: 'text.secondary' }}>
-                    <Box sx={{ flex: 1 }}>充電樁</Box>
-                    <Box sx={{ flex: 1 }}>接頭</Box>
-                    <Box sx={{ flex: 1 }}>狀態</Box>
-                    <Box sx={{ flex: 1 }}>EMS分配之功率 (kW)</Box>
-                    <Box sx={{ flex: 0.8, textAlign: 'center' }}>操作</Box>
-                  </Box>
-                }
-              />
-            </ListItem>
-            <Divider />
-            {cpList.length > 0 ? (
-              <>
-                {cpList.map((cp, index) => (
-                  <ListItem key={`${cp.id}-${cp.connector}-${index}`} sx={{ py: 2, px: 1 }} divider>
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <EvStationIcon color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', fontSize: '1rem' }}>
-                          <Box sx={{ flex: 1, fontWeight: 'bold', color: 'text.primary' }}>
-                            {cp.id}
-                            <Chip
-                              label={cp.emsAllocation?.acdc || cp.acdc || 'AC'}
-                              size="small"
-                              color={(cp.emsAllocation?.acdc || cp.acdc) === 'DC' ? 'secondary' : 'primary'}
+          {Object.keys(meterEmsResults).length === 0 ? (
+            <Box display="flex" justifyContent="center" alignItems="center" sx={{ py: 4 }}>
+              <Typography variant="h6" color="text.secondary">
+                暫無電表數據 {processedChargers.length > 0 ? `(收到 ${processedChargers.length} 條數據但無法分組)` : ''}
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {Object.entries(meterEmsResults).map(([meterId, meterData]) => {
+                const isExpanded = expandedMeters.has(meterId);
+                const meterCpList = cpList.filter(cp => cp.meterId === parseInt(meterId));
+                
+                return (
+                  <Card 
+                    key={`meter-${meterId}`} 
+                    variant="outlined"
+                    sx={{ 
+                      borderRadius: 3,
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        boxShadow: (theme) => theme.shadows[4],
+                        borderColor: 'primary.main'
+                      }
+                    }}
+                  >
+                    {/* 電表摘要標題 - 可點擊展開/收合 */}
+                    <Box 
+                      sx={{ 
+                        p: 2, 
+                        background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, ${theme.palette.secondary.main}08 100%)`,
+                        borderRadius: '12px 12px 0 0',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s ease',
+                        '&:hover': {
+                          background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}12 0%, ${theme.palette.secondary.main}12 100%)`,
+                        }
+                      }}
+                      onClick={() => toggleMeterExpansion(meterId)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
+                            📊 {meterData.meter.meter_no || `電表-${meterData.meter.id}`}
+                          </Typography>
+                          <Chip 
+                            label={meterData.meter.ems_mode === 'dynamic' ? '動態模式' : '靜態模式'} 
+                            size="small" 
+                            color={meterData.meter.ems_mode === 'dynamic' ? 'primary' : 'default'}
+                            variant="filled"
+                          />
+                          <Chip 
+                            label={`${meterData.meter.max_power_kw}kW`}
+                            size="small" 
+                            color="secondary"
+                            variant="outlined"
+                          />
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {/* 電表狀態摘要 */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+                            <Chip 
+                              label={`${meterData.guns.length}樁`}
+                              size="small" 
+                              color="default"
                               variant="outlined"
-                              sx={{
-                                ml: 1,
-                                fontSize: '0.7rem',
-                                height: '18px',
-                                '& .MuiChip-label': {
-                                  px: 0.5,
-                                }
-                              }}
                             />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>{cp.connector}</Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Chip
-                              label={cp.status}
-                              color={cp.statusColor}
-                              size="small"
-                              variant="filled"
-                              sx={{
-                                fontSize: '0.875rem',
-                                fontWeight: 'bold',
-                                minWidth: '60px',
-                                '& .MuiChip-label': {
-                                  px: 1,
-                                }
-                              }}
-                            />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <AnimatedNumber value={cp.power} />
-                            {cp.emsAllocation && (
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
-                                {cp.emsAllocation.unit === 'A' ? 
-                                  `${cp.emsAllocation.limit}A` : 
-                                  `${(cp.emsAllocation.limit / 1000).toFixed(1)}kW`
-                                }
-                              </Typography>
+                            {meterData.emsResult?.summary?.charging_guns > 0 && (
+                              <Chip 
+                                label={`${meterData.emsResult.summary.charging_guns}充電中`} 
+                                size="small" 
+                                color="warning"
+                                variant="filled"
+                              />
+                            )}
+                            {meterData.emsResult?.summary && (
+                              <Chip 
+                                label={`${meterData.emsResult.summary.total_allocated_kw.toFixed(1)}kW`} 
+                                size="small" 
+                                color={meterData.emsResult.summary.within_limit ? "success" : "error"}
+                                variant="filled"
+                              />
                             )}
                           </Box>
-                          <Box sx={{ flex: 0.8, textAlign: 'center' }}>
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={() => handleRestart(cp.id)}
-                              disabled={restartingIds.has(cp.id)}
-                              sx={{
-                                borderRadius: 2,
-                                padding: '8px',
-                                backgroundColor: restartingIds.has(cp.id) ? 'grey.300' : 'transparent',
-                                border: '1px solid',
-                                borderColor: restartingIds.has(cp.id) ? 'grey.400' : 'primary.main',
-                                color: restartingIds.has(cp.id) ? 'grey.600' : 'primary.main',
-                                transition: 'all 0.2s ease-in-out',
-                                '&:hover': restartingIds.has(cp.id) ? {} : {
-                                  backgroundColor: 'primary.main',
-                                  color: 'primary.contrastText',
-                                  transform: 'scale(1.05)',
-                                  boxShadow: (theme) => theme.shadows[2],
-                                },
-                                '&:active': restartingIds.has(cp.id) ? {} : {
-                                  transform: 'scale(0.95)',
-                                },
-                                '& .MuiSvgIcon-root': {
-                                  fontSize: '1.2rem',
-                                  animation: restartingIds.has(cp.id) ? 'spin 1s linear infinite' : 'none',
-                                },
-                                '@keyframes spin': {
-                                  '0%': { transform: 'rotate(0deg)' },
-                                  '100%': { transform: 'rotate(360deg)' },
-                                }
-                              }}
-                            >
-                              <RestartAltIcon />
-                            </IconButton>
-                          </Box>
+                          
+                          {/* 展開/收合按鈕 */}
+                          <IconButton 
+                            size="small" 
+                            sx={{ 
+                              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                              transition: 'transform 0.3s ease'
+                            }}
+                          >
+                            <Typography sx={{ fontSize: '1.2rem' }}>▼</Typography>
+                          </IconButton>
                         </Box>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </>
-            ) : (
-              <ListItem sx={{ py: 4, px: 1 }}>
-                <ListItemText
-                  primary={
-                    <Box sx={{ textAlign: 'center', color: 'text.secondary' }}>
-                      暫無充電樁數據 {chargers.length > 0 ? `(收到 ${chargers.length} 條數據但處理後為空)` : ''}
+                      </Box>
+                      
+                      {/* EMS 分配快速摘要 */}
+                      {meterData.emsResult?.summary && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            功率分配:
+                          </Typography>
+                          <Chip 
+                            label={`AC ${meterData.emsResult.summary.total_allocated_ac_kw.toFixed(1)}kW`} 
+                            size="small" 
+                            color="primary"
+                            variant="outlined"
+                            sx={{ height: '20px', fontSize: '0.7rem' }}
+                          />
+                          <Chip 
+                            label={`DC ${meterData.emsResult.summary.total_allocated_dc_kw.toFixed(1)}kW`} 
+                            size="small" 
+                            color="secondary"
+                            variant="outlined"
+                            sx={{ height: '20px', fontSize: '0.7rem' }}
+                          />
+
+                        </Box>
+                      )}
                     </Box>
-                  }
-                />
-              </ListItem>
-            )}
-          </List>
+
+                    {/* 充電樁詳情 - 可摺疊 */}
+                    {isExpanded && (
+                      <Box sx={{ p: 0 }}>
+                        <List sx={{ py: 0 }}>
+                          <ListItem sx={{ py: 1, px: 2, backgroundColor: 'background.default' }} disablePadding>
+                            <ListItemIcon sx={{ minWidth: 36 }}>
+                              <EvStationIcon sx={{ opacity: 0 }} />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', fontWeight: 'bold', fontSize: '0.9rem', color: 'text.secondary' }}>
+                                  <Box sx={{ flex: 1 }}>充電樁</Box>
+                                  <Box sx={{ flex: 1 }}>接頭</Box>
+                                  <Box sx={{ flex: 1 }}>狀態</Box>
+                                  <Box sx={{ flex: 1 }}>EMS功率 (kW)</Box>
+                                  <Box sx={{ flex: 0.8, textAlign: 'center' }}>操作</Box>
+                                </Box>
+                              }
+                            />
+                          </ListItem>
+                          <Divider />
+                          
+                          {meterCpList.map((cp, index) => (
+                            <ListItem key={`${cp.id}-${cp.connector}-${index}`} sx={{ py: 1.5, px: 2 }} divider={index < meterCpList.length - 1}>
+                              <ListItemIcon sx={{ minWidth: 36 }}>
+                                <EvStationIcon 
+                                  color={cp.isCharging ? "warning" : "primary"} 
+                                  sx={{ fontSize: '1.2rem' }}
+                                />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', fontSize: '0.95rem' }}>
+                                    <Box sx={{ flex: 1, fontWeight: 'bold', color: 'text.primary' }}>
+                                      {cp.id}
+                                      <Chip
+                                        label={cp.emsAllocation?.acdc || cp.acdc || 'AC'}
+                                        size="small"
+                                        color={(cp.emsAllocation?.acdc || cp.acdc) === 'DC' ? 'secondary' : 'primary'}
+                                        variant="outlined"
+                                        sx={{
+                                          ml: 1,
+                                          fontSize: '0.65rem',
+                                          height: '16px',
+                                          '& .MuiChip-label': { px: 0.5 }
+                                        }}
+                                      />
+                                    </Box>
+                                    <Box sx={{ flex: 1, fontSize: '0.9rem' }}>{cp.connector}</Box>
+                                    <Box sx={{ flex: 1 }}>
+                                      <Chip
+                                        label={cp.status}
+                                        color={cp.statusColor}
+                                        size="small"
+                                        variant="filled"
+                                        sx={{
+                                          fontSize: '0.75rem',
+                                          fontWeight: 'bold',
+                                          minWidth: '60px',
+                                          height: '24px'
+                                        }}
+                                      />
+                                    </Box>
+                                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                      <AnimatedNumber value={cp.power} sx={{ fontWeight: 'bold', fontSize: '0.9rem' }} />
+                                      {cp.emsAllocation && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                          {cp.emsAllocation.unit === 'A' ? 
+                                            `限制 ${cp.emsAllocation.limit}A` : 
+                                            `限制 ${(cp.emsAllocation.limit / 1000).toFixed(1)}kW`
+                                          }
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                    <Box sx={{ flex: 0.8, textAlign: 'center' }}>
+                                      <IconButton
+                                        size="small"
+                                        color="primary"
+                                        onClick={() => handleRestart(cp.id)}
+                                        disabled={restartingIds.has(cp.id)}
+                                        sx={{
+                                          borderRadius: 2,
+                                          padding: '6px',
+                                          backgroundColor: restartingIds.has(cp.id) ? 'grey.300' : 'transparent',
+                                          border: '1px solid',
+                                          borderColor: restartingIds.has(cp.id) ? 'grey.400' : 'primary.main',
+                                          color: restartingIds.has(cp.id) ? 'grey.600' : 'primary.main',
+                                          transition: 'all 0.2s ease-in-out',
+                                          '&:hover': restartingIds.has(cp.id) ? {} : {
+                                            backgroundColor: 'primary.main',
+                                            color: 'primary.contrastText',
+                                            transform: 'scale(1.05)',
+                                          },
+                                          '& .MuiSvgIcon-root': {
+                                            fontSize: '1rem',
+                                            animation: restartingIds.has(cp.id) ? 'spin 1s linear infinite' : 'none',
+                                          },
+                                          '@keyframes spin': {
+                                            '0%': { transform: 'rotate(0deg)' },
+                                            '100%': { transform: 'rotate(360deg)' },
+                                          }
+                                        }}
+                                      >
+                                        <RestartAltIcon />
+                                      </IconButton>
+                                    </Box>
+                                  </Box>
+                                }
+                              />
+                            </ListItem>
+                          ))}
+                        </List>
+                      </Box>
+                    )}
+                  </Card>
+                );
+              })}
+            </Box>
+          )}
         </Box>
       </CardContent>
     </Card>

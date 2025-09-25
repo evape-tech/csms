@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthUtils } from '../../../../lib/auth/auth';
 import { OperationLogger } from '../../../../lib/operationLogger';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // 在清除 session 前先獲取用戶信息用於日誌記錄

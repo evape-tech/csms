@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import fs from 'fs';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 // Initialize Firebase Admin SDK: prefer GOOGLE_APPLICATION_CREDENTIALS file, fallback to FIREBASE_SERVICE_ACCOUNT env
 if (!admin.apps.length) {
   try {

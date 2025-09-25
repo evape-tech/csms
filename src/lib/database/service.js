@@ -152,6 +152,36 @@ class DatabaseService {
     return await client.users.findFirst({ where: { email } });
   }
 
+  async getUserByRfidCard(cardNumber) {
+    const client = getDatabaseClient();
+    console.log(`🔍 [DatabaseService] getUserByRfidCard() called with cardNumber: ${cardNumber}`);
+    
+    // 查找RFID卡片及其關聯的用戶
+    const rfidCard = await client.rfid_cards.findFirst({
+      where: { 
+        card_number: cardNumber,
+        status: 'ACTIVE' // 只查找啟用的卡片
+      },
+      include: {
+        users: true // 包含關聯的用戶信息
+      }
+    });
+    
+    if (!rfidCard) {
+      console.log(`🔍 [DatabaseService] RFID卡片不存在或未啟用: ${cardNumber}`);
+      return null;
+    }
+    
+    // 更新卡片的最後使用時間
+    await client.rfid_cards.update({
+      where: { id: rfidCard.id },
+      data: { last_used_at: new Date() }
+    });
+    
+    console.log(`🔍 [DatabaseService] 找到RFID卡片用戶: ${rfidCard.users.email} (UUID: ${rfidCard.users.uuid})`);
+    return rfidCard.users;
+  }
+
   async updateUser(id, data) {
     const client = getDatabaseClient();
     return await client.users.update({ 
@@ -166,6 +196,41 @@ class DatabaseService {
   async deleteUser(id) {
     const client = getDatabaseClient();
     return await client.users.delete({ where: { id } });
+  }
+
+  // 獲取用戶的所有RFID卡片
+  async getUserRfidCards(userUuid) {
+    const client = getDatabaseClient();
+    
+    try {
+      // 先通過UUID找到用戶ID
+      const user = await client.users.findFirst({
+        where: { uuid: userUuid }
+      });
+      
+      if (!user) {
+        console.log('🔍 [DatabaseService] getUserRfidCards: 找不到用戶 UUID:', userUuid);
+        return [];
+      }
+      
+      // 查找用戶的所有啟用RFID卡片
+      const rfidCards = await client.rfid_cards.findMany({
+        where: {
+          user_id: user.id,
+          is_active: true
+        },
+        orderBy: {
+          created_at: 'desc' // 最新的卡片優先
+        }
+      });
+      
+      console.log(`🔍 [DatabaseService] getUserRfidCards: 用戶 ${userUuid} 有 ${rfidCards.length} 張啟用的RFID卡片`);
+      return rfidCards;
+      
+    } catch (error) {
+      console.error('🔍 [DatabaseService] getUserRfidCards error:', error);
+      return [];
+    }
   }
 
   // ===============================

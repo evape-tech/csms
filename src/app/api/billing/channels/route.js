@@ -1,9 +1,10 @@
-'use server';
-
 import { PrismaClient } from '../../../../../prisma-clients/mysql';
 import { NextResponse } from 'next/server';
 import { AuthUtils } from '@/lib/auth/auth';
 import { OperationLogger } from '@/lib/operationLogger';
+
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
 
 const prisma = new PrismaClient();
 

@@ -288,53 +288,57 @@ async function getStations() {
 }
 
 /**
- * 验证IdTag是否有效
+ * 验证IdTag是否有效，並返回對應的用戶UUID
  * @param {string} idTag 用户标识标签
- * @returns {Promise<boolean>} 是否有效
+ * @returns {Promise<{valid: boolean, userUuid?: string}>} 驗證結果和用戶UUID
  */
 async function validateIdTag(idTag) {
   try {
-    // 開發階段：跳過所有驗證，直接返回 true
-    logger.debug(`[開發階段] 跳過 IdTag 驗證，直接接受: ${idTag}`);
-    return true;
-    
-    // 以下代碼暫時註解，等正式環境再啟用
-    /*
     await ensureDbInitialized();
+    const { databaseService: dbService } = await loadDatabaseModules();
     
-    // 開發模式：接受所有非空的 idTag
-    const isDevelopment = process.env.NODE_ENV !== 'production';
+    logger.debug(`🔍 [IdTag驗證] 開始驗證 IdTag: ${idTag}`);
     
-    // 基本验证逻辑：非空且长度合理
+    // 基本格式驗證
     if (!idTag || typeof idTag !== 'string' || idTag.trim().length === 0) {
-      logger.warn(`IdTag 格式无效: ${idTag}`);
-      return false;
+      logger.warn(`❌ [IdTag驗證] IdTag 格式無效: ${idTag}`);
+      return { valid: false };
     }
     
-    // 開發模式下，接受所有有效格式的 idTag
-    if (isDevelopment) {
-      logger.debug(`[開發模式] 接受 IdTag: ${idTag}`);
-      return true;
+    // 檢查是否為web界面標籤（管理者遠端操作）
+    if (idTag === 'web_interface_tag' || idTag.startsWith('web_') || idTag.startsWith('admin_')) {
+      logger.debug(`🌐 [IdTag驗證] 接受web界面標籤: ${idTag}`);
+      return { valid: true }; // 管理者操作不需要userUuid，已在前端處理
     }
     
-    // 如果是来自web界面的标签，直接认为有效
-    if (idTag === 'web_interface_tag' || idTag.startsWith('web_')) {
-      logger.debug(`接受web界面标签: ${idTag}`);
-      return true;
-    }
-    
-    // 如果是测试标签，直接认为有效
+    // 檢查是否為測試標籤
     if (idTag.startsWith('test_') || idTag === 'default_tag') {
-      logger.debug(`接受测试标签: ${idTag}`);
-      return true;
+      logger.debug(`🧪 [IdTag驗證] 接受測試標籤: ${idTag}`);
+      return { valid: true };
     }
     
-    // 对于其他标签，可以在这里添加更复杂的验证逻辑
-    // 例如：查询用户数据库、检查授权状态等
+    // 嘗試根據RFID卡號查找用戶
+    try {
+      const user = await dbService.getUserByRfidCard(idTag);
+      
+      if (user) {
+        logger.info(`✅ [IdTag驗證] RFID卡片 ${idTag} 對應用戶: ${user.email} (UUID: ${user.uuid}, 角色: ${user.role})`);
+        return { 
+          valid: true, 
+          userUuid: user.uuid,
+          userRole: user.role,
+          userEmail: user.email
+        };
+      } else {
+        logger.warn(`❌ [IdTag驗證] 找不到對應的RFID卡片或用戶: ${idTag}`);
+        return { valid: false };
+      }
+    } catch (rfidError) {
+      logger.error(`❌ [IdTag驗證] RFID卡片查詢失敗: ${idTag}`, rfidError);
+      return { valid: false };
+    }
     
-    logger.debug(`IdTag 验证通过: ${idTag}`);
-    return true;
-    */
+
   } catch (error) {
     logger.error(`验证IdTag失败: ${idTag}`, error);
     return true; // 開發階段：即使出錯也返回 true
@@ -398,6 +402,13 @@ async function createNewTransaction(transactionData) {
       createdAt: new Date(),
       updatedAt: new Date()
     };
+    
+    // 記錄管理者信息（如果有）
+    if (transactionData.user_id) {
+      logger.info(`🧑‍💼 [管理者記錄] 創建交易 ${internalTransactionId}，管理者UUID: ${transactionData.user_id}`);
+    } else {
+      logger.info(`👤 [一般交易] 創建交易 ${internalTransactionId}，無管理者UUID`);
+    }
     
     // 創建交易記錄
     const transaction = await dbService.createTransaction(transactionRecord);
@@ -484,22 +495,36 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     const newStatus = updateFields.status || originalStatus;
     const statusChanged = originalStatus !== newStatus;
     
+    console.log(`🔄 [交易狀態檢查] 交易 ${transaction.transaction_id}: 原始狀態=${originalStatus} -> 新狀態=${newStatus}, 狀態已變更=${statusChanged}`);
+    
     if (statusChanged && ['COMPLETED', 'ERROR'].includes(newStatus)) {
+      console.log(`✅ [自動Billing] 觸發條件滿足，開始為交易 ${transaction.transaction_id} 生成billing記錄...`);
+      
       try {
         // 導入billing服務並自動生成billing記錄
         const billingService = require('../services/billingService.js');
+        console.log(`📦 [自動Billing] billingService 已載入，呼叫 generateBillingForTransaction...`);
+        
         const billing = await billingService.generateBillingForTransaction(
           transaction.transaction_id, 
           { autoMode: true }
         );
         
+        console.log(`🎯 [自動Billing] generateBillingForTransaction 回傳結果:`, billing ? `billing記錄 #${billing.id}` : 'null');
+        
         if (billing) {
-          logger.info(`已為交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+          logger.info(`✅ 已為交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+          console.log(`💰 [自動Billing成功] 交易 ${transaction.transaction_id} -> billing記錄 #${billing.id}, 金額: ${billing.total_amount || 'N/A'}`);
+        } else {
+          console.log(`⚠️  [自動Billing] 交易 ${transaction.transaction_id} 沒有生成billing記錄（可能是重複或其他原因）`);
         }
       } catch (billingError) {
+        console.error(`❌ [自動Billing失敗] 交易 ${transaction.transaction_id} 生成billing記錄時出錯:`, billingError);
         logger.error(`為交易 ${transaction.transaction_id} 自動生成billing失敗:`, billingError);
         // 不拋出錯誤，避免影響主要的交易更新流程
       }
+    } else {
+      console.log(`⏭️  [自動Billing] 跳過billing生成 - 交易 ${transaction.transaction_id}: 狀態變更=${statusChanged}, 新狀態=${newStatus}`);
     }
     
     // logger.info(`更新交易記錄成功: OCPP ID=${transactionIdInt}`);
@@ -700,39 +725,31 @@ async function handleOrphanTransaction(transaction) {
     const updatedTransaction = await dbService.updateTransaction(transaction.transaction_id, updateData);
     
     // 為孤兒交易自動生成billing記錄
+    console.log(`🔄 [孤兒交易Billing] 開始為孤兒交易 ${transaction.transaction_id} 生成billing記錄...`);
+    
     try {
       const billingService = require('../services/billingService.js');
+      console.log(`📦 [孤兒交易Billing] billingService 已載入，呼叫 generateBillingForTransaction...`);
+      
       const billing = await billingService.generateBillingForTransaction(
         transaction.transaction_id, 
         { autoMode: true }
       );
       
+      console.log(`🎯 [孤兒交易Billing] generateBillingForTransaction 回傳結果:`, billing ? `billing記錄 #${billing.id}` : 'null');
+      
       if (billing) {
-        logger.info(`已為孤兒交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+        logger.info(`✅ 已為孤兒交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+        console.log(`💰 [孤兒交易Billing成功] 孤兒交易 ${transaction.transaction_id} -> billing記錄 #${billing.id}, 金額: ${billing.total_amount || 'N/A'}`);
+      } else {
+        console.log(`⚠️  [孤兒交易Billing] 孤兒交易 ${transaction.transaction_id} 沒有生成billing記錄（可能是重複或其他原因）`);
       }
     } catch (billingError) {
+      console.error(`❌ [孤兒交易Billing失敗] 孤兒交易 ${transaction.transaction_id} 生成billing記錄時出錯:`, billingError);
       logger.error(`為孤兒交易 ${transaction.transaction_id} 自動生成billing失敗:`, billingError);
       // 不拋出錯誤，避免影響孤兒交易處理流程
     }
-    
-    // 注意：不更新充電樁狀態，因為孤兒交易通常由斷電/網路中斷造成
-    // 充電樁可能：
-    // 1. 仍然離線（斷電未恢復）
-    // 2. 已重新上線但處於不同狀態
-    // 3. 已經在進行新的交易
-    // 因此，讓充電樁在重新連接時自己報告正確的狀態
-    // logger.info(`孤兒交易 ${transaction.transaction_id} 已標記為ERROR，充電樁狀態保持不變`);
-    
-    // 記錄孤兒交易處理日志
-    // await createCpLogEntry({
-    //   cpid: transaction.cpid,
-    //   cpsn: transaction.cpsn,
-    //   log: `Orphan Transaction Auto-Closed - ID: ${transaction.transaction_id}, Energy: ${transaction.energy_consumed || 0} kWh, Duration: ${formatDuration(finalChargingDuration)}, Reason: Timeout/Lost Connection`,
-    //   time: endTime,
-    //   inout: "system",
-    // });
-    
-    // logger.info(`孤兒交易 ${transaction.transaction_id} 已自動關閉`);
+
     return { ...transaction, ...updateData, handled: true };
     
   } catch (error) {

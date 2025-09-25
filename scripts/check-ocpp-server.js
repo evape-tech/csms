@@ -81,7 +81,7 @@ function checkHealthEndpoint() {
 // 3. 檢查 OCPP API 端點
 function checkOcppApiEndpoint() {
     return new Promise((resolve) => {
-        console.log(`\n🔌 檢查 OCPP API 端點: http://${OCPP_HOST}:${OCPP_PORT}/ocpp/api/trigger_meter_reallocation`);
+        console.log(`\n🔌 檢查 OCPP API 端點: http://${OCPP_HOST}:${OCPP_PORT}/ocpp/api/v1/trigger_meter_reallocation`);
         
         const postData = JSON.stringify({
             source: "health-check",
@@ -92,7 +92,7 @@ function checkOcppApiEndpoint() {
         const req = http.request({
             hostname: OCPP_HOST,
             port: OCPP_PORT,
-            path: '/ocpp/api/trigger_meter_reallocation',
+            path: '/ocpp/api/v1/trigger_meter_reallocation',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

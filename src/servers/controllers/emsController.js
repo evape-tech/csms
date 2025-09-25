@@ -395,7 +395,7 @@ async function trigger_profile_update(req, res) {
                     userAgent: requestData.userAgent || req.headers['user-agent'],
                     clientIP: requestData.clientIP || req.ip || req.connection.remoteAddress,
                     timestamp: requestData.timestamp || new Date().toISOString(),
-                    triggerAPI: '/ocpp/api/trigger_profile_update'
+                    triggerAPI: '/ocpp/api/v1/trigger_profile_update'
                 }
             });
             
@@ -461,7 +461,7 @@ async function trigger_profile_update(req, res) {
                                 userAgent: requestData.userAgent || req.headers['user-agent'],
                                 clientIP: requestData.clientIP || req.ip || req.connection.remoteAddress,
                                 timestamp: requestData.timestamp || new Date().toISOString(),
-                                triggerAPI: '/ocpp/api/trigger_profile_update'
+                                triggerAPI: '/ocpp/api/v1/trigger_profile_update'
                             }
                         });
                         
@@ -661,7 +661,7 @@ async function trigger_meter_reallocation(req, res) {
                 userAgent: requestData.userAgent || req.headers['user-agent'],
                 clientIP: requestData.clientIP || req.ip || req.connection.remoteAddress,
                 timestamp: requestData.timestamp || new Date().toISOString(),
-                triggerAPI: '/ocpp/api/trigger_meter_reallocation'
+                triggerAPI: '/ocpp/api/v1/trigger_meter_reallocation'
             }
         });
         
@@ -793,7 +793,7 @@ async function trigger_station_reallocation(req, res) {
                         userAgent: requestData.userAgent || req.headers['user-agent'],
                         clientIP: requestData.clientIP || req.ip || req.connection.remoteAddress,
                         timestamp: requestData.timestamp || new Date().toISOString(),
-                        triggerAPI: '/ocpp/api/trigger_station_reallocation'
+                        triggerAPI: '/ocpp/api/v1/trigger_station_reallocation'
                     }
                 });
                 

@@ -18,7 +18,7 @@ const testData = {
 };
 
 console.log('🧪 測試 OCPP API 端點...');
-console.log(`📍 目標: http://${HOST}:${PORT}/ocpp/api/trigger_meter_reallocation`);
+console.log(`📍 目標: http://${HOST}:${PORT}/ocpp/api/v1/trigger_meter_reallocation`);
 console.log(`📊 測試數據: ${JSON.stringify(testData, null, 2)}`);
 
 function testApiEndpoint() {
@@ -28,7 +28,7 @@ function testApiEndpoint() {
         const options = {
             hostname: HOST,
             port: PORT,
-            path: '/ocpp/api/trigger_meter_reallocation',
+            path: '/ocpp/api/v1/trigger_meter_reallocation',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -89,8 +89,8 @@ function testApiEndpoint() {
 async function testMultipleEndpoints() {
     const endpoints = [
         { path: '/health', method: 'GET', description: '健康檢查' },
-        { path: '/ocpp/api/see_connections', method: 'GET', description: '查看連接' },
-        { path: '/ocpp/api/trigger_meter_reallocation', method: 'POST', description: '觸發電表重分配' }
+        { path: '/ocpp/api/v1/connections', method: 'GET', description: '查看連接' },
+        { path: '/ocpp/api/v1/trigger_meter_reallocation', method: 'POST', description: '觸發電表重分配' }
     ];
 
     console.log(`\n🔍 測試多個端點進行對比...`);

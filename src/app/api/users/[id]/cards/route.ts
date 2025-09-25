@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '@/lib/database/adapter';
 import { AuthUtils } from '@/lib/auth/auth';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const response = NextResponse.json({ 

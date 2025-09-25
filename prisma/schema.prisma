@@ -146,44 +146,42 @@ model tariffs {
 }
 
 model billing_records {
-  id                  BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
-  transaction_id      String                 @db.VarChar(50)
-  transaction_ref     BigInt?                @db.UnsignedBigInt
-  tariff_id           Int
-  applied_price       Decimal                @db.Decimal(10, 2)
-  energy_consumed     Decimal                @db.Decimal(10, 3)
-  energy_fee          Decimal                @db.Decimal(10, 2)
-  service_fee         Decimal                @db.Decimal(10, 2)
-  discount_amount     Decimal?               @db.Decimal(10, 2)
-  tax_amount          Decimal?               @db.Decimal(10, 2)
-  total_amount        Decimal                @db.Decimal(10, 2)
-  currency            String                 @default("TWD") @db.VarChar(3)
-  start_time          DateTime               @db.DateTime(0)
-  end_time            DateTime               @db.DateTime(0)
-  charging_duration   Int
-  billing_details     String?                @db.Text
-  invoice_number      String?                @db.VarChar(20)
-  invoice_issued_at   DateTime?              @db.DateTime(0)
-  payment_method      String?                @db.VarChar(50)
-  payment_reference   String?                @db.VarChar(100)
-  payment_time        DateTime?              @db.DateTime(0)
-  user_id             String?                @db.VarChar(36)
-  id_tag              String                 @db.VarChar(20)
-  cpid                String                 @db.VarChar(255)
-  cpsn                String                 @db.VarChar(255)
-  connector_id        Int
-  status              billing_status         @default(CALCULATED)
-  remark              String?                @db.Text
-  createdAt           DateTime               @default(now()) @db.DateTime(0)
-  updatedAt           DateTime               @default(now()) @updatedAt @db.DateTime(0)
-  billing_channels    billing_channels?      @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
-  tariff              tariffs                @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
-  transactions        charging_transactions? @relation(fields: [transaction_ref], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_ref")
-  users               users?                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_user_uuid")
-  wallet_transactions wallet_transactions[]
+  id                    BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  transaction_id        String                @db.VarChar(50)
+  tariff_id             Int
+  applied_price         Decimal               @db.Decimal(10, 2)
+  energy_consumed       Decimal               @db.Decimal(10, 3)
+  energy_fee            Decimal               @db.Decimal(10, 2)
+  service_fee           Decimal               @db.Decimal(10, 2)
+  discount_amount       Decimal?              @db.Decimal(10, 2)
+  tax_amount            Decimal?              @db.Decimal(10, 2)
+  total_amount          Decimal               @db.Decimal(10, 2)
+  currency              String                @default("TWD") @db.VarChar(3)
+  start_time            DateTime              @db.DateTime(0)
+  end_time              DateTime              @db.DateTime(0)
+  charging_duration     Int
+  billing_details       String?               @db.Text
+  invoice_number        String?               @db.VarChar(20)
+  invoice_issued_at     DateTime?             @db.DateTime(0)
+  payment_method        String?               @db.VarChar(50)
+  payment_reference     String?               @db.VarChar(100)
+  payment_time          DateTime?             @db.DateTime(0)
+  user_id               String                @db.VarChar(36)
+  id_tag                String                @db.VarChar(20)
+  cpid                  String                @db.VarChar(255)
+  cpsn                  String                @db.VarChar(255)
+  connector_id          Int
+  status                billing_status        @default(CALCULATED)
+  remark                String?               @db.Text
+  createdAt             DateTime              @default(now()) @db.DateTime(0)
+  updatedAt             DateTime              @default(now()) @updatedAt @db.DateTime(0)
+  billing_channels      billing_channels?     @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
+  tariff                tariffs               @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
+  charging_transactions charging_transactions @relation(fields: [transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_id")
+  users                 users                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_user_uuid")
+  wallet_transactions   wallet_transactions[]
 
   @@index([payment_method], map: "fk_billing_records_payment_method")
-  @@index([transaction_ref], map: "fk_billing_records_transaction_ref")
   @@index([cpid], map: "idx_cpid")
   @@index([id_tag], map: "idx_id_tag")
   @@index([invoice_number], map: "idx_invoice_number")
@@ -216,7 +214,7 @@ model charging_transactions {
   cpid                String                       @db.VarChar(255)
   cpsn                String                       @db.VarChar(255)
   connector_id        Int
-  user_id             String?                      @db.VarChar(36)
+  user_id             String                       @db.VarChar(36)
   id_tag              String                       @db.VarChar(20)
   meter_start         Decimal?                     @db.Decimal(10, 3)
   meter_stop          Decimal?                     @db.Decimal(10, 3)
@@ -231,7 +229,7 @@ model charging_transactions {
   createdAt           DateTime                     @db.DateTime(0)
   updatedAt           DateTime                     @db.DateTime(0)
   billing_records     billing_records[]
-  users               users?                       @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_charging_transactions_user_uuid")
+  users               users                        @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_charging_transactions_user_uuid")
   wallet_transactions wallet_transactions[]
 
   @@index([user_id], map: "fk_charging_transactions_user_uuid")

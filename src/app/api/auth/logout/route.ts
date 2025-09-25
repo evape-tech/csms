@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { OperationLogger } from '@/lib/operationLogger';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // 記錄登出操作

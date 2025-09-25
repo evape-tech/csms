@@ -226,7 +226,7 @@ export default function CPCard({ chargers, stations, meters }) {
         apikey: undefined,
         cmd: 'cmd_start_charging',
         cp_id: targetCharger.cpid,
-        connectorId: targetCharger.connector, // 使用充電樁的實際 connector 欄位，預設為1
+        connectorId: targetCharger.connector, 
       };
       await callOcppEndpoint(id, body);
 

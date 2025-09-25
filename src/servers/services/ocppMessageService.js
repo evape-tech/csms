@@ -488,40 +488,19 @@ async function handleStartTransaction(cpsn, messageBody) {
     // 获取CPID
     let cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
     
-    if (!cpid) {
-      if (isDevelopment) {
-        // 开发模式：尝试从数据库直接获取CPID
-        logger.warn(`[开发模式] 无法找到 ${cpsn}:${connectorId} 的CPID映射，尝试从数据库获取`);
-        try {
-          const guns = await chargePointRepository.getGuns({ cpsn: cpsn });
-          if (guns && guns.length > 0) {
-            cpid = guns[0].cpid;
-            logger.info(`[开发模式] 从数据库获取到 CPID: ${cpid}`);
-          }
-        } catch (dbError) {
-          logger.error(`[开发模式] 从数据库获取CPID失败:`, dbError);
-        }
-      }
+    // 验证idTag
+    if (!isDevelopment) {
+      const validTag = await chargePointRepository.validateIdTag(idTag);
       
-      if (!cpid) {
-        logger.warn(`无法找到 ${cpsn}:${connectorId} 的CPID映射`);
+      if (!validTag) {
+        logger.warn(`无效的 IdTag: ${idTag}`);
         return {
           transactionId: -1,
           idTagInfo: { status: "Invalid" }
         };
       }
     }
-    
-    // 验证idTag
-    const validTag = await chargePointRepository.validateIdTag(idTag);
-    
-    if (!validTag) {
-      logger.warn(`无效的 IdTag: ${idTag}`);
-      return {
-        transactionId: -1,
-        idTagInfo: { status: "Invalid" }
-      };
-    }
+
     
     // 創建新的交易記錄
     const transactionRecord = await chargePointRepository.createNewTransaction({
@@ -530,7 +509,7 @@ async function handleStartTransaction(cpsn, messageBody) {
       connector_id: connectorId,
       idTag: idTag,
       meterStart: meterStart,
-      user_id: null // 目前沒有用戶系統，暫時設為 null
+      user_id: null 
     });
     
     // 獲取符合 OCPP 1.6 協議的整數 transactionId

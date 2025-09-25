@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '@/lib/database/adapter';
 import { OperationLogger } from '@/lib/operationLogger';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 const ADMIN_SECRET_KEY = 'admin-secret-key';
 
 export async function POST(request: NextRequest) {

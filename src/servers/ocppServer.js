@@ -12,9 +12,10 @@ const cors = require('cors');
 const { logger } = require('./utils');
 
 // 引入配置
-const { envConfig, mqConfig } = require('./config');
+const { envConfig, mqConfig, apiConfig } = require('./config');
 const { SERVER } = envConfig;
 const { MQ_ENABLED } = mqConfig;
+const { API_PATHS } = apiConfig;
 
 // 创建Express应用
 const app = express();
@@ -92,13 +93,18 @@ async function publishConnectionState(id, state, additionalData = {}) {
  * 初始化REST API路由
  */
 function initializeRoutes() {
-  // 健康检查端点
-  app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', version: '1.0.0' });
+  // 健康检查端点 - 系统级别，不带版本
+  app.get(API_PATHS.HEALTH, (req, res) => {
+    res.status(200).json({ 
+      status: 'ok', 
+      version: '1.0.0',
+      apiVersion: apiConfig.API.VERSION,
+      timestamp: new Date().toISOString()
+    });
   });
   
   // MQ健康检查端点
-  app.get('/mq/health', (req, res) => {
+  app.get(API_PATHS.MQ_HEALTH, (req, res) => {
     if (!MQ_ENABLED) {
       return res.json({ 
         status: 'disabled', 
@@ -140,13 +146,13 @@ function initializeRoutes() {
   
   // 系统状态端点
   if (systemStatusService) {
-    app.get('/system/status', (req, res) => {
+    app.get(API_PATHS.SYSTEM_STATUS, (req, res) => {
       res.json(systemStatusService.getSystemStatus());
     });
   }
   
   // 获取在线充电桩列表
-  app.get('/api/v1/chargepoints/online', async (req, res) => {
+  app.get(API_PATHS.CHARGEPOINTS_ONLINE, async (req, res) => {
     try {
       const onlineCpids = await ocppController.getOnlineChargePoints();
       res.status(200).json({ status: 'success', data: onlineCpids });
@@ -157,10 +163,10 @@ function initializeRoutes() {
   });
   
   // 启动远程充电
-  app.post('/api/v1/chargepoints/:cpsn/remotestart', async (req, res) => {
+  app.post(API_PATHS.CHARGEPOINT_REMOTE_START, async (req, res) => {
     try {
       const { cpsn } = req.params;
-      const { connectorId, idTag } = req.body;
+      const { connectorId, idTag, userUuid, userRole } = req.body;
       
       if (!connectorId || !idTag) {
         return res.status(400).json({ 
@@ -169,7 +175,8 @@ function initializeRoutes() {
         });
       }
       
-      const success = await ocppController.startRemoteCharging(cpsn, connectorId, idTag);
+      logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
+      const success = await ocppController.startRemoteCharging(cpsn, connectorId, idTag, userUuid, userRole);
       
       if (success) {
         res.status(200).json({ status: 'success', message: '远程启动命令已发送' });
@@ -183,10 +190,10 @@ function initializeRoutes() {
   });
   
   // 停止远程充电
-  app.post('/api/v1/chargepoints/:cpsn/remotestop', async (req, res) => {
+  app.post(API_PATHS.CHARGEPOINT_REMOTE_STOP, async (req, res) => {
     try {
       const { cpsn } = req.params;
-      const { transactionId } = req.body;
+      const { transactionId, userUuid, userRole } = req.body;
       
       if (!transactionId) {
         return res.status(400).json({ 
@@ -195,7 +202,8 @@ function initializeRoutes() {
         });
       }
       
-      const success = await ocppController.stopRemoteCharging(cpsn, transactionId);
+      logger.info(`停止远程充电: ${cpsn}, 交易ID: ${transactionId}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
+      const success = await ocppController.stopRemoteCharging(cpsn, transactionId, userUuid, userRole);
       
       if (success) {
         res.status(200).json({ status: 'success', message: '远程停止命令已发送' });
@@ -209,7 +217,7 @@ function initializeRoutes() {
   });
   
   // 重启充电桩
-  app.post('/api/v1/chargepoints/:cpsn/reset', async (req, res) => {
+  app.post(API_PATHS.CHARGEPOINT_RESET, async (req, res) => {
     try {
       const { cpsn } = req.params;
       const { type = 'Soft' } = req.body;
@@ -227,49 +235,30 @@ function initializeRoutes() {
     }
   });
   
-  // 兼容旧版API路由
-  app.post('/ocpp/api/spacepark_cp_api', (req, res) => {
-    res.status(410).json({ 
-      status: 'error', 
-      message: '此API已弃用，请使用新的API端点' 
-    });
-  });
-  
-  app.post('/ocpp/api/ocpp_send_cmd', (req, res) => {
-    res.status(410).json({ 
-      status: 'error', 
-      message: '此API已弃用，请使用新的API端点' 
-    });
-  });
-  
-  app.get('/ocpp/api/see_connections', async (req, res) => {
+  // 獲取OCPP連接狀態 - 新版本API
+  app.get(API_PATHS.OCPP_CONNECTIONS, async (req, res) => {
     try {
       const onlineCpids = await ocppController.getOnlineChargePoints();
-      res.status(200).json({ online: onlineCpids });
+      res.status(200).json({ 
+        status: 'success', 
+        data: { online: onlineCpids },
+        apiVersion: apiConfig.API.VERSION,
+        timestamp: new Date().toISOString()
+      });
     } catch (err) {
       logger.error('获取连接列表失败', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ 
+        status: 'error', 
+        message: err.message,
+        apiVersion: apiConfig.API.VERSION,
+        timestamp: new Date().toISOString()
+      });
     }
   });
   
-  app.get('/ocpp/api/ocpp_cpid/:id', (req, res) => {
-    res.status(410).json({ 
-      status: 'error', 
-      message: '此API已弃用，请使用新的API端点' 
-    });
-  });
-  
-  app.get('/ocpp/api/ocpp_stop_charging/:cpid', (req, res) => {
-    res.status(410).json({ 
-      status: 'error', 
-      message: '此API已弃用，请使用新的API端点' 
-    });
-  });
-  
-  // 添加触发全站功率重新分配的API
-  app.post('/ocpp/api/trigger_profile_update', async (req, res) => {
+  // EMS功率管理API端點 - 新版本
+  app.post(API_PATHS.OCPP_TRIGGER_PROFILE_UPDATE, async (req, res) => {
     try {
-      // 使用新架构中的emsController代替旧的ocppController
       await emsController.trigger_profile_update(req, res);
     } catch (err) {
       logger.error('触发全站功率重新分配失败', err);
@@ -277,8 +266,7 @@ function initializeRoutes() {
     }
   });
   
-  // 添加触发电表级功率重新分配的API
-  app.post('/ocpp/api/trigger_meter_reallocation', async (req, res) => {
+  app.post(API_PATHS.OCPP_TRIGGER_METER_REALLOCATION, async (req, res) => {
     try {
       await emsController.trigger_meter_reallocation(req, res);
     } catch (err) {
@@ -287,8 +275,7 @@ function initializeRoutes() {
     }
   });
   
-  // 添加触发站点级功率重新分配的API
-  app.post('/ocpp/api/trigger_station_reallocation', async (req, res) => {
+  app.post(API_PATHS.OCPP_TRIGGER_STATION_REALLOCATION, async (req, res) => {
     try {
       await emsController.trigger_station_reallocation(req, res);
     } catch (err) {
@@ -529,8 +516,10 @@ async function startServer() {
         const PORT = SERVER.PORT || 8089;
         const serverInstance = server.listen(PORT, HOST, () => {
           logger.info(`OCPP服务器正在监听端口 ${PORT} (綁定到: ${HOST})`);
-          logger.info(`REST API: http://${HOST}:${PORT}/api/v1`);
+          logger.info(`REST API: http://${HOST}:${PORT}${apiConfig.API.BASE_PATH}/${apiConfig.API.VERSION}`);
+          logger.info(`OCPP API: http://${HOST}:${PORT}${apiConfig.API.OCPP_BASE_PATH}/${apiConfig.API.VERSION}`);
           logger.info(`WebSocket服务: ws://${HOST}:${PORT}/ocpp`);
+          logger.info(`健康檢查: http://${HOST}:${PORT}${API_PATHS.HEALTH}`);
           
           // 如果綁定到所有接口，顯示額外的訪問地址
           if (HOST === '0.0.0.0') {

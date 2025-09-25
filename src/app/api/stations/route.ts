@@ -25,7 +25,7 @@ async function notifyOcpp(payload: Record<string, unknown>) {
 
     console.log('[notifyOcpp] triggering profile update with payload:', JSON.stringify(triggerPayload));
 
-    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/trigger_profile_update`, {
+    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/v1/trigger_profile_update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(triggerPayload),

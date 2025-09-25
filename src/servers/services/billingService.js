@@ -37,8 +37,8 @@ class BillingService {
     const { tariffId, autoMode = false, skipValidation = false } = options;
     
     try {
-      // 获取交易记录
-      const transaction = await this.databaseService.getTransactionById(transactionId);
+      // 获取交易记录（使用字串形式的 transaction_id）
+      const transaction = await this.databaseService.getTransaction(transactionId);
 
       if (!transaction) {
         const error = `交易 ${transactionId} 不存在`;
@@ -326,7 +326,6 @@ class BillingService {
 
       return {
         transaction_id: transaction.transaction_id,
-        transaction_ref: transaction.id,
         tariff_id: tariff.id,
         applied_price: appliedPrice,
         energy_consumed: energyConsumed,
@@ -335,6 +334,7 @@ class BillingService {
         discount_amount: discountAmount,
         tax_amount: taxAmount,
         total_amount: totalAmount,
+        currency: 'TWD', // 新增的貨幣欄位，預設為台幣
         start_time: transaction.start_time,
         end_time: transaction.end_time,
         charging_duration: transaction.charging_duration || 0,

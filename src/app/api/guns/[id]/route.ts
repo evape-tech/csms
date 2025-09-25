@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache';
 import DatabaseUtils from '../../../../lib/database/utils.js';
 import { databaseService } from '../../../../lib/database/service.js';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log(`🔍 [API /api/guns/[id] POST] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);

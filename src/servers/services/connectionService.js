@@ -348,16 +348,20 @@ function getCpidFromWsData(cpsn, connector) {
     
     let cpid = null;
     
-    if (connector === 1) {
+    // 統一轉換為數字進行比較，支持字符串和數字類型的 connector
+    const connectorNum = parseInt(connector);
+    logger.debug(`connector 原值: ${connector} (類型: ${typeof connector}), 轉換後: ${connectorNum}`);
+    
+    if (connectorNum === 1) {
       cpid = wsData.connector_1_meter?.cpid_mapping;
-    } else if (connector === 2) {
+    } else if (connectorNum === 2) {
       cpid = wsData.connector_2_meter?.cpid_mapping;
-    } else if (connector === 3) {
+    } else if (connectorNum === 3) {
       cpid = wsData.connector_3_meter?.cpid_mapping;
-    } else if (connector === 4) {
+    } else if (connectorNum === 4) {
       cpid = wsData.connector_4_meter?.cpid_mapping;
     } else {
-      logger.warn(`不支持的 connector 编号: ${connector}`);
+      logger.warn(`不支持的 connector 编号: ${connector} (原值), ${connectorNum} (轉換後)`);
     }
     
     if (cpid) {

@@ -2,6 +2,13 @@
 
 這是一個基於 [Next.js](https://nextjs.org) 的充電站管理系統 (CSMS) 專案，採用現代化微服務架構，結合了前端使用者介面、後端 API 服務以及 OCPP (Open Charge Point Protocol) 伺服器，並內建了智能能源管理系統 (EMS)。
 
+## 📚 文檔目錄
+
+- **[API 結構文檔](docs/API_STRUCTURE.md)** - 完整的 API 端點說明、版本管理和使用範例
+- **[EMS 模式說明](docs/EMS_MODE.md)** - 能源管理系統的運作模式和配置
+- **[自動計費系統](docs/AUTO_BILLING.md)** - 計費系統的運作原理和配置
+- **[服務重構說明](docs/SERVICE_REFACTORING.md)** - 系統架構和服務設計說明
+
 ## 🚀 專案特色
 
 -   **Next.js 15 前端**: 提供響應式且高效能的使用者介面，採用 App Router 架構進行充電站監控和管理。
@@ -37,12 +44,8 @@
 ### 三種功率更新機制
 
 1. **手動觸發 (Manual)**
-   ```bash
-   # 手動觸發全站功率重新分配
-   curl -X POST http://localhost:8089/ocpp/api/trigger_profile_update \
-        -H "Content-Type: application/json" \
-        -d '{"source":"manual_trigger"}'
-   ```
+   - 透過 API 端點觸發功率重分配
+   - 完整的 API 使用方式請參考：[API 結構文檔](docs/API_STRUCTURE.md)
 
 2. **定時校正 (Scheduled)**
    - 每 60 秒自動執行功率校正
@@ -188,61 +191,22 @@ rabbitmq-server
 
 ## 📡 API 說明
 
-### Next.js API 端點 (http://localhost:3000)
+### API 端點總覽
 
-專案提供以下主要 API 端點：
+本專案提供完整的 RESTful API 服務，包含：
 
-#### 🔐 認證與用戶管理
--   `/api/login` - 使用者登入
--   `/api/session` - 會話管理
--   `/api/users` - 用戶管理 (CRUD)
--   `/api/users/[id]/cards` - 用戶 RFID 卡片管理
--   `/api/users/[id]/wallet` - 用戶錢包資訊
--   `/api/users/[id]/transactions` - 用戶交易記錄
+#### 🌐 Next.js API (http://localhost:3000)
+- **認證與用戶管理**: 登入、會話、用戶CRUD、RFID卡片管理
+- **錢包與支付**: 儲值、扣款、交易記錄、計費管理  
+- **充電站管理**: 站點設定、設備監控、功率分析
+- **系統管理**: 操作日誌、故障報告、報表生成
 
-#### 💳 錢包與卡片系統
--   `/api/wallet/topup` - 錢包儲值
--   `/api/wallet/deduct` - 錢包扣款
--   `/api/cards` - RFID 卡片管理
--   `/api/cards/all` - 所有卡片資訊
+#### ⚡ OCPP Server API (http://localhost:8089)
+- **系統監控**: 健康檢查、系統狀態、MQ連接狀態
+- **充電樁管理**: 遠程控制、狀態查詢、重啟操作
+- **能源管理**: EMS功率分配、電表管理、站點調度
 
-#### 💰 計費與費率
--   `/api/billing/channels` - 計費渠道管理
--   `/api/pricing_management` - 費率管理
-
-#### 🏢 充電站與設備
--   `/api/stations` - 充電站管理
--   `/api/charging_status` - 充電狀態監控
--   `/api/dashboard` - 儀表板資料
-
-#### 📊 系統管理
--   `/api/operation-logs` - 操作日誌
--   `/api/database` - 資料庫管理
--   `/api/fault_report` - 故障報告
--   `/api/hardware_maintenance` - 硬體維護
--   `/api/power_analysis` - 功率分析
--   `/api/reports` - 報告生成
-
-### OCPP API 端點 (http://localhost:8089)
-
-#### 健康檢查與狀態
-- `GET /health` - 服務健康檢查
-- `GET /system/status` - 系統狀態監控
-- `GET /mq/health` - 消息隊列健康狀態
-
-#### 充電樁管理
-- `GET /api/v1/chargepoints/online` - 獲取在線充電樁列表
-- `POST /api/v1/chargepoints/:cpsn/remotestart` - 遠程啟動充電
-- `POST /api/v1/chargepoints/:cpsn/remotestop` - 遠程停止充電
-- `POST /api/v1/chargepoints/:cpsn/reset` - 重啟充電樁
-
-#### EMS 能源管理
-- `POST /ocpp/api/trigger_profile_update` - 手動觸發功率重新分配
-- `POST /ocpp/api/trigger_meter_reallocation` - 觸發電表級功率重新分配
-- `POST /ocpp/api/trigger_station_reallocation` - 觸發站點級功率重新分配
-- `GET /ocpp/api/see_connections` - 查看 WebSocket 連接狀態
-
-詳細的 API 文件請參考各個端點的實現或使用工具如 Postman 進行測試。
+完整的 API 結構、端點說明、請求格式、響應結構和使用範例請查看：**[API 結構文檔](docs/API_STRUCTURE.md)**
 
 ## 🧪 測試
 
@@ -398,13 +362,11 @@ npm test tests/emsIntegration.test.js
 curl http://localhost:8089/health
 curl http://localhost:8089/system/status
 
-# 查看在線充電樁
-curl http://localhost:8089/api/v1/chargepoints/online
+# API 使用範例請參考
+# 📖 完整的 API 使用範例和文檔：docs/API_STRUCTURE.md
 
-# 手動觸發 EMS 重分配
-curl -X POST http://localhost:8089/ocpp/api/trigger_profile_update \
-     -H "Content-Type: application/json" \
-     -d '{"source":"debug"}'
+# 快速測試 - 健康檢查
+curl http://localhost:8089/health
 
 # 檢查 RabbitMQ 管理界面 (如果啟用)
 # http://localhost:15672 (guest/guest)

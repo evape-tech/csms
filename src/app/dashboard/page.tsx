@@ -95,8 +95,6 @@ export default async function Dashboard() {
         guns_status: gunsData.filter(g => g.guns_status).length,
         guns_metervalue1: gunsData.filter(g => g.guns_metervalue1).length
       };
-      
-      console.log('[Page /dashboard] Gun data field presence:', fieldCheck);
     } else {
       console.warn('[Page /dashboard] No gun data available');
     }

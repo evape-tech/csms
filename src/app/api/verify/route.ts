@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import fs from 'fs';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 // ensure admin initialized similarly to session route
 if (!admin.apps.length) {
   try {

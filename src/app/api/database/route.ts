@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '../../../lib/database/utils.js';
 import { databaseManager } from '../../../lib/database/adapter.js';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const stats = await DatabaseUtils.getDatabaseStats();

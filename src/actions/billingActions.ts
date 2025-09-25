@@ -88,7 +88,7 @@ export async function getBillingRecords(filters: BillingFilters = {}, pagination
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        tariffs: {
+        tariff: {
           select: {
             id: true,
             name: true,

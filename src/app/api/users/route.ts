@@ -3,6 +3,9 @@ import { databaseService } from '../../../lib/database/service';
 import DatabaseUtils from '../../../lib/database/utils';
 import { cookies } from 'next/headers';
 
+// 強制動態渲染，避免靜態快取
+export const dynamic = 'force-dynamic';
+
 // 簡易身份驗證檢查
 async function isAdmin(req: NextRequest) {
     try {

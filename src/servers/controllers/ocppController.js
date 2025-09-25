@@ -311,13 +311,15 @@ async function handleCallErrorMessage(cpsn, messageId, payload) {
  * @param {string} cpsn 充电站序列号
  * @param {number} connectorId 连接器ID
  * @param {string} idTag 用户标识
+ * @param {string} userUuid 用戶UUID
+ * @param {string} userRole 用戶角色
  * @returns {Promise<boolean>} 是否成功发送命令
  */
-async function startRemoteCharging(cpsn, connectorId, idTag) {
-  logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}`);
+async function startRemoteCharging(cpsn, connectorId, idTag, userUuid = null, userRole = null) {
+  logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
   
   try {
-    return await ocppMessageService.sendRemoteStartTransaction(cpsn, connectorId, idTag);
+    return await ocppMessageService.sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid, userRole);
   } catch (err) {
     logger.error(`启动远程充电时出错: ${err.message}`, err);
     return false;
@@ -328,13 +330,15 @@ async function startRemoteCharging(cpsn, connectorId, idTag) {
  * 停止远程充电
  * @param {string} cpsn 充电站序列号
  * @param {number} transactionId 交易ID
+ * @param {string} userUuid 用戶UUID
+ * @param {string} userRole 用戶角色
  * @returns {Promise<boolean>} 是否成功发送命令
  */
-async function stopRemoteCharging(cpsn, transactionId) {
-  logger.info(`停止远程充电: ${cpsn}, 交易ID: ${transactionId}`);
+async function stopRemoteCharging(cpsn, transactionId, userUuid = null, userRole = null) {
+  logger.info(`停止远程充电: ${cpsn}, 交易ID: ${transactionId}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
   
   try {
-    return await ocppMessageService.sendRemoteStopTransaction(cpsn, transactionId);
+    return await ocppMessageService.sendRemoteStopTransaction(cpsn, transactionId, userUuid, userRole);
   } catch (err) {
     logger.error(`停止远程充电时出错: ${err.message}`, err);
     return false;
