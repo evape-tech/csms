@@ -288,60 +288,47 @@ async function getStations() {
 }
 
 /**
- * 验证IdTag是否有效，並返回對應的用戶UUID
- * @param {string} idTag 用户标识标签
- * @returns {Promise<{valid: boolean, userUuid?: string}>} 驗證結果和用戶UUID
+ * 验证IdTag是否有效，透過 rfid_cards.card_number 對應 users.uuid
+ * @param {string} idTag 用戶 RFID 卡片號碼
+ * @returns {Promise<{valid: boolean, userUuid?: string}>} 驗證結果和用戶資訊
  */
 async function validateIdTag(idTag) {
   try {
     await ensureDbInitialized();
     const { databaseService: dbService } = await loadDatabaseModules();
-    
-    logger.debug(`🔍 [IdTag驗證] 開始驗證 IdTag: ${idTag}`);
-    
+
+    logger.debug(`🔍 [IdTag驗證] 開始驗證卡片號碼: ${idTag}`);
+
     // 基本格式驗證
     if (!idTag || typeof idTag !== 'string' || idTag.trim().length === 0) {
-      logger.warn(`❌ [IdTag驗證] IdTag 格式無效: ${idTag}`);
+      logger.warn(`❌ [IdTag驗證] 卡片號碼格式無效: ${idTag}`);
       return { valid: false };
     }
-    
-    // 檢查是否為web界面標籤（管理者遠端操作）
-    if (idTag === 'web_interface_tag' || idTag.startsWith('web_') || idTag.startsWith('admin_')) {
-      logger.debug(`🌐 [IdTag驗證] 接受web界面標籤: ${idTag}`);
-      return { valid: true }; // 管理者操作不需要userUuid，已在前端處理
-    }
-    
-    // 檢查是否為測試標籤
-    if (idTag.startsWith('test_') || idTag === 'default_tag') {
-      logger.debug(`🧪 [IdTag驗證] 接受測試標籤: ${idTag}`);
-      return { valid: true };
-    }
-    
-    // 嘗試根據RFID卡號查找用戶
+
+    // 依據 RFID 卡片號碼取得關聯用戶
     try {
       const user = await dbService.getUserByRfidCard(idTag);
-      
+
       if (user) {
-        logger.info(`✅ [IdTag驗證] RFID卡片 ${idTag} 對應用戶: ${user.email} (UUID: ${user.uuid}, 角色: ${user.role})`);
-        return { 
-          valid: true, 
+        logger.info(`✅ [IdTag驗證] 卡片 ${idTag} 對應用戶: ${user.email} (角色: ${user.role})`);
+        return {
+          valid: true,
           userUuid: user.uuid,
           userRole: user.role,
           userEmail: user.email
         };
       } else {
-        logger.warn(`❌ [IdTag驗證] 找不到對應的RFID卡片或用戶: ${idTag}`);
+        logger.warn(`❌ [IdTag驗證] 找不到對應的卡片號碼: ${idTag}`);
         return { valid: false };
       }
     } catch (rfidError) {
-      logger.error(`❌ [IdTag驗證] RFID卡片查詢失敗: ${idTag}`, rfidError);
+      logger.error(`❌ [IdTag驗證] RFID 卡片查詢失敗: ${idTag}`, rfidError);
       return { valid: false };
     }
-    
 
   } catch (error) {
-    logger.error(`验证IdTag失败: ${idTag}`, error);
-    return true; // 開發階段：即使出錯也返回 true
+    logger.error(`驗證卡片號碼失敗: ${idTag}`, error);
+    return { valid: false }; // 生產環境：驗證失敗返回false
   }
 }
 
@@ -524,7 +511,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
         // 不拋出錯誤，避免影響主要的交易更新流程
       }
     } else {
-      console.log(`⏭️  [自動Billing] 跳過billing生成 - 交易 ${transaction.transaction_id}: 狀態變更=${statusChanged}, 新狀態=${newStatus}`);
+      // console.log(`⏭️  [自動Billing] 跳過billing生成 - 交易 ${transaction.transaction_id}: 狀態變更=${statusChanged}, 新狀態=${newStatus}`);
     }
     
     // logger.info(`更新交易記錄成功: OCPP ID=${transactionIdInt}`);

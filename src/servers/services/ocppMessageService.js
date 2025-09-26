@@ -489,18 +489,16 @@ async function handleStartTransaction(cpsn, messageBody) {
     let cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
     
     // 验证idTag
-    if (!isDevelopment) {
-      const validTag = await chargePointRepository.validateIdTag(idTag);
+    
+    const validTag = await chargePointRepository.validateIdTag(idTag);
       
-      if (!validTag) {
-        logger.warn(`无效的 IdTag: ${idTag}`);
-        return {
-          transactionId: -1,
-          idTagInfo: { status: "Invalid" }
-        };
-      }
+    if (!validTag) {
+      logger.warn(`无效的 IdTag: ${idTag}`);
+      return {
+        transactionId: -1,
+        idTagInfo: { status: "Invalid" }
+      };
     }
-
     
     // 創建新的交易記錄
     const transactionRecord = await chargePointRepository.createNewTransaction({
@@ -509,7 +507,7 @@ async function handleStartTransaction(cpsn, messageBody) {
       connector_id: connectorId,
       idTag: idTag,
       meterStart: meterStart,
-      user_id: null 
+      user_id: validTag.userUuid // 关联用户ID
     });
     
     // 獲取符合 OCPP 1.6 協議的整數 transactionId
@@ -667,10 +665,12 @@ async function handleStopTransaction(cpsn, messageBody) {
  * @param {string} cpsn 充电站序列号
  * @param {number} connectorId 连接器ID
  * @param {string} idTag 用户标识
+ * @param {string} userUuid 用户UUID
+ * @param {string} userRole 用户角色
  * @returns {Promise<boolean>} 是否成功
  */
-async function sendRemoteStartTransaction(cpsn, connectorId, idTag) {
-  logger.info(`发送远程启动交易请求: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}`);
+async function sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid = null, userRole = null) {
+  logger.info(`发送远程启动交易请求: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用户UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
   
   try {
     const messageId = generateUniqueId();
@@ -692,8 +692,16 @@ async function sendRemoteStartTransaction(cpsn, connectorId, idTag) {
       const cpid = connectionService.getCpidFromWsData(cpsn, connectorId);
       
       if (cpid) {
-        // 记录OCPP JSON日志
-        await createOcppLogEntry(cpid, cpsn, message, "out");
+        // 记录OCPP JSON日志，包含用户上下文信息
+        const logEntry = {
+          ...message,
+          userContext: {
+            userUuid: userUuid,
+            userRole: userRole,
+            timestamp: new Date().toISOString()
+          }
+        };
+        await createOcppLogEntry(cpid, cpsn, logEntry, "out");
       }
     }
     
@@ -708,10 +716,12 @@ async function sendRemoteStartTransaction(cpsn, connectorId, idTag) {
  * 发送远程停止交易请求
  * @param {string} cpsn 充电站序列号
  * @param {number} transactionId 交易ID
+ * @param {string} userUuid 用户UUID
+ * @param {string} userRole 用户角色
  * @returns {Promise<boolean>} 是否成功
  */
-async function sendRemoteStopTransaction(cpsn, transactionId) {
-  logger.info(`发送远程停止交易请求: ${cpsn}, 交易ID: ${transactionId}`);
+async function sendRemoteStopTransaction(cpsn, transactionId, userUuid = null, userRole = null) {
+  logger.info(`发送远程停止交易请求: ${cpsn}, 交易ID: ${transactionId}, 用户UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
   
   try {
     const messageId = generateUniqueId();
@@ -732,8 +742,16 @@ async function sendRemoteStopTransaction(cpsn, transactionId) {
       const transaction = await chargePointRepository.findTransaction(transactionId);
       
       if (transaction && transaction.cpid) {
-        // 记录OCPP JSON日志
-        await createOcppLogEntry(transaction.cpid, cpsn, message, "out");
+        // 记录OCPP JSON日志，包含用户上下文信息
+        const logEntry = {
+          ...message,
+          userContext: {
+            userUuid: userUuid,
+            userRole: userRole,
+            timestamp: new Date().toISOString()
+          }
+        };
+        await createOcppLogEntry(transaction.cpid, cpsn, logEntry, "out");
       }
     }
     

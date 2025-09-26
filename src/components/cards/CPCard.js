@@ -221,12 +221,13 @@ export default function CPCard({ chargers, stations, meters }) {
 
     setActionLoading(s => ({ ...s, [id]: true }));
     try {
-      // build remote start body inline (do not use shared builder per request)
+      // 管理後台的啟動與停止充電先寫死
       const body = {
-        apikey: undefined,
         cmd: 'cmd_start_charging',
         cp_id: targetCharger.cpid,
-        connectorId: targetCharger.connector, 
+        connectorId: targetCharger.connector,
+        user_uuid: 'cc2bccd0-c979-11e9-ba8d-d70282892727',
+        user_id_tag: 'RFID002',
       };
       await callOcppEndpoint(id, body);
 
@@ -257,10 +258,11 @@ export default function CPCard({ chargers, stations, meters }) {
     setActionLoading(s => ({ ...s, [id]: true }));
     try {
       const body = {
-        apikey: undefined,
         cmd: 'cmd_stop_charging',
         cp_id: targetCharger.cpid,
         connectorId: targetCharger.connector ? parseInt(targetCharger.connector, 10) : 1, // 使用充電樁的實際 connector 欄位，預設為1
+        user_uuid: 'cc2bccd0-c979-11e9-ba8d-d70282892727',
+        user_id_tag: 'RFID002',
       };
       await callOcppEndpoint(id, body);
 

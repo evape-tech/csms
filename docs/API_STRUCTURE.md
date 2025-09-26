@@ -25,12 +25,12 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 ### 1. Next.js API 端點 (http://localhost:3000)
 
 #### 🔐 認證與用戶管理
-- `POST /api/login` - 使用者登入
-- `GET /api/session` - 會話管理
+- `POST /api/auth/login` - 使用者登入
+- `POST /api/session` - 創建會話 cookie
 - `GET /api/users` - 獲取用戶列表
 - `POST /api/users` - 新增用戶
-- `PUT /api/users` - 更新用戶資訊
-- `DELETE /api/users` - 刪除用戶
+- `PUT /api/users/[id]` - 更新用戶資訊
+- `DELETE /api/users/[id]` - 刪除用戶
 - `GET /api/users/[id]/cards` - 用戶 RFID 卡片管理
 - `GET /api/users/[id]/wallet` - 用戶錢包資訊
 - `GET /api/users/[id]/transactions` - 用戶交易記錄
@@ -38,10 +38,9 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 #### 💳 錢包與卡片系統
 - `POST /api/wallet/topup` - 錢包儲值
 - `POST /api/wallet/deduct` - 錢包扣款
-- `GET /api/cards` - RFID 卡片管理
 - `POST /api/cards` - 新增 RFID 卡片
-- `PUT /api/cards` - 更新 RFID 卡片
-- `DELETE /api/cards` - 刪除 RFID 卡片
+- `PUT /api/cards/[id]` - 更新 RFID 卡片
+- `DELETE /api/cards/[id]` - 刪除 RFID 卡片
 - `GET /api/cards/all` - 所有卡片資訊
 
 #### 💰 計費與費率
@@ -49,31 +48,17 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 - `POST /api/billing/channels` - 新增計費渠道
 - `PUT /api/billing/channels` - 更新計費渠道
 - `DELETE /api/billing/channels` - 刪除計費渠道
-- `GET /api/pricing_management` - 費率管理
-- `POST /api/pricing_management` - 新增費率
-- `PUT /api/pricing_management` - 更新費率
-- `DELETE /api/pricing_management` - 刪除費率
+- `GET /api/tariffs` - 費率管理
+- `POST /api/tariffs` - 新增費率
 
 #### 🏢 充電站與設備
 - `GET /api/stations` - 充電站管理
-- `POST /api/stations` - 新增充電站
-- `PUT /api/stations` - 更新充電站
-- `DELETE /api/stations` - 刪除充電站
-- `GET /api/charging_status` - 充電狀態監控
-- `GET /api/dashboard` - 儀表板資料
+- `PATCH /api/stations` - 更新充電站
 
 #### 📊 系統管理
 - `GET /api/operation-logs` - 操作日誌查詢
-- `POST /api/operation-logs` - 記錄操作日誌
 - `GET /api/database` - 資料庫管理
 - `POST /api/database` - 資料庫操作
-- `GET /api/fault_report` - 故障報告
-- `POST /api/fault_report` - 提交故障報告
-- `GET /api/hardware_maintenance` - 硬體維護
-- `POST /api/hardware_maintenance` - 硬體維護操作
-- `GET /api/power_analysis` - 功率分析
-- `GET /api/reports` - 報告生成
-- `POST /api/reports` - 生成報告
 
 ### 2. OCPP Server 系統級 API（無版本號）
 這些端點不包含版本號，主要用於系統健康檢查和基礎功能：
@@ -129,13 +114,14 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 #### 用戶認證
 ```bash
 # 使用者登入
-curl -X POST http://localhost:3000/api/login \
+curl -X POST http://localhost:3000/api/auth/login \
      -H "Content-Type: application/json" \
      -d '{"email": "admin@example.com", "password": "password"}'
 
-# 檢查會話狀態
-curl http://localhost:3000/api/session \
-     -H "Cookie: session=your_session_token"
+# 創建會話 cookie
+curl -X POST http://localhost:3000/api/session \
+     -H "Content-Type: application/json" \
+     -d '{"idToken": "firebase_id_token", "next": "/dashboard"}'
 ```
 
 #### 用戶管理
@@ -148,11 +134,22 @@ curl -X POST http://localhost:3000/api/users \
      -H "Content-Type: application/json" \
      -d '{"name": "新用戶", "email": "user@example.com", "role": "user"}'
 
+# 更新用戶資訊
+curl -X PUT http://localhost:3000/api/users/1 \
+     -H "Content-Type: application/json" \
+     -d '{"name": "更新用戶名", "email": "updated@example.com"}'
+
+# 刪除用戶
+curl -X DELETE http://localhost:3000/api/users/1
+
 # 獲取用戶錢包資訊
 curl http://localhost:3000/api/users/1/wallet
 
 # 獲取用戶交易記錄
 curl http://localhost:3000/api/users/1/transactions
+
+# 獲取用戶 RFID 卡片
+curl http://localhost:3000/api/users/1/cards
 ```
 
 #### 錢包操作
@@ -168,21 +165,86 @@ curl -X POST http://localhost:3000/api/wallet/deduct \
      -d '{"userId": 1, "amount": 50, "reason": "charging_fee"}'
 ```
 
+#### 卡片管理
+```bash
+# 獲取所有卡片資訊
+curl http://localhost:3000/api/cards/all
+
+# 新增 RFID 卡片
+curl -X POST http://localhost:3000/api/cards \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: admin-secret-key" \
+     -d '{"card_number": "1234567890", "user_id": "user-uuid", "card_type": "RFID"}'
+
+# 更新 RFID 卡片
+curl -X PUT http://localhost:3000/api/cards/1 \
+     -H "Content-Type: application/json" \
+     -d '{"status": "INACTIVE"}'
+
+# 刪除 RFID 卡片
+curl -X DELETE http://localhost:3000/api/cards/1
+```
+
+#### 計費與費率
+```bash
+# 獲取計費渠道
+curl http://localhost:3000/api/billing/channels
+
+# 新增計費渠道
+curl -X POST http://localhost:3000/api/billing/channels \
+     -H "Content-Type: application/json" \
+     -d '{"name": "信用卡支付", "code": "credit_card", "status": 1}'
+
+# 更新計費渠道
+curl -X PUT http://localhost:3000/api/billing/channels \
+     -H "Content-Type: application/json" \
+     -d '{"id": 1, "name": "更新後的支付方式", "status": 1}'
+
+# 刪除計費渠道
+curl -X DELETE "http://localhost:3000/api/billing/channels?id=1"
+
+# 獲取費率方案
+curl http://localhost:3000/api/tariffs
+
+# 新增費率方案
+curl -X POST http://localhost:3000/api/tariffs \
+     -H "Content-Type: multipart/form-data" \
+     -F "name=標準費率" \
+     -F "peak_rate=5.5" \
+     -F "off_peak_rate=3.2"
+```
+
 #### 充電站管理
 ```bash
 # 獲取所有充電站
 curl http://localhost:3000/api/stations
 
-# 新增充電站
-curl -X POST http://localhost:3000/api/stations \
+# 更新充電站設定
+curl -X PATCH http://localhost:3000/api/stations \
      -H "Content-Type: application/json" \
-     -d '{"name": "新充電站", "location": "台北市", "total_power_kw": 100}'
+     -d '{"station_id": 1, "name": "更新充電站", "max_power_kw": 150}'
+```
 
-# 獲取充電狀態
-curl http://localhost:3000/api/charging_status
+#### 系統管理
+```bash
+# 獲取操作日誌
+curl "http://localhost:3000/api/operation-logs?page=1&limit=50"
 
-# 獲取儀表板資料
-curl http://localhost:3000/api/dashboard
+# 獲取操作日誌 (含篩選)
+curl "http://localhost:3000/api/operation-logs?actionType=LOGIN&startDate=2025-09-01&endDate=2025-09-30"
+
+# 資料庫健康檢查
+curl http://localhost:3000/api/database
+
+# 測試資料庫連接
+curl -X POST http://localhost:3000/api/database \
+     -H "Content-Type: application/json" \
+     -d '{"action": "test"}'
+
+# 切換資料庫
+curl -X POST http://localhost:3000/api/database \
+     -H "Content-Type: application/json" \
+     -d '{"action": "switch", "provider": "mysql"}'
 ```
 
 ### OCPP Server API 範例 (http://localhost:8089)
