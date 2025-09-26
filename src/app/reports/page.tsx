@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useCallback, memo, lazy, Suspense } from 'react';
+import React, { useState, useCallback, memo, lazy, Suspense, useMemo, useEffect } from 'react';
 import {
   Tabs,
   Tab,
@@ -12,13 +12,20 @@ import {
   alpha,
   Card,
   CardContent,
-  Avatar
+  Avatar,
+  Button,
+  Chip,
+  Stack,
+  Alert
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import DownloadIcon from '@mui/icons-material/Download';
+import InsightsIcon from '@mui/icons-material/Insights';
 
 // 使用 lazy loading 加載組件
 const ChargingRecords = lazy(() => import('./ChargingRecords'));
@@ -35,7 +42,6 @@ const TabPanel = memo(function TabPanel(props: {
 }) {
   const { children, value, index, ...other } = props;
   const theme = useTheme();
-console.log("Server render at:", new Date().toISOString());
   return (
     <div
       role="tabpanel"
@@ -48,7 +54,7 @@ console.log("Server render at:", new Date().toISOString());
         <Box sx={{
           p: 4,
           minHeight: 400,
-          bgcolor: alpha(theme.palette.background.default, 0.3)
+          bgcolor: alpha(theme.palette.background.paper, 0.6)
         }}>
           <Suspense fallback={
             <Box
@@ -174,6 +180,68 @@ function a11yProps(index: number) {
   } as const;
 }
 
+const SUMMARY_DEFAULT = {
+  charging: { count: 0, today: 0 },
+  transactions: { count: 0, today: 0 },
+  system: { count: 0, today: 0 },
+  usage: { count: 0, today: 0 }
+};
+
+interface SummaryCardProps {
+  title: string;
+  value: number;
+  delta: number;
+  icon: React.ReactNode;
+  color: string;
+}
+
+const SummaryCard = memo(function SummaryCard({ title, value, delta, icon, color }: SummaryCardProps) {
+  const theme = useTheme();
+
+  return (
+    <Card
+      elevation={2}
+      sx={{
+        borderRadius: 3,
+        bgcolor: alpha(color, 0.05),
+        border: `1px solid ${alpha(color, 0.12)}`,
+        transition: 'all 0.3s ease-in-out',
+        '&:hover': {
+          boxShadow: theme.shadows[6],
+          transform: 'translateY(-2px)'
+        }
+      }}
+    >
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Avatar
+            sx={{
+              bgcolor: color,
+              color: theme.palette.getContrastText(color),
+              width: 48,
+              height: 48,
+              mr: 2
+            }}
+          >
+            {icon}
+          </Avatar>
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              {title}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: color, lineHeight: 1 }}>
+              {value.toLocaleString()}
+            </Typography>
+          </Box>
+        </Box>
+        <Typography variant="body2" color="text.secondary">
+          今日新增 {delta.toLocaleString()} 筆
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+});
+
 const Reports = memo(function Reports() {
   const theme = useTheme();
   const [value, setValue] = useState(0);
@@ -182,13 +250,94 @@ const Reports = memo(function Reports() {
     setValue(newValue);
   }, []);
 
-  // 報表統計數據
-  const reportStats = {
-    charging: { count: 1247, today: 89 },
-    transactions: { count: 892, today: 45 },
-    system: { count: 156, today: 12 },
-    usage: { count: 2341, today: 156 }
-  };
+  const [summary, setSummary] = useState(SUMMARY_DEFAULT);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+
+    try {
+      const response = await fetch('/api/reports/summary', {
+        cache: 'no-store'
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || '無法取得報表摘要');
+      }
+
+      const normalize = (section?: { count?: number; today?: number }) => ({
+        count: section?.count ?? 0,
+        today: section?.today ?? 0
+      });
+
+      setSummary({
+        charging: normalize(json.data?.charging),
+        transactions: normalize(json.data?.transactions),
+        system: normalize(json.data?.system),
+        usage: normalize(json.data?.usage)
+      });
+    } catch (error) {
+      console.error('Fetch report summary error:', error);
+      setSummaryError(error instanceof Error ? error.message : '未知錯誤，請稍後再試');
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  const summaryCards = useMemo(() => ([
+    {
+      key: 'charging',
+      title: '充電記錄總數',
+      value: summary.charging.count,
+      delta: summary.charging.today,
+      icon: <ElectricBoltIcon />,
+      color: theme.palette.primary.main
+    },
+    {
+      key: 'transactions',
+      title: '交易記錄總數',
+      value: summary.transactions.count,
+      delta: summary.transactions.today,
+      icon: <ReceiptIcon />,
+      color: theme.palette.success.main
+    },
+    {
+      key: 'system',
+      title: '系統記錄總數',
+      value: summary.system.count,
+      delta: summary.system.today,
+      icon: <SettingsIcon />,
+      color: theme.palette.warning.main
+    },
+    {
+      key: 'usage',
+      title: '使用記錄總數',
+      value: summary.usage.count,
+      delta: summary.usage.today,
+      icon: <AnalyticsIcon />,
+      color: theme.palette.info.main
+    }
+  ]), [summary, theme]);
+
+  const aggregatedStats = useMemo(() => summaryCards.reduce((acc, stat) => ({
+    total: acc.total + stat.value,
+    today: acc.today + stat.delta
+  }), { total: 0, today: 0 }), [summaryCards]);
+
+  const handleExport = useCallback(() => {
+    console.info('Export reports requested');
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   return (
     <Container
@@ -201,24 +350,83 @@ const Reports = memo(function Reports() {
     >
       {/* 頁面標題 */}
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant="h4"
-          component="h1"
+        <Box
           sx={{
-            fontWeight: 700,
-            color: theme.palette.primary.main,
-            mb: 1,
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: 2
           }}
         >
-          <AssessmentIcon sx={{ fontSize: '2rem' }} />
-          報表管理系統
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          查看和管理各種系統報表和記錄數據
-        </Typography>
+          <Box>
+            <Typography
+              variant="h4"
+              component="h1"
+              sx={{
+                fontWeight: 700,
+                color: theme.palette.primary.main,
+                mb: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2
+              }}
+            >
+              <AssessmentIcon sx={{ fontSize: '2rem' }} />
+              報表管理中心
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              掌握充電、交易、系統與使用記錄的完整分析資訊
+            </Typography>
+          </Box>
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            sx={{
+              flexWrap: 'wrap',
+              '& > *': { flexShrink: 0 }
+            }}
+          >
+            <Chip
+              icon={<InsightsIcon />}
+              label={summaryLoading ? '摘要載入中…' : `今日新增報表 ${aggregatedStats.today.toLocaleString()} 筆`}
+              sx={{
+                bgcolor: alpha(theme.palette.primary.main, 0.08),
+                color: theme.palette.primary.main,
+                fontWeight: 600
+              }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              sx={{
+                px: 3,
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600
+              }}
+              onClick={handleExport}
+              disabled={summaryLoading}
+            >
+              匯出報表
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={summaryLoading ? <CircularProgress size={18} color="inherit" /> : <RefreshIcon />}
+              sx={{
+                px: 3,
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600
+              }}
+              onClick={handleRefresh}
+              disabled={summaryLoading}
+            >
+              更新數據
+            </Button>
+          </Stack>
+        </Box>
       </Box>
 
       {/* 統計概覽 */}
@@ -226,179 +434,32 @@ const Reports = memo(function Reports() {
         <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: theme.palette.text.primary }}>
           報表統計概覽
         </Typography>
-        <Box sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 3,
-          '& > *': { flex: '1 1 280px', minWidth: 240 }
-        }}>
-          <Card
-            elevation={2}
-            sx={{
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.primary.main, 0.05),
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-              transition: 'all 0.3s ease-in-out',
-              '&:hover': {
-                elevation: 4,
-                transform: 'translateY(-2px)'
-              }
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar sx={{
-                  bgcolor: theme.palette.primary.main,
-                  mr: 2,
-                  width: 48,
-                  height: 48
-                }}>
-                  <ElectricBoltIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    充電記錄總數
-                  </Typography>
-                  <Typography variant="h4" sx={{
-                    fontWeight: 700,
-                    color: theme.palette.primary.main,
-                    lineHeight: 1
-                  }}>
-                    {reportStats.charging.count.toLocaleString()}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    今日新增: {reportStats.charging.today}
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card
-            elevation={2}
-            sx={{
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.success.main, 0.05),
-              border: `1px solid ${alpha(theme.palette.success.main, 0.1)}`,
-              transition: 'all 0.3s ease-in-out',
-              '&:hover': {
-                elevation: 4,
-                transform: 'translateY(-2px)'
-              }
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar sx={{
-                  bgcolor: theme.palette.success.main,
-                  mr: 2,
-                  width: 48,
-                  height: 48
-                }}>
-                  <ReceiptIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    交易記錄總數
-                  </Typography>
-                  <Typography variant="h4" sx={{
-                    fontWeight: 700,
-                    color: theme.palette.success.main,
-                    lineHeight: 1
-                  }}>
-                    {reportStats.transactions.count.toLocaleString()}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    今日新增: {reportStats.transactions.today}
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card
-            elevation={2}
-            sx={{
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.warning.main, 0.05),
-              border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`,
-              transition: 'all 0.3s ease-in-out',
-              '&:hover': {
-                elevation: 4,
-                transform: 'translateY(-2px)'
-              }
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar sx={{
-                  bgcolor: theme.palette.warning.main,
-                  mr: 2,
-                  width: 48,
-                  height: 48
-                }}>
-                  <SettingsIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    系統記錄總數
-                  </Typography>
-                  <Typography variant="h4" sx={{
-                    fontWeight: 700,
-                    color: theme.palette.warning.main,
-                    lineHeight: 1
-                  }}>
-                    {reportStats.system.count.toLocaleString()}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    今日新增: {reportStats.system.today}
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card
-            elevation={2}
-            sx={{
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.info.main, 0.05),
-              border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`,
-              transition: 'all 0.3s ease-in-out',
-              '&:hover': {
-                elevation: 4,
-                transform: 'translateY(-2px)'
-              }
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Avatar sx={{
-                  bgcolor: theme.palette.info.main,
-                  mr: 2,
-                  width: 48,
-                  height: 48
-                }}>
-                  <AnalyticsIcon />
-                </Avatar>
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    使用記錄總數
-                  </Typography>
-                  <Typography variant="h4" sx={{
-                    fontWeight: 700,
-                    color: theme.palette.info.main,
-                    lineHeight: 1
-                  }}>
-                    {reportStats.usage.count.toLocaleString()}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    今日新增: {reportStats.usage.today}
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
+        {summaryError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {summaryError}
+          </Alert>
+        )}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 3,
+            '& > *': {
+              flex: '1 1 280px',
+              minWidth: 240
+            }
+          }}
+        >
+          {summaryCards.map(({ key, title, value, delta, icon, color }) => (
+            <SummaryCard
+              key={key}
+              title={title}
+              value={value}
+              delta={delta}
+              icon={icon}
+              color={color}
+            />
+          ))}
         </Box>
       </Box>
 

@@ -22,8 +22,11 @@ import {
 import {
   Download as DownloadIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon
+  FilterList as FilterIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
 
 interface Column {
   id: string;
@@ -42,6 +45,9 @@ interface RecordsTableProps {
   filterable?: boolean;
   exportable?: boolean;
   onExport?: () => void;
+  loading?: boolean;
+  error?: string | null;
+  onRefresh?: () => void;
 }
 
 export default function RecordsTable({
@@ -51,13 +57,18 @@ export default function RecordsTable({
   searchable = true,
   filterable = true,
   exportable = true,
-  onExport
+  onExport,
+  loading = false,
+  error,
+  onRefresh
 }: RecordsTableProps) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [orderBy, setOrderBy] = useState<string>('');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+
+  const dataset = useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
   // 處理排序
   const handleRequestSort = (property: string) => {
@@ -68,11 +79,11 @@ export default function RecordsTable({
 
   // 過濾和排序數據
   const filteredAndSortedData = useMemo(() => {
-    let filtered = data;
+    let filtered = dataset;
 
     // 搜索過濾
     if (searchTerm) {
-      filtered = data.filter(row =>
+      filtered = dataset.filter(row =>
         Object.values(row).some(value =>
           String(value).toLowerCase().includes(searchTerm.toLowerCase())
         )
@@ -92,7 +103,7 @@ export default function RecordsTable({
     }
 
     return filtered;
-  }, [data, searchTerm, orderBy, order]);
+  }, [dataset, searchTerm, orderBy, order]);
 
   // 分頁數據
   const paginatedData = useMemo(() => {
@@ -127,18 +138,36 @@ export default function RecordsTable({
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
           <Typography variant="h6">{title}</Typography>
           <Stack direction="row" spacing={1}>
+            {onRefresh && (
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={onRefresh}
+                size="small"
+                disabled={loading}
+              >
+                重新整理
+              </Button>
+            )}
             {exportable && (
               <Button
                 variant="contained"
                 startIcon={<DownloadIcon />}
                 onClick={handleExport}
                 size="small"
+                disabled={loading}
               >
                 導出
               </Button>
             )}
           </Stack>
         </Box>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         {/* 搜索和過濾 */}
         {(searchable || filterable) && (
@@ -213,6 +242,13 @@ export default function RecordsTable({
               </TableRow>
             </TableHead>
             <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={columns.length} align="center" sx={{ py: 4 }}>
+                    <CircularProgress size={24} />
+                  </TableCell>
+                </TableRow>
+              )}
               {paginatedData.length > 0 ? (
                 paginatedData.map((row, index) => (
                   <TableRow hover key={row.id || index}>
@@ -230,7 +266,7 @@ export default function RecordsTable({
                     })}
                   </TableRow>
                 ))
-              ) : (
+              ) : !loading ? (
                 <TableRow>
                   <TableCell colSpan={columns.length} align="center" sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
@@ -238,7 +274,7 @@ export default function RecordsTable({
                     </Typography>
                   </TableCell>
                 </TableRow>
-              )}
+              ) : null}
             </TableBody>
           </Table>
         </TableContainer>

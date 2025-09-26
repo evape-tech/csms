@@ -72,29 +72,33 @@ model meters {
 }
 
 model users {
-  id                    Int                     @id @default(autoincrement())
-  uuid                  String?                 @unique(map: "uk_users_uuid") @db.VarChar(36)
-  email                 String?                 @db.VarChar(255)
-  password              String?                 @db.VarChar(255)
-  role                  String?                 @db.VarChar(255)
-  first_name            String?                 @db.VarChar(50)
-  last_name             String?                 @db.VarChar(50)
-  phone                 String?                 @db.VarChar(20)
-  date_of_birth         DateTime?               @db.Date
-  email_verified        Boolean                 @default(false)
-  account_status        users_account_status    @default(ACTIVE)
-  last_login_at         DateTime?               @db.DateTime(0)
-  login_count           Int                     @default(0)
-  failed_login_attempts Int                     @default(0)
-  lockout_until         DateTime?               @db.DateTime(0)
-  createdAt             DateTime                @db.DateTime(0)
-  updatedAt             DateTime                @db.DateTime(0)
-  billing_records       billing_records[]
-  charging_transactions charging_transactions[]
-  operation_logs        operation_logs[]
-  rfid_cards            rfid_cards[]
-  user_wallets          user_wallets?
-  wallet_transactions   wallet_transactions[]
+  id                                                           Int                     @id @default(autoincrement())
+  uuid                                                         String?                 @unique(map: "uk_users_uuid") @db.VarChar(36)
+  email                                                        String?                 @db.VarChar(255)
+  password                                                     String?                 @db.VarChar(255)
+  role                                                         String?                 @db.VarChar(255)
+  first_name                                                   String?                 @db.VarChar(50)
+  last_name                                                    String?                 @db.VarChar(50)
+  phone                                                        String?                 @db.VarChar(20)
+  date_of_birth                                                DateTime?               @db.Date
+  email_verified                                               Boolean                 @default(false)
+  account_status                                               users_account_status    @default(ACTIVE)
+  last_login_at                                                DateTime?               @db.DateTime(0)
+  login_count                                                  Int                     @default(0)
+  failed_login_attempts                                        Int                     @default(0)
+  lockout_until                                                DateTime?               @db.DateTime(0)
+  createdAt                                                    DateTime                @db.DateTime(0)
+  updatedAt                                                    DateTime                @db.DateTime(0)
+  billing_records                                              billing_records[]
+  charging_transactions                                        charging_transactions[]
+  fault_reports_fault_reports_assigned_toTousers               fault_reports[]         @relation("fault_reports_assigned_toTousers")
+  fault_reports_fault_reports_user_idTousers                   fault_reports[]         @relation("fault_reports_user_idTousers")
+  maintenance_records_maintenance_records_created_byTousers    maintenance_records[]   @relation("maintenance_records_created_byTousers")
+  maintenance_records_maintenance_records_technician_idTousers maintenance_records[]   @relation("maintenance_records_technician_idTousers")
+  operation_logs                                               operation_logs[]
+  rfid_cards                                                   rfid_cards[]
+  user_wallets                                                 user_wallets?
+  wallet_transactions                                          wallet_transactions[]
 
   @@index([account_status], map: "idx_account_status")
   @@index([email], map: "idx_email")
@@ -166,7 +170,7 @@ model billing_records {
   payment_method        String?               @db.VarChar(50)
   payment_reference     String?               @db.VarChar(100)
   payment_time          DateTime?             @db.DateTime(0)
-  user_id               String                @db.VarChar(36)
+  user_id               String?               @db.VarChar(36)
   id_tag                String                @db.VarChar(20)
   cpid                  String                @db.VarChar(255)
   cpsn                  String                @db.VarChar(255)
@@ -178,7 +182,7 @@ model billing_records {
   billing_channels      billing_channels?     @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_payment_method")
   tariff                tariffs               @relation(fields: [tariff_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_tariff_id")
   charging_transactions charging_transactions @relation(fields: [transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_transaction_id")
-  users                 users                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_user_uuid")
+  users                 users?                @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_billing_records_user_uuid")
   wallet_transactions   wallet_transactions[]
 
   @@index([payment_method], map: "fk_billing_records_payment_method")
@@ -348,6 +352,74 @@ model gun_tariffs {
   @@index([tariff_id], map: "IX_gun_tariffs_tariff_id")
 }
 
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model fault_reports {
+  id                                     BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  cpid                                   String                   @db.VarChar(255)
+  cpsn                                   String                   @db.VarChar(255)
+  connector_id                           Int?
+  user_id                                String                   @db.VarChar(36)
+  fault_type                             fault_reports_fault_type
+  severity                               fault_reports_severity   @default(MEDIUM)
+  description                            String                   @db.Text
+  status                                 fault_reports_status     @default(REPORTED)
+  assigned_to                            String?                  @db.VarChar(36)
+  resolution                             String?                  @db.Text
+  reported_at                            DateTime                 @default(now()) @db.DateTime(0)
+  resolved_at                            DateTime?                @db.DateTime(0)
+  createdAt                              DateTime                 @default(now()) @db.DateTime(0)
+  updatedAt                              DateTime                 @default(now()) @db.DateTime(0)
+  users_fault_reports_assigned_toTousers users?                   @relation("fault_reports_assigned_toTousers", fields: [assigned_to], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_fault_reports_assigned_user")
+  users_fault_reports_user_idTousers     users                    @relation("fault_reports_user_idTousers", fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_fault_reports_user_uuid")
+
+  @@index([assigned_to], map: "fk_fault_reports_assigned_user")
+  @@index([cpid], map: "idx_cpid")
+  @@index([cpsn], map: "idx_cpsn")
+  @@index([reported_at], map: "idx_reported_at")
+  @@index([severity], map: "idx_severity")
+  @@index([status], map: "idx_status")
+  @@index([user_id], map: "idx_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model maintenance_records {
+  id                                             BigInt                               @id @default(autoincrement()) @db.UnsignedBigInt
+  cpid                                           String                               @db.VarChar(255)
+  cpsn                                           String                               @db.VarChar(255)
+  connector_id                                   Int?
+  maintenance_type                               maintenance_records_maintenance_type
+  priority                                       maintenance_records_priority         @default(NORMAL)
+  description                                    String                               @db.Text
+  scheduled_date                                 DateTime?                            @db.DateTime(0)
+  actual_start_date                              DateTime?                            @db.DateTime(0)
+  actual_end_date                                DateTime?                            @db.DateTime(0)
+  technician_id                                  String?                              @db.VarChar(36)
+  technician_name                                String?                              @db.VarChar(100)
+  parts_used                                     String?                              @db.Text
+  labor_cost                                     Decimal?                             @db.Decimal(10, 2)
+  parts_cost                                     Decimal?                             @db.Decimal(10, 2)
+  total_cost                                     Decimal?                             @db.Decimal(10, 2)
+  currency                                       String                               @default("TWD") @db.VarChar(3)
+  status                                         maintenance_records_status           @default(SCHEDULED)
+  result                                         String?                              @db.Text
+  next_maintenance_date                          DateTime?                            @db.DateTime(0)
+  remarks                                        String?                              @db.Text
+  created_by                                     String?                              @db.VarChar(36)
+  createdAt                                      DateTime                             @default(now()) @db.DateTime(0)
+  updatedAt                                      DateTime                             @default(now()) @db.DateTime(0)
+  users_maintenance_records_created_byTousers    users?                               @relation("maintenance_records_created_byTousers", fields: [created_by], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_records_created_by_uuid")
+  users_maintenance_records_technician_idTousers users?                               @relation("maintenance_records_technician_idTousers", fields: [technician_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_maintenance_records_technician_uuid")
+
+  @@index([actual_start_date], map: "idx_actual_start_date")
+  @@index([cpid], map: "idx_cpid")
+  @@index([cpsn], map: "idx_cpsn")
+  @@index([created_by], map: "idx_created_by")
+  @@index([maintenance_type], map: "idx_maintenance_type")
+  @@index([scheduled_date], map: "idx_scheduled_date")
+  @@index([status], map: "idx_status")
+  @@index([technician_id], map: "idx_technician_id")
+}
+
 enum guns_acdc {
   AC
   DC
@@ -452,4 +524,52 @@ enum tariffs_tariff_type {
   SPECIAL_PROMOTION
   MEMBERSHIP
   CUSTOM
+}
+
+enum maintenance_records_maintenance_type {
+  ROUTINE
+  REPAIR
+  UPGRADE
+  INSPECTION
+  CLEANING
+  OTHER
+}
+
+enum fault_reports_fault_type {
+  POWER_FAILURE
+  COMMUNICATION_ERROR
+  HARDWARE_DAMAGE
+  SOFTWARE_ERROR
+  OVERHEAT
+  OTHER
+}
+
+enum maintenance_records_priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum fault_reports_severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum fault_reports_status {
+  REPORTED
+  UNDER_REVIEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum maintenance_records_status {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FAILED
 }

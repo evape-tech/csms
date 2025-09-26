@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Paper,
@@ -21,7 +21,9 @@ import {
   Avatar,
   InputAdornment,
   useTheme,
-  alpha
+  alpha,
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import BuildIcon from '@mui/icons-material/Build';
@@ -37,43 +39,165 @@ import InfoIcon from '@mui/icons-material/Info';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
-  { label: '待處理', value: 'pending' },
-  { label: '處理中', value: 'processing' },
-  { label: '已完成', value: 'done' },
-  { label: '已關閉', value: 'closed' },
-];
-const typeOptions = [
-  { label: '全部類型', value: '' },
-  { label: '定期保養', value: 'regular' },
-  { label: '故障維修', value: 'repair' },
-  { label: '設備升級', value: 'upgrade' },
+  { label: '已排程', value: 'SCHEDULED' },
+  { label: '處理中', value: 'IN_PROGRESS' },
+  { label: '已完成', value: 'COMPLETED' },
+  { label: '已取消', value: 'CANCELLED' },
+  { label: '失敗', value: 'FAILED' },
 ];
 
-const summary = { total: 6, pending: 1, processing: 2, done: 2, closed: 1 };
-const workRows = [
-  { id: 1, code: 'M001', device: '樁1', type: 'regular', staff: '李技師', status: 'pending', created: '2024-06-01', finished: '', desc: '定期保養' },
-  { id: 2, code: 'M002', device: '樁6', type: 'repair', staff: '王工程師', status: 'processing', created: '2024-06-02', finished: '', desc: '充電接頭' },
-  { id: 3, code: 'M003', device: '樁2', type: 'done', staff: '張大明', status: 'done', created: '2024-06-03', finished: '2024-06-04', desc: '軟體更新' },
+const typeOptions = [
+  { label: '全部類型', value: '' },
+  { label: '例行維護', value: 'ROUTINE' },
+  { label: '故障維修', value: 'REPAIR' },
+  { label: '設備升級', value: 'UPGRADE' },
+  { label: '檢查', value: 'INSPECTION' },
+  { label: '清潔', value: 'CLEANING' },
+  { label: '其他', value: 'OTHER' },
 ];
+
+interface MaintenanceRecord {
+  id: string;
+  cpid: string;
+  cpsn: string;
+  connector_id?: number;
+  maintenance_type: string;
+  priority: string;
+  description: string;
+  scheduled_date?: string;
+  actual_start_date?: string;
+  actual_end_date?: string;
+  technician_id?: string;
+  technician_name?: string;
+  parts_used?: string;
+  labor_cost?: number;
+  parts_cost?: number;
+  total_cost?: number;
+  status: string;
+  result?: string;
+  users_maintenance_records_technician_idTousers?: {
+    id: number;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+  };
+}
+
+interface MaintenanceStats {
+  total: number;
+  scheduled: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+  failed: number;
+}
 
 export default function HardwareMaintenance() {
   const theme = useTheme();
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+  const [stats, setStats] = useState<MaintenanceStats>({
+    total: 0,
+    scheduled: 0,
+    in_progress: 0,
+    completed: 0,
+    cancelled: 0,
+    failed: 0
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 載入維護記錄數據
+  const fetchMaintenanceRecords = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      if (type) params.append('maintenance_type', type);
+      if (keyword) params.append('cpid', keyword);
+      
+      const response = await fetch(`/api/maintenance-records?${params.toString()}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setMaintenanceRecords(data.data.records);
+        setStats(data.data.stats);
+      } else {
+        setError(data.message || '載入數據失敗');
+      }
+    } catch (err) {
+      setError('網路錯誤，請稍後再試');
+      console.error('Fetch maintenance records error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 更新維護記錄狀態
+  const updateMaintenanceRecordStatus = async (recordId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/maintenance-records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        fetchMaintenanceRecords();
+      } else {
+        setError(data.message || '更新失敗');
+      }
+    } catch (err) {
+      setError('更新失敗，請稍後再試');
+      console.error('Update maintenance record error:', err);
+    }
+  };
+
+  // 初始載入
+  React.useEffect(() => {
+    fetchMaintenanceRecords();
+  }, [status, type]);
+
+  // 手動搜尋
+  const handleSearch = () => {
+    fetchMaintenanceRecords();
+  };
+
+  // 狀態標籤映射
+  const getStatusLabel = (status: string) => {
+    const option = statusOptions.find(opt => opt.value === status);
+    return option ? option.label : status;
+  };
+
+  // 狀態顏色映射
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'SCHEDULED': return 'info';
+      case 'IN_PROGRESS': return 'primary';
+      case 'COMPLETED': return 'success';
+      case 'CANCELLED': return 'default';
+      case 'FAILED': return 'error';
+      default: return 'default';
+    }
+  };
 
   // 過濾數據
-  const filteredRows = workRows.filter((row) => {
+  const filteredRows = maintenanceRecords.filter((record) => {
     const matchesKeyword = !keyword ||
-      row.code?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.device?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.staff?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.desc?.toLowerCase().includes(keyword.toLowerCase());
+      record.cpid?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.cpsn?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.technician_name?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.description?.toLowerCase().includes(keyword.toLowerCase());
 
-    const matchesStatus = !status || row.status === status;
-    const matchesType = !type || row.type === type;
-
-    return matchesKeyword && matchesStatus && matchesType;
+    return matchesKeyword;
   });
 
   return (
@@ -150,7 +274,7 @@ export default function HardwareMaintenance() {
                     color: theme.palette.primary.main,
                     lineHeight: 1
                   }}>
-                    {summary.total}
+                    {stats.total}
                   </Typography>
                 </Box>
               </Box>
@@ -182,14 +306,14 @@ export default function HardwareMaintenance() {
                 </Avatar>
                 <Box>
                   <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    待處理
+                    已排程
                   </Typography>
                   <Typography variant="h4" sx={{
                     fontWeight: 700,
                     color: theme.palette.warning.main,
                     lineHeight: 1
                   }}>
-                    {summary.pending}
+                    {stats.scheduled}
                   </Typography>
                 </Box>
               </Box>
@@ -228,7 +352,7 @@ export default function HardwareMaintenance() {
                     color: theme.palette.info.main,
                     lineHeight: 1
                   }}>
-                    {summary.processing}
+                    {stats.in_progress}
                   </Typography>
                 </Box>
               </Box>
@@ -267,7 +391,7 @@ export default function HardwareMaintenance() {
                     color: theme.palette.success.main,
                     lineHeight: 1
                   }}>
-                    {summary.done}
+                    {stats.completed}
                   </Typography>
                 </Box>
               </Box>
@@ -299,14 +423,14 @@ export default function HardwareMaintenance() {
                 </Avatar>
                 <Box>
                   <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
-                    已關閉
+                    已取消
                   </Typography>
                   <Typography variant="h4" sx={{
                     fontWeight: 700,
                     color: theme.palette.grey[500],
                     lineHeight: 1
                   }}>
-                    {summary.closed}
+                    {stats.cancelled}
                   </Typography>
                 </Box>
               </Box>
@@ -401,6 +525,8 @@ export default function HardwareMaintenance() {
           <Button
             variant="contained"
             size="medium"
+            onClick={handleSearch}
+            disabled={loading}
             sx={{
               px: 4,
               py: 1,
@@ -415,7 +541,7 @@ export default function HardwareMaintenance() {
               transition: 'all 0.2s ease-in-out'
             }}
           >
-            查詢
+            {loading ? <CircularProgress size={20} /> : '查詢'}
           </Button>
         </Box>
       </Paper>
@@ -477,9 +603,9 @@ export default function HardwareMaintenance() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map((row) => (
+              {filteredRows.map((record) => (
                 <TableRow
-                  key={row.id}
+                  key={record.id}
                   sx={{
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.02)
@@ -491,27 +617,26 @@ export default function HardwareMaintenance() {
                 >
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
-                      {row.code}
+                      M{record.id}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {record.cpid}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {record.cpsn}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={row.device}
-                      size="small"
-                      variant="outlined"
-                      sx={{ fontWeight: 500 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip
                       label={
-                        row.type === 'regular' ? '定期保養' :
-                        row.type === 'repair' ? '故障維修' : '設備升級'
+                        typeOptions.find(opt => opt.value === record.maintenance_type)?.label || record.maintenance_type
                       }
                       size="small"
                       color={
-                        row.type === 'regular' ? 'info' :
-                        row.type === 'repair' ? 'warning' : 'success'
+                        record.maintenance_type === 'ROUTINE' ? 'info' :
+                        record.maintenance_type === 'REPAIR' ? 'warning' : 'success'
                       }
                       variant="outlined"
                     />
@@ -519,36 +644,34 @@ export default function HardwareMaintenance() {
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <EngineeringIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
-                      <Typography variant="body2">{row.staff}</Typography>
+                      <Typography variant="body2">
+                        {record.technician_name || record.users_maintenance_records_technician_idTousers?.first_name + ' ' + record.users_maintenance_records_technician_idTousers?.last_name || '-'}
+                      </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={
-                        row.status === 'pending' ? '待處理' :
-                        row.status === 'processing' ? '處理中' :
-                        row.status === 'done' ? '已完成' : '已關閉'
-                      }
+                      label={getStatusLabel(record.status)}
                       size="small"
-                      color={
-                        row.status === 'pending' ? 'warning' :
-                        row.status === 'processing' ? 'info' :
-                        row.status === 'done' ? 'success' : 'default'
-                      }
-                      variant={row.status === 'done' ? 'filled' : 'outlined'}
+                      color={getStatusColor(record.status) as any}
+                      variant={record.status === 'COMPLETED' ? 'filled' : 'outlined'}
                     />
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <ScheduleIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
-                      <Typography variant="body2">{row.created}</Typography>
+                      <Typography variant="body2">
+                        {record.scheduled_date ? new Date(record.scheduled_date).toLocaleDateString('zh-TW') : '-'}
+                      </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
-                    {row.finished ? (
+                    {record.actual_end_date ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CheckCircleIcon sx={{ fontSize: '1rem', color: theme.palette.success.main }} />
-                        <Typography variant="body2">{row.finished}</Typography>
+                        <Typography variant="body2">
+                          {new Date(record.actual_end_date).toLocaleDateString('zh-TW')}
+                        </Typography>
                       </Box>
                     ) : (
                       <Typography variant="body2" color="text.secondary">-</Typography>
@@ -556,52 +679,45 @@ export default function HardwareMaintenance() {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {row.desc}
+                      {record.description}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        sx={{
-                          minWidth: 'auto',
-                          px: 2,
-                          textTransform: 'none',
-                          borderRadius: 2
-                        }}
-                      >
-                        <InfoIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
-                        詳情
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="success"
-                        sx={{
-                          minWidth: 'auto',
-                          px: 2,
-                          textTransform: 'none',
-                          borderRadius: 2
-                        }}
-                      >
-                        <AssignmentTurnedInIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
-                        完成
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        sx={{
-                          minWidth: 'auto',
-                          px: 2,
-                          textTransform: 'none',
-                          borderRadius: 2
-                        }}
-                      >
-                        <CloseIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
-                        關閉
-                      </Button>
+                      {record.status !== 'COMPLETED' && record.status !== 'CANCELLED' && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="success"
+                          onClick={() => updateMaintenanceRecordStatus(record.id, 'COMPLETED')}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 2,
+                            textTransform: 'none',
+                            borderRadius: 2
+                          }}
+                        >
+                          <AssignmentTurnedInIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+                          完成
+                        </Button>
+                      )}
+                      {record.status !== 'CANCELLED' && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          onClick={() => updateMaintenanceRecordStatus(record.id, 'CANCELLED')}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 2,
+                            textTransform: 'none',
+                            borderRadius: 2
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+                          取消
+                        </Button>
+                      )}
                     </Box>
                   </TableCell>
                 </TableRow>

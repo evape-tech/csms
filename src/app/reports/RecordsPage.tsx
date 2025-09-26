@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import DateFilter from './DateFilter';
 import RecordsTable from './RecordsTable';
@@ -17,8 +17,14 @@ interface RecordsPageProps {
   columns: Column[];
   data: any[];
   filterTitle?: string;
-  onFilter?: (startDate: string, endDate: string) => void;
+  onFilter?: (startDate: string, endDate: string) => Promise<void> | void;
   onExport?: () => void;
+  onRefresh?: () => void;
+  onClear?: () => Promise<void> | void;
+  loading?: boolean;
+  error?: string | null;
+  initialStartDate?: string;
+  initialEndDate?: string;
 }
 
 export default function RecordsPage({
@@ -27,15 +33,37 @@ export default function RecordsPage({
   data,
   filterTitle,
   onFilter,
-  onExport
+  onExport,
+  onRefresh,
+  onClear,
+  loading,
+  error,
+  initialStartDate,
+  initialEndDate
 }: RecordsPageProps) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(initialStartDate ?? '');
+  const [endDate, setEndDate] = useState(initialEndDate ?? '');
   const [filteredData, setFilteredData] = useState(data);
 
-  const handleFilter = () => {
+  useEffect(() => {
+    setFilteredData(data);
+  }, [data]);
+
+  useEffect(() => {
+    if (initialStartDate !== undefined) {
+      setStartDate(initialStartDate);
+    }
+  }, [initialStartDate]);
+
+  useEffect(() => {
+    if (initialEndDate !== undefined) {
+      setEndDate(initialEndDate);
+    }
+  }, [initialEndDate]);
+
+  const handleFilter = async () => {
     if (onFilter) {
-      onFilter(startDate, endDate);
+      await onFilter(startDate, endDate);
     } else {
       // 默認篩選邏輯
       if (startDate && endDate) {
@@ -52,9 +80,18 @@ export default function RecordsPage({
     }
   };
 
-  const handleClear = () => {
-    setStartDate('');
-    setEndDate('');
+  const handleClear = async () => {
+    const resetStart = initialStartDate ?? '';
+    const resetEnd = initialEndDate ?? '';
+
+    setStartDate(resetStart);
+    setEndDate(resetEnd);
+
+    if (onClear) {
+      await onClear();
+      return;
+    }
+
     setFilteredData(data);
   };
 
@@ -68,13 +105,17 @@ export default function RecordsPage({
         onFilter={handleFilter}
         onClear={handleClear}
         title={filterTitle}
+        loading={loading}
       />
 
       <RecordsTable
         title={title}
         columns={columns}
         data={filteredData}
+        loading={loading}
+        error={error || undefined}
         onExport={onExport}
+        onRefresh={onRefresh}
       />
     </Box>
   );

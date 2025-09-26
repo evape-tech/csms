@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Typography,
   Paper,
@@ -21,7 +21,8 @@ import {
   InputAdornment,
   useTheme,
   alpha,
-  Grid
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
@@ -36,35 +37,260 @@ import CloseIcon from '@mui/icons-material/Close';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
-  { label: '待處理', value: 'pending' },
-  { label: '處理中', value: 'processing' },
-  { label: '已完成', value: 'done' },
-  { label: '已關閉', value: 'closed' },
+  { label: '待處理', value: 'REPORTED' },
+  { label: '審核中', value: 'UNDER_REVIEW' },
+  { label: '處理中', value: 'IN_PROGRESS' },
+  { label: '已完成', value: 'RESOLVED' },
+  { label: '已關閉', value: 'CLOSED' },
 ];
 
-const summary = { total: 8, pending: 2, processing: 3, done: 2, closed: 1 };
-const faultRows = [
-  { id: 1, code: 'F001', charger: 1, reporter: '陳先生', time: '2024-06-01 10:20', status: 'pending', desc: '充電樁無法正常充電' },
-  { id: 2, code: 'F002', charger: 6, reporter: '李小姐', time: '2024-06-01 11:10', status: 'processing', desc: '異常斷電' },
-  { id: 3, code: 'F003', charger: 2, reporter: '張大明', time: '2024-06-02 09:30', status: 'done', desc: '螢幕無法正常顯示' },
-];
+type FaultReportStatus =
+  | 'REPORTED'
+  | 'UNDER_REVIEW'
+  | 'OPEN'
+  | 'IN_PROGRESS'
+  | 'RESOLVED'
+  | 'CLOSED';
+
+interface FaultReportUser {
+  id?: string | number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+}
+
+interface FaultReport {
+  id: number;
+  cpid?: string | null;
+  cpsn?: string | null;
+  connector_id?: number | null;
+  fault_type?: string | null;
+  severity?: string | null;
+  description?: string | null;
+  status?: FaultReportStatus | string | null;
+  reported_at?: string | Date | null;
+  resolved_at?: string | Date | null;
+  users_fault_reports_user_idTousers?: FaultReportUser | null;
+  users_fault_reports_assigned_toTousers?: FaultReportUser | null;
+}
+
+interface SummaryStats {
+  total: number;
+  pending: number;
+  processing: number;
+  done: number;
+  closed: number;
+  critical?: number;
+}
+
+const defaultSummary: SummaryStats = {
+  total: 0,
+  pending: 0,
+  processing: 0,
+  done: 0,
+  closed: 0,
+  critical: 0
+};
+
+const statusLabelMap: Record<string, string> = {
+  REPORTED: '待處理',
+  UNDER_REVIEW: '審核中',
+  OPEN: '待處理',
+  IN_PROGRESS: '處理中',
+  RESOLVED: '已完成',
+  CLOSED: '已關閉'
+};
+
+const statusColorMap: Record<string, 'warning' | 'info' | 'success' | 'default'> = {
+  REPORTED: 'warning',
+  UNDER_REVIEW: 'warning',
+  OPEN: 'warning',
+  IN_PROGRESS: 'info',
+  RESOLVED: 'success',
+  CLOSED: 'default'
+};
+
+const formatDateTime = (value?: string | Date | null) => {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+};
+
+const getReporterName = (report: FaultReport) => {
+  const reporter = report.users_fault_reports_user_idTousers;
+  if (!reporter) return '未提供';
+  const fullName = `${reporter.first_name ?? ''}${reporter.last_name ?? ''}`.trim();
+  if (fullName) return fullName;
+  if (reporter.email) return reporter.email;
+  return '未提供';
+};
+
+const getReportIdentifier = (report: FaultReport) => `FR-${report.id ?? ''}`;
+
+const normalizeFaultReports = (reports: unknown[]): FaultReport[] => {
+  if (!Array.isArray(reports)) return [];
+  return reports.map((item) => {
+    const report = item as FaultReport;
+    return {
+      ...report,
+      id: typeof report.id === 'number' ? report.id : Number(report.id ?? 0),
+      reported_at: report.reported_at ? new Date(report.reported_at) : null,
+      resolved_at: report.resolved_at ? new Date(report.resolved_at) : null
+    };
+  });
+};
+
+const deriveSummary = (reports: FaultReport[], rawStats?: Record<string, number>): SummaryStats => {
+  if (rawStats && Object.keys(rawStats).length > 0) {
+    const total = rawStats.total ?? reports.length;
+    const open = rawStats.open ?? 0;
+    const processing = rawStats.in_progress ?? 0;
+    const done = rawStats.resolved ?? 0;
+    const closed = rawStats.closed ?? 0;
+    const pending = open + Math.max(total - (open + processing + done + closed), 0);
+
+    return {
+      total,
+      pending,
+      processing,
+      done,
+      closed,
+      critical: rawStats.critical ?? reports.filter((r) => r.severity === 'CRITICAL').length
+    };
+  }
+
+  return reports.reduce<SummaryStats>((acc, report) => {
+    const status = report.status ?? 'REPORTED';
+    acc.total += 1;
+    switch (status) {
+      case 'IN_PROGRESS':
+        acc.processing += 1;
+        break;
+      case 'RESOLVED':
+        acc.done += 1;
+        break;
+      case 'CLOSED':
+        acc.closed += 1;
+        break;
+      default:
+        acc.pending += 1;
+        break;
+    }
+    return acc;
+  }, { ...defaultSummary, total: 0 });
+};
 
 export default function FaultReport() {
   const theme = useTheme();
   const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [faultReports, setFaultReports] = useState<FaultReport[]>([]);
+  const [summary, setSummary] = useState<SummaryStats>(defaultSummary);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  // 過濾數據
-  const filteredRows = faultRows.filter((row) => {
-    const matchesKeyword = !keyword ||
-      row.code?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.reporter?.toLowerCase().includes(keyword.toLowerCase()) ||
-      row.desc?.toLowerCase().includes(keyword.toLowerCase());
+  const fetchFaultReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-    const matchesStatus = !status || row.status === status;
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      params.append('limit', '100');
 
-    return matchesKeyword && matchesStatus;
-  });
+      const response = await fetch(`/api/fault-reports?${params.toString()}`, {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message ?? '取得故障報告失敗');
+      }
+
+      const normalizedReports = normalizeFaultReports(data.data?.reports ?? []);
+      setFaultReports(normalizedReports);
+
+      const statsPayload = data.data?.stats as Record<string, number> | undefined;
+      setSummary(deriveSummary(normalizedReports, statsPayload));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '取得故障報告失敗，請稍後再試';
+      setError(message);
+      setFaultReports([]);
+      setSummary(defaultSummary);
+      console.error('Fetch fault reports error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    fetchFaultReports();
+  }, [fetchFaultReports]);
+
+  const handleSearch = () => {
+    fetchFaultReports();
+  };
+
+  const updateFaultReportStatus = async (id: number, nextStatus: FaultReportStatus) => {
+    setUpdatingId(id);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/fault-reports/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message ?? '更新故障報告狀態失敗');
+      }
+
+      await fetchFaultReports();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
+      setError(message);
+      console.error('Update fault report status error:', err);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const filteredRows = useMemo(() => {
+    return faultReports.filter((row) => {
+      const keywordValue = keyword.toLowerCase();
+      const matchesKeyword = !keyword ||
+        getReportIdentifier(row).toLowerCase().includes(keywordValue) ||
+        (row.cpid && row.cpid.toLowerCase().includes(keywordValue)) ||
+        (row.cpsn && row.cpsn.toLowerCase().includes(keywordValue)) ||
+        (row.description && row.description.toLowerCase().includes(keywordValue)) ||
+        getReporterName(row).toLowerCase().includes(keywordValue);
+
+      return matchesKeyword;
+    });
+  }, [faultReports, keyword]);
+
+  const getStatusLabel = (value?: string | null) => {
+    if (!value) return '未知';
+    return statusLabelMap[value] ?? value;
+  };
+
+  const getStatusColor = (value?: string | null) => {
+    if (!value) return 'default';
+    return statusColorMap[value] ?? 'default';
+  };
 
   return (
     <Container
@@ -142,6 +368,15 @@ export default function FaultReport() {
                   }}>
                     {summary.total}
                   </Typography>
+                  {(summary.critical ?? 0) > 0 && (
+                    <Chip
+                      label={`重大：${summary.critical}`}
+                      size="small"
+                      color="error"
+                      variant="outlined"
+                      sx={{ mt: 1, fontWeight: 500 }}
+                    />
+                  )}
                 </Box>
               </Box>
             </CardContent>
@@ -383,6 +618,8 @@ export default function FaultReport() {
               },
               transition: 'all 0.2s ease-in-out'
             }}
+            onClick={handleSearch}
+            disabled={loading}
           >
             查詢
           </Button>
@@ -412,7 +649,7 @@ export default function FaultReport() {
               故障報告列表
             </Typography>
             <Chip
-              label={`${filteredRows.length} 筆記錄`}
+              label={loading ? '載入中…' : `${filteredRows.length} 筆記錄`}
               size="small"
               sx={{
                 bgcolor: alpha(theme.palette.primary.main, 0.1),
@@ -422,6 +659,14 @@ export default function FaultReport() {
             />
           </Box>
         </Box>
+
+        {error && (
+          <Box sx={{ p: 3 }}>
+            <Alert severity="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          </Box>
+        )}
 
         <TableContainer>
           <Table>
@@ -444,7 +689,7 @@ export default function FaultReport() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map((row) => (
+              {!loading && filteredRows.map((row) => (
                 <TableRow
                   key={row.id}
                   sx={{
@@ -458,43 +703,35 @@ export default function FaultReport() {
                 >
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
-                      {row.code}
+                      {getReportIdentifier(row)}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={`樁 ${row.charger}`}
+                      label={row.cpid ? `CP ${row.cpid}` : row.cpsn ? `SN ${row.cpsn}` : row.connector_id ? `連接器 ${row.connector_id}` : '未提供'}
                       size="small"
                       variant="outlined"
                       sx={{ fontWeight: 500 }}
                     />
                   </TableCell>
-                  <TableCell>{row.reporter}</TableCell>
+                  <TableCell>{getReporterName(row)}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <ScheduleIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
-                      <Typography variant="body2">{row.time}</Typography>
+                      <Typography variant="body2">{formatDateTime(row.reported_at)}</Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={
-                        row.status === 'pending' ? '待處理' :
-                        row.status === 'processing' ? '處理中' :
-                        row.status === 'done' ? '已完成' : '已關閉'
-                      }
+                      label={getStatusLabel(row.status ?? undefined)}
                       size="small"
-                      color={
-                        row.status === 'pending' ? 'warning' :
-                        row.status === 'processing' ? 'info' :
-                        row.status === 'done' ? 'success' : 'default'
-                      }
-                      variant={row.status === 'done' ? 'filled' : 'outlined'}
+                      color={getStatusColor(row.status ?? undefined)}
+                      variant={row.status === 'RESOLVED' ? 'filled' : 'outlined'}
                     />
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {row.desc}
+                      {row.description || '—'}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -508,6 +745,8 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
+                        disabled={loading || updatingId === row.id || row.status === 'IN_PROGRESS'}
+                        onClick={() => updateFaultReportStatus(row.id, 'IN_PROGRESS')}
                       >
                         調度
                       </Button>
@@ -521,6 +760,8 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
+                        disabled={loading || updatingId === row.id || row.status === 'RESOLVED'}
+                        onClick={() => updateFaultReportStatus(row.id, 'RESOLVED')}
                       >
                         <AssignmentTurnedInIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
                         完成
@@ -535,6 +776,8 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
+                        disabled={loading || updatingId === row.id || row.status === 'CLOSED'}
+                        onClick={() => updateFaultReportStatus(row.id, 'CLOSED')}
                       >
                         <CloseIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
                         關閉
@@ -547,7 +790,18 @@ export default function FaultReport() {
           </Table>
         </TableContainer>
 
-        {filteredRows.length === 0 && (
+        {loading && (
+          <Box sx={{
+            p: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <CircularProgress />
+          </Box>
+        )}
+
+        {!loading && filteredRows.length === 0 && (
           <Box sx={{
             p: 6,
             textAlign: 'center',

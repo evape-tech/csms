@@ -22,6 +22,7 @@ interface DateFilterProps {
   onFilter: () => void;
   onClear: () => void;
   title?: string;
+  loading?: boolean;
 }
 
 export default function DateFilter({
@@ -31,7 +32,8 @@ export default function DateFilter({
   onEndDateChange,
   onFilter,
   onClear,
-  title = "日期範圍篩選"
+  title = "日期範圍篩選",
+  loading = false
 }: DateFilterProps) {
   const hasActiveFilter = startDate || endDate;
 
@@ -80,6 +82,7 @@ export default function DateFilter({
               size="small"
               variant="outlined"
               onClick={() => handleQuickFilter(7)}
+              disabled={loading}
             >
               最近7天
             </Button>
@@ -87,6 +90,7 @@ export default function DateFilter({
               size="small"
               variant="outlined"
               onClick={() => handleQuickFilter(30)}
+              disabled={loading}
             >
               最近30天
             </Button>
@@ -94,6 +98,7 @@ export default function DateFilter({
               size="small"
               variant="outlined"
               onClick={() => handleQuickFilter(90)}
+              disabled={loading}
             >
               最近90天
             </Button>
@@ -109,6 +114,7 @@ export default function DateFilter({
                 onStartDateChange(startDate.toISOString().split('T')[0]);
                 onEndDateChange(endDate.toISOString().split('T')[0]);
               }}
+              disabled={loading}
             >
               本月
             </Button>
@@ -149,7 +155,7 @@ export default function DateFilter({
             <Button
               variant="contained"
               onClick={onFilter}
-              disabled={!startDate || !endDate}
+              disabled={!startDate || !endDate || loading}
             >
               應用篩選
             </Button>
@@ -157,7 +163,7 @@ export default function DateFilter({
               variant="outlined"
               startIcon={<ClearIcon />}
               onClick={onClear}
-              disabled={!hasActiveFilter}
+              disabled={!hasActiveFilter || loading}
             >
               清除
             </Button>

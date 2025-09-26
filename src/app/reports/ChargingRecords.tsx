@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
 
 const columns = [
@@ -58,32 +58,115 @@ const columns = [
   }
 ];
 
-// 模擬充電紀錄數據
-const mockData = [
-  { id: 1, user: '王小明', charger: 'CP-01', startTime: '2024-05-01T14:30:00', endTime: '2024-05-01T15:45:00', kWh: 12.5, fee: 80 },
-  { id: 2, user: '李小美', charger: 'CP-03', startTime: '2024-05-01T16:20:00', endTime: '2024-05-01T17:30:00', kWh: 8.2, fee: 52 },
-  { id: 3, user: '張大華', charger: 'CP-02', startTime: '2024-05-02T09:15:00', endTime: '2024-05-02T10:40:00', kWh: 15.8, fee: 101 },
-  { id: 4, user: '陳美玲', charger: 'CP-01', startTime: '2024-05-02T14:00:00', endTime: '2024-05-02T15:30:00', kWh: 10.3, fee: 65 },
-  { id: 5, user: '林志偉', charger: 'CP-04', startTime: '2024-05-03T08:45:00', endTime: '2024-05-03T10:15:00', kWh: 18.7, fee: 119 },
-  { id: 6, user: '黃小琪', charger: 'CP-02', startTime: '2024-05-03T16:30:00', endTime: '2024-05-03T18:00:00', kWh: 14.2, fee: 90 },
-  { id: 7, user: '吳建國', charger: 'CP-03', startTime: '2024-05-04T11:20:00', endTime: '2024-05-04T12:45:00', kWh: 11.9, fee: 76 },
-  { id: 8, user: '蔡文娟', charger: 'CP-01', startTime: '2024-05-04T15:10:00', endTime: '2024-05-04T16:40:00', kWh: 13.4, fee: 85 },
-];
+const getDefaultRange = (days = 30) => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - (days - 1));
+
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0]
+  };
+};
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 export default function ChargingRecords() {
-  const handleExport = () => {
-    // 實現導出邏輯
-    console.log('導出充電記錄');
-    // 可以實現 CSV 或 Excel 導出
-  };
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const defaultRange = useMemo(() => getDefaultRange(30), []);
+  const [appliedRange, setAppliedRange] = useState<DateRange>(defaultRange);
+  const rangeRef = useRef<DateRange>(defaultRange);
+
+  const fetchRecords = useCallback(async (range?: Partial<DateRange>) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const currentRange = rangeRef.current;
+      const appliedStart = range?.start ?? currentRange.start;
+      const appliedEnd = range?.end ?? currentRange.end;
+
+      const params = new URLSearchParams({ limit: '500' });
+
+      if (appliedStart) {
+        params.set('startDate', appliedStart);
+      }
+
+      if (appliedEnd) {
+        params.set('endDate', appliedEnd);
+      }
+
+      const response = await fetch(`/api/reports/charging?${params.toString()}`, {
+        cache: 'no-store'
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || '無法取得充電記錄');
+      }
+
+      setRecords(Array.isArray(json.data?.records) ? json.data.records : []);
+
+      const updatedRange: DateRange = {
+        start: appliedStart,
+        end: appliedEnd
+      };
+
+      rangeRef.current = updatedRange;
+      setAppliedRange(updatedRange);
+    } catch (err) {
+      console.error('Fetch charging records error:', err);
+      setError(err instanceof Error ? err.message : '未知錯誤，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    rangeRef.current = defaultRange;
+    setAppliedRange(defaultRange);
+    fetchRecords(defaultRange);
+  }, [defaultRange, fetchRecords]);
+
+  const handleFilter = useCallback(async (start: string, end: string) => {
+    await fetchRecords({ start, end });
+  }, [fetchRecords]);
+
+  const handleClear = useCallback(async () => {
+    const resetRange = getDefaultRange(30);
+    await fetchRecords(resetRange);
+  }, [fetchRecords]);
+
+  const handleRefresh = useCallback(async () => {
+    await fetchRecords();
+  }, [fetchRecords]);
+
+  const handleExport = useCallback(() => {
+    console.info('導出充電記錄', {
+      range: rangeRef.current,
+      count: records.length
+    });
+  }, [records]);
 
   return (
     <RecordsPage
       title="充電記錄列表"
       columns={columns}
-      data={mockData}
+      data={records}
       filterTitle="充電記錄日期篩選"
+      onFilter={handleFilter}
       onExport={handleExport}
+      onRefresh={handleRefresh}
+      onClear={handleClear}
+      loading={loading}
+      error={error}
+      initialStartDate={appliedRange.start}
+      initialEndDate={appliedRange.end}
     />
   );
 }

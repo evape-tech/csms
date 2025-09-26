@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
 
 const columns = [
@@ -48,34 +48,115 @@ const columns = [
   }
 ];
 
-// 模擬系統紀錄數據
-const mockData = [
-  { id: 1, time: '2024-05-01T14:30:00', type: '系統啟動', description: '系統正常啟動', status: '成功' },
-  { id: 2, time: '2024-05-01T15:45:00', type: '設備連接', description: 'CP-01連接成功', status: '成功' },
-  { id: 3, time: '2024-05-01T16:20:00', type: '錯誤', description: 'CP-03連線失敗', status: '錯誤' },
-  { id: 4, time: '2024-05-02T09:15:00', type: '維護', description: '系統備份完成', status: '成功' },
-  { id: 5, time: '2024-05-02T11:30:00', type: '設備連接', description: 'CP-04連接成功', status: '成功' },
-  { id: 6, time: '2024-05-02T14:45:00', type: '警告', description: 'CP-02電壓異常', status: '警告' },
-  { id: 7, time: '2024-05-03T08:20:00', type: '系統啟動', description: '系統重新啟動', status: '成功' },
-  { id: 8, time: '2024-05-03T16:10:00', type: '維護', description: '資料庫優化完成', status: '成功' },
-  { id: 9, time: '2024-05-04T10:30:00', type: '錯誤', description: '網路連接中斷', status: '錯誤' },
-  { id: 10, time: '2024-05-04T15:20:00', type: '設備連接', description: 'CP-02重新連接', status: '成功' },
-];
+const getDefaultRange = (days = 30) => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - (days - 1));
+
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0]
+  };
+};
+
+interface DateRange {
+  start: string;
+  end: string;
+}
 
 export default function SystemRecords() {
-  const handleExport = () => {
-    // 實現導出邏輯
-    console.log('導出系統記錄');
-    // 可以實現 CSV 或 Excel 導出
-  };
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const defaultRange = useMemo(() => getDefaultRange(30), []);
+  const [appliedRange, setAppliedRange] = useState<DateRange>(defaultRange);
+  const rangeRef = useRef<DateRange>(defaultRange);
+
+  const fetchRecords = useCallback(async (range?: Partial<DateRange>) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const currentRange = rangeRef.current;
+      const appliedStart = range?.start ?? currentRange.start;
+      const appliedEnd = range?.end ?? currentRange.end;
+
+      const params = new URLSearchParams({ limit: '500' });
+
+      if (appliedStart) {
+        params.set('startDate', appliedStart);
+      }
+
+      if (appliedEnd) {
+        params.set('endDate', appliedEnd);
+      }
+
+      const response = await fetch(`/api/reports/system?${params.toString()}`, {
+        cache: 'no-store'
+      });
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || '無法取得系統紀錄');
+      }
+
+      setRecords(Array.isArray(json.data?.records) ? json.data.records : []);
+
+      const updatedRange: DateRange = {
+        start: appliedStart,
+        end: appliedEnd
+      };
+
+      rangeRef.current = updatedRange;
+      setAppliedRange(updatedRange);
+    } catch (err) {
+      console.error('Fetch system records error:', err);
+      setError(err instanceof Error ? err.message : '未知錯誤，請稍後再試');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    rangeRef.current = defaultRange;
+    setAppliedRange(defaultRange);
+    fetchRecords(defaultRange);
+  }, [defaultRange, fetchRecords]);
+
+  const handleFilter = useCallback(async (start: string, end: string) => {
+    await fetchRecords({ start, end });
+  }, [fetchRecords]);
+
+  const handleClear = useCallback(async () => {
+    const resetRange = getDefaultRange(30);
+    await fetchRecords(resetRange);
+  }, [fetchRecords]);
+
+  const handleRefresh = useCallback(async () => {
+    await fetchRecords();
+  }, [fetchRecords]);
+
+  const handleExport = useCallback(() => {
+    console.info('導出系統記錄', {
+      range: rangeRef.current,
+      count: records.length
+    });
+  }, [records]);
 
   return (
     <RecordsPage
       title="系統記錄列表"
       columns={columns}
-      data={mockData}
+      data={records}
       filterTitle="系統記錄日期篩選"
+      onFilter={handleFilter}
       onExport={handleExport}
+      onRefresh={handleRefresh}
+      onClear={handleClear}
+      loading={loading}
+      error={error}
+      initialStartDate={appliedRange.start}
+      initialEndDate={appliedRange.end}
     />
   );
 }
