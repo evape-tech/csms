@@ -3,38 +3,16 @@
  * 负责所有与充电桩相关的数据库访问操作
  */
 
-// 动态导入依赖
-let DatabaseUtils;
-let databaseService;
-let createCpLog;
-
 // 导入日志工具
 const { logger } = require('../utils');
 
+// 直接导入数据库服务
+const { databaseService } = require('../../lib/database/service.js');
+const DatabaseUtils = require('../../lib/database/utils.js').default;
+const createCpLog = databaseService.createCpLog;
+
 // 数据库初始化标志
 let isDbInitialized = false;
-
-/**
- * 动态加载数据库模块
- * @returns {Promise<Object>} 包含数据库工具和服务的对象
- */
-const loadDatabaseModules = async () => {
-  if (!DatabaseUtils) {
-    try {
-      const utilsModule = await import('../../lib/database/utils.js');
-      const serviceModule = await import('../../lib/database/service.js');
-      DatabaseUtils = utilsModule.default;
-      databaseService = serviceModule.databaseService;
-      createCpLog = databaseService.createCpLog;
-      
-      logger.debug('数据库模块加载成功');
-    } catch (error) {
-      logger.error('加载数据库模块失败', error);
-      throw new Error(`数据库模块加载失败: ${error.message}`);
-    }
-  }
-  return { DatabaseUtils, databaseService, createCpLog };
-};
 
 /**
  * 确保数据库已初始化
@@ -43,22 +21,20 @@ const loadDatabaseModules = async () => {
 async function ensureDbInitialized() {
   if (!isDbInitialized) {
     logger.info('初始化数据库连接...');
-    
+
     try {
-      const { DatabaseUtils: dbUtils } = await loadDatabaseModules();
-      
       // 初始化数据库连接，指定 provider
       const targetProvider = process.env.DB_PROVIDER || 'mysql';
       logger.info(`目标数据库提供者: ${targetProvider}`);
-      
-      const initialized = await dbUtils.initialize(targetProvider);
-      
+
+      const initialized = await DatabaseUtils.initialize(targetProvider);
+
       if (initialized) {
         isDbInitialized = true;
-        logger.info(`数据库初始化成功，当前提供者: ${dbUtils.getCurrentProvider().toUpperCase()}`);
-        
+        logger.info(`数据库初始化成功，当前提供者: ${DatabaseUtils.getCurrentProvider().toUpperCase()}`);
+
         // 执行健康检查
-        const isHealthy = await dbUtils.healthCheck();
+        const isHealthy = await DatabaseUtils.healthCheck();
         logger.info(`数据库健康状态: ${isHealthy ? '正常' : '异常'}`);
       } else {
         throw new Error('数据库初始化失败');
@@ -78,8 +54,7 @@ async function ensureDbInitialized() {
 async function getAllGuns(whereClause = {}) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const guns = await dbService.getGuns(whereClause);
+    const guns = await databaseService.getGuns(whereClause);
     logger.debug(`获取充电桩成功，共 ${guns.length} 条记录`);
     return guns;
   } catch (error) {
@@ -96,8 +71,7 @@ async function getAllGuns(whereClause = {}) {
 async function getGunByCpid(cpid) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const guns = await dbService.getGuns({ cpid });
+    const guns = await databaseService.getGuns({ cpid });
     const gun = guns.length > 0 ? guns[0] : null;
     
     if (gun) {
@@ -121,8 +95,7 @@ async function getGunByCpid(cpid) {
 async function getGunsByCpsn(cpsn) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const guns = await dbService.getGuns({ cpsn });
+    const guns = await databaseService.getGuns({ cpsn });
     logger.debug(`获取充电站 ${cpsn} 的充电桩成功，共 ${guns.length} 个`);
     return guns;
   } catch (error) {
@@ -142,8 +115,7 @@ async function updateGun(whereClause, updateData) {
     await ensureDbInitialized();
     
     // 查找充电桩
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const guns = await dbService.getGuns(whereClause);
+    const guns = await databaseService.getGuns(whereClause);
     
     if (guns.length === 0) {
       logger.warn(`未找到符合条件的充电桩进行更新`, whereClause);
@@ -152,7 +124,7 @@ async function updateGun(whereClause, updateData) {
     
     // 批量更新
     const updatePromises = guns.map(gun => 
-      dbService.updateGun(gun.id, {
+      databaseService.updateGun(gun.id, {
         ...updateData,
         updatedAt: new Date()
       })
@@ -211,8 +183,7 @@ async function updateGunMeterValues(cpsn, connector, meterValues) {
     await ensureDbInitialized();
     
     // 查找充电桩
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const guns = await dbService.getGuns({ 
+    const guns = await databaseService.getGuns({ 
       cpsn: cpsn, 
       connector: String(connector) 
     });
@@ -241,7 +212,7 @@ async function updateGunMeterValues(cpsn, connector, meterValues) {
     }
     
     // 更新
-    await dbService.updateGun(gun.id, updateData);
+    await databaseService.updateGun(gun.id, updateData);
     logger.debug(`更新充电桩 ${cpsn}:${connector} 电表值成功`);
     
     return true;
@@ -259,8 +230,7 @@ async function updateGunMeterValues(cpsn, connector, meterValues) {
 async function createCpLogEntry(logData) {
   try {
     await ensureDbInitialized();
-    const { createCpLog: logFunction } = await loadDatabaseModules();
-    const log = await logFunction(logData);
+    const log = await createCpLog(logData);
     logger.debug(`创建充电桩日志成功: ${logData.cpid}`);
     return log;
   } catch (error) {
@@ -276,8 +246,7 @@ async function createCpLogEntry(logData) {
 async function getStations() {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const stations = await dbService.getStations();
+    const stations = await databaseService.getStations();
     // logger.info(`获取站点设置成功，共 ${stations ? stations.length : 0} 个站点`);
 
     return stations || [];
@@ -295,7 +264,6 @@ async function getStations() {
 async function validateIdTag(idTag) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
 
     logger.debug(`🔍 [IdTag驗證] 開始驗證卡片號碼: ${idTag}`);
 
@@ -307,7 +275,7 @@ async function validateIdTag(idTag) {
 
     // 依據 RFID 卡片號碼取得關聯用戶
     try {
-      const user = await dbService.getUserByRfidCard(idTag);
+      const user = await databaseService.getUserByRfidCard(idTag);
 
       if (user) {
         logger.info(`✅ [IdTag驗證] 卡片 ${idTag} 對應用戶: ${user.email} (角色: ${user.role})`);
@@ -340,7 +308,6 @@ async function validateIdTag(idTag) {
 async function createTransactionRecord(transactionData) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
     // 更新充电桩的交易ID
     if (transactionData.cpid && transactionData.transactionId) {
@@ -369,7 +336,6 @@ async function createTransactionRecord(transactionData) {
 async function createNewTransaction(transactionData) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
     // 生成內部自訂編號 (字串格式，用於內部追蹤)
     const now = new Date();
@@ -398,7 +364,7 @@ async function createNewTransaction(transactionData) {
     }
     
     // 創建交易記錄
-    const transaction = await dbService.createTransaction(transactionRecord);
+    const transaction = await databaseService.createTransaction(transactionRecord);
     
     // 獲取資料庫自動生成的 id 作為 OCPP transactionId
     // 注意：Prisma BigInt 需要轉換為 JavaScript number 用於 OCPP 協議
@@ -438,7 +404,6 @@ async function createNewTransaction(transactionData) {
 async function updateTransactionRecord(ocppTransactionId, updateData) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
     // 確保 ocppTransactionId 為整數
     const transactionIdInt = parseInt(ocppTransactionId);
@@ -476,7 +441,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
       updateFields.charging_duration = parseInt(updateData.chargingDuration);
     }
     
-    const transaction = await dbService.updateTransactionById(transactionIdInt, updateFields);
+    const transaction = await databaseService.updateTransactionById(transactionIdInt, updateFields);
     
     // 檢查狀態是否變更為已完成或錯誤，如果是則自動生成billing記錄
     const newStatus = updateFields.status || originalStatus;
@@ -530,12 +495,11 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
 async function findTransactionById(ocppTransactionId) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
     // 確保 ocppTransactionId 為整數
     const transactionIdInt = parseInt(ocppTransactionId);
     
-    const transaction = await dbService.getTransactionById(transactionIdInt);
+    const transaction = await databaseService.getTransactionById(transactionIdInt);
     if (transaction) {
       logger.debug(`找到交易記錄: OCPP ID=${transactionIdInt}`);
     } else {
@@ -572,9 +536,8 @@ async function findTransaction(transactionId) {
     
     // 如果沒找到，嘗試舊的方法（向後兼容）
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
-    const guns = await dbService.getGuns({ transactionid: String(transactionId) });
+    const guns = await databaseService.getGuns({ transactionid: String(transactionId) });
     
     if (guns.length > 0) {
       const gun = guns[0];
@@ -607,7 +570,6 @@ async function findTransaction(transactionId) {
 async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
   try {
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
     
     // 計算超時時間點
     const timeoutThreshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
@@ -621,7 +583,7 @@ async function findAndHandleOrphanTransactions(timeoutMinutes = 30) {
     // logger.info(`查找孤兒交易: 超時閾值=${timeoutThreshold.toISOString()}, 電表更新閾值=${meterUpdateThreshold.toISOString()}`);
     
     // 查找所有可能的孤兒交易
-    const activeTransactions = await dbService.getTransactions({ 
+    const activeTransactions = await databaseService.getTransactions({ 
       status: 'ACTIVE',
       start_time: {
         lt: timeoutThreshold // 開始時間早於超時閾值
@@ -708,8 +670,7 @@ async function handleOrphanTransaction(transaction) {
     
     // 使用 dbService.updateTransaction 方法直接更新，因為我們有字符串形式的 transaction_id
     await ensureDbInitialized();
-    const { databaseService: dbService } = await loadDatabaseModules();
-    const updatedTransaction = await dbService.updateTransaction(transaction.transaction_id, updateData);
+    const updatedTransaction = await databaseService.updateTransaction(transaction.transaction_id, updateData);
     
     // 為孤兒交易自動生成billing記錄
     console.log(`🔄 [孤兒交易Billing] 開始為孤兒交易 ${transaction.transaction_id} 生成billing記錄...`);
@@ -789,7 +750,6 @@ function formatDuration(seconds) {
 }
 
 module.exports = {
-  loadDatabaseModules,
   ensureDbInitialized,
   getAllGuns,
   getGunByCpid,

@@ -68,13 +68,12 @@ async function handleMessage(cpsn, ws, message) {
   
   // 记录原始消息到数据库 - 这是与原始代码保持一致的关键
   try {
-    const { createCpLog } = await chargePointRepository.loadDatabaseModules();
     // 使用充电站的主要CPID或fallback到CPSN
     const cpid = connectionService.getStationPrimaryCpid ? 
       connectionService.getStationPrimaryCpid(cpsn) : cpsn;
     
     // 记录原始消息到数据库
-    await createCpLog({
+    await chargePointRepository.createCpLogEntry({
       cpid: cpid,
       cpsn: cpsn,
       log: messageStr,
@@ -212,13 +211,12 @@ async function handleCallMessage(cpsn, ws, messageId, action, payload) {
     
     // 发送响应前先记录到数据库
     try {
-      const { createCpLog } = await chargePointRepository.loadDatabaseModules();
       // 使用充电站的主要CPID或fallback到CPSN
       const cpid = connectionService.getStationPrimaryCpid ? 
         connectionService.getStationPrimaryCpid(cpsn) : cpsn;
       
       // 记录响应消息到数据库
-      await createCpLog({
+      await chargePointRepository.createCpLogEntry({
         cpid: cpid,
         cpsn: cpsn,
         log: callResultMessage,
@@ -248,13 +246,12 @@ async function handleCallMessage(cpsn, ws, messageId, action, payload) {
     
     // 发送错误响应前先记录到数据库
     try {
-      const { createCpLog } = await chargePointRepository.loadDatabaseModules();
       // 使用充电站的主要CPID或fallback到CPSN
       const cpid = connectionService.getStationPrimaryCpid ? 
         connectionService.getStationPrimaryCpid(cpsn) : cpsn;
       
       // 记录错误响应到数据库
-      await createCpLog({
+      await chargePointRepository.createCpLogEntry({
         cpid: cpid,
         cpsn: cpsn,
         log: callErrorMessage,

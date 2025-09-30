@@ -4,7 +4,7 @@
 
 基於單一職責原則 (Single Responsibility Principle) 和 Next.js App Router 最佳實踐，我們進行了全面的架構重構：
 
-1. **將費率管理功能從 `billingService` 分離** - 建立專門的 `tariffService`
+1. **將費率管理功能從 `billingService` 分離** - 建立專門的 `tariffRepository`
 2. **移除不必要的 API 層** - 使用 Server Actions 直接與前端通信
 3. **正確的服務分層** - API Routes → Server Actions → Database Services
 
@@ -58,7 +58,7 @@ Database Services (src/lib/database/)
 #### 3. Backend Services (src/servers/services/)
 **專門服務於後端邏輯:**
 
-- ✅ `tariffService.js` - 費率管理業務邏輯
+- ✅ `tariffRepository.js` - 費率管理業務邏輯
 - ✅ `billingService.js` - 計費業務邏輯 (重構後)
 
 ### 正確的依賴關係
@@ -76,7 +76,7 @@ Database Services
 ## 受影響的檔案
 
 ### 新增檔案
-- ✅ `src/servers/services/tariffService.js` - 費率管理服務
+- ✅ `src/servers/repositories/tariffRepository.js` - 費率管理倉庫
 - ✅ `src/actions/billingActions.ts` - 計費 Server Actions
 - ✅ `src/app/api/billing/statistics/route.ts` - 計費統計 API
 - ✅ `src/app/api/billing/records/[id]/route.ts` - 計費記錄更新 API

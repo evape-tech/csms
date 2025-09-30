@@ -295,117 +295,126 @@ async function handleMeterValues(cpsn, messageBody) {
     let cp_data5 = "0.00"; // 附加数据
     
     // 根据厂商不同处理MeterValues
-    if (cpsn[0] === "T" && cpsn[1] === "A" && cpsn[2] === "C") {
-      // ABB充电桩的处理逻辑
-      logger.info(`处理ABB充电桩 ${cpsn} 的MeterValues`);
-      
-      // 安全检查 sampledValue 数组长度
-      if (Array.isArray(meterValue) && meterValue.length > 0 && 
-          meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
+    switch (true) {
+      case cpsn.startsWith("TAC"): {
+        // ABB充电桩的处理逻辑
+        logger.info(`处理ABB充电桩 ${cpsn} 的MeterValues`);
         
-        const sampledValues = meterValue[0].sampledValue;
-        logger.debug(`收到 ${sampledValues.length} 个 sampledValue: ${JSON.stringify(sampledValues)}`);
-        
-        // 根据实际收到的数据解析
-        for (let i = 0; i < sampledValues.length; i++) {
-          const sample = sampledValues[i];
-          logger.debug(`sampledValue[${i}]: ${JSON.stringify(sample)}`);
+        // 安全检查 sampledValue 数组长度
+        if (Array.isArray(meterValue) && meterValue.length > 0 && 
+            meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
           
-          if (sample.measurand === "Energy.Active.Import.Register") {
-            cp_data1 = (parseFloat(sample.value) / 1000).toFixed(3); // Wh -> kWh
-          } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
-            cp_data2 = parseFloat(sample.value).toFixed(2);
-          } else if (sample.measurand === "Voltage") {
-            cp_data3 = parseFloat(sample.value).toFixed(2);
-          } else if (sample.measurand === "Power.Active.Import") {
-            cp_data4 = parseFloat(sample.value).toFixed(3);
-          }
-        }
-        
-        // 如果没有直接的功率读数，计算功率 (V * A / 1000)
-        if (cp_data4 === "0.00" && cp_data2 !== "0.00" && cp_data3 !== "0.00") {
-          cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3) / 1000).toFixed(3);
-        }
-      }
-      
-    } else if (cpsn[0] === "s" && cpsn[1] === "p") {
-      // Spacepark充电桩的处理逻辑
-      logger.info(`处理Spacepark充电桩 ${cpsn} 的MeterValues`);
-      
-      if (Array.isArray(meterValue) && meterValue.length > 0 && 
-          meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
-        
-        const sampledValues = meterValue[0].sampledValue;
-        
-        if (sampledValues[0].unit === "Wh") {
-          // 非充电状态的数据
-          cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
-          cp_data2 = "0.00";
-          cp_data3 = "0.0";
-          cp_data4 = "0.0";
-        } else {
-          // 充电状态的数据
-          cp_data1 = (parseFloat(sampledValues[1].value) / 1000).toFixed(3); // Wh -> kWh
-          cp_data2 = sampledValues[0].value;
-          cp_data3 = sampledValues[3].value;
-          cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
-        }
-      }
-      
-    } else if (cpsn[0] === "G" && cpsn[1] === "S") {
-      // GS充电桩的处理逻辑
-      logger.info(`处理GS充电桩 ${cpsn} 的MeterValues`);
-      
-      if (Array.isArray(meterValue) && meterValue.length > 0 && 
-          meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
-        
-        const sampledValues = meterValue[0].sampledValue;
-        
-        // 记录所有采样值，便于诊断
-        for (let i = 0; i < Math.min(sampledValues.length, 10); i++) {
-          logger.debug(`metervalue_[${i}]: ${sampledValues[i].value}`);
-        }
-        
-        if (sampledValues[0].unit === "Wh") {
-          // 非充电状态的数据
-          cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
-          cp_data2 = "0.00";
-          cp_data3 = "0.0";
-          cp_data4 = "0.0";
-        } else {
-          // 充电状态的数据
-          cp_data1 = (parseFloat(sampledValues[4].value) / 1000).toFixed(3); // Wh -> kWh
-          cp_data2 = sampledValues[0].value; // 电流
-          cp_data3 = sampledValues[7].value; // 电压
-          cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
-        }
-      }
-      
-    } else {
-      // 通用处理逻辑，适用于其他厂商
-      logger.info(`处理通用充电桩 ${cpsn} 的MeterValues`);
-      
-      // 解析计量数据
-      if (Array.isArray(meterValue) && meterValue.length > 0) {
-        // 处理最新的一组数据
-        const latestValues = meterValue[meterValue.length - 1];
-        
-        if (latestValues.sampledValue && Array.isArray(latestValues.sampledValue)) {
-          // 遍历所有采样值，找出我们需要的数据
-          for (const sample of latestValues.sampledValue) {
+          const sampledValues = meterValue[0].sampledValue;
+          logger.debug(`收到 ${sampledValues.length} 个 sampledValue: ${JSON.stringify(sampledValues)}`);
+          
+          // 根据实际收到的数据解析
+          for (let i = 0; i < sampledValues.length; i++) {
+            const sample = sampledValues[i];
+            logger.debug(`sampledValue[${i}]: ${JSON.stringify(sample)}`);
+            
             if (sample.measurand === "Energy.Active.Import.Register") {
-              cp_data1 = (parseFloat(sample.value) / (sample.unit === "Wh" ? 1000 : 1)).toFixed(3);
+              cp_data1 = (parseFloat(sample.value) / 1000).toFixed(3); // Wh -> kWh
             } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
               cp_data2 = parseFloat(sample.value).toFixed(2);
             } else if (sample.measurand === "Voltage") {
               cp_data3 = parseFloat(sample.value).toFixed(2);
             } else if (sample.measurand === "Power.Active.Import") {
               cp_data4 = parseFloat(sample.value).toFixed(3);
-            } else if (sample.measurand === "Temperature") {
-              cp_data5 = parseFloat(sample.value).toFixed(2);
+            }
+          }
+          
+          // 如果没有直接的功率读数，计算功率 (V * A / 1000)
+          if (cp_data4 === "0.00" && cp_data2 !== "0.00" && cp_data3 !== "0.00") {
+            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3) / 1000).toFixed(3);
+          }
+        }
+        break;
+      }
+      
+      case cpsn.startsWith("sp"): {
+        // Spacepark充电桩的处理逻辑
+        logger.info(`处理Spacepark充电桩 ${cpsn} 的MeterValues`);
+        
+        if (Array.isArray(meterValue) && meterValue.length > 0 && 
+            meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
+          
+          const sampledValues = meterValue[0].sampledValue;
+          
+          if (sampledValues[0].unit === "Wh") {
+            // 非充电状态的数据
+            cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
+            cp_data2 = "0.00";
+            cp_data3 = "0.0";
+            cp_data4 = "0.0";
+          } else {
+            // 充电状态的数据
+            cp_data1 = (parseFloat(sampledValues[1].value) / 1000).toFixed(3); // Wh -> kWh
+            cp_data2 = sampledValues[0].value;
+            cp_data3 = sampledValues[3].value;
+            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
+          }
+        }
+        break;
+      }
+      
+      case cpsn.startsWith("GS"): {
+        // GS充电桩的处理逻辑
+        logger.info(`处理GS充电桩 ${cpsn} 的MeterValues`);
+        
+        if (Array.isArray(meterValue) && meterValue.length > 0 && 
+            meterValue[0].sampledValue && Array.isArray(meterValue[0].sampledValue)) {
+          
+          const sampledValues = meterValue[0].sampledValue;
+          
+          // 记录所有采样值，便于诊断
+          for (let i = 0; i < Math.min(sampledValues.length, 10); i++) {
+            logger.debug(`metervalue_[${i}]: ${sampledValues[i].value}`);
+          }
+          
+          if (sampledValues[0].unit === "Wh") {
+            // 非充电状态的数据
+            cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
+            cp_data2 = "0.00";
+            cp_data3 = "0.0";
+            cp_data4 = "0.0";
+          } else {
+            // 充电状态的数据
+            cp_data1 = (parseFloat(sampledValues[4].value) / 1000).toFixed(3); // Wh -> kWh
+            cp_data2 = sampledValues[0].value; // 电流
+            cp_data3 = sampledValues[7].value; // 电压
+            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
+          }
+        }
+        break;
+      }
+      
+      default: {
+        // 通用处理逻辑，适用于其他厂商
+        logger.info(`处理通用充电桩 ${cpsn} 的MeterValues`);
+        
+        // 解析计量数据
+        if (Array.isArray(meterValue) && meterValue.length > 0) {
+          // 处理最新的一组数据
+          const latestValues = meterValue[meterValue.length - 1];
+          
+          if (latestValues.sampledValue && Array.isArray(latestValues.sampledValue)) {
+            // 遍历所有采样值，找出我们需要的数据
+            for (const sample of latestValues.sampledValue) {
+              if (sample.measurand === "Energy.Active.Import.Register") {
+                cp_data1 = (parseFloat(sample.value) / (sample.unit === "Wh" ? 1000 : 1)).toFixed(3);
+              } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
+                cp_data2 = parseFloat(sample.value).toFixed(2);
+              } else if (sample.measurand === "Voltage") {
+                cp_data3 = parseFloat(sample.value).toFixed(2);
+              } else if (sample.measurand === "Power.Active.Import") {
+                cp_data4 = parseFloat(sample.value).toFixed(3);
+              } else if (sample.measurand === "Temperature") {
+                cp_data5 = parseFloat(sample.value).toFixed(2);
+              }
             }
           }
         }
+        break;
       }
     }
     

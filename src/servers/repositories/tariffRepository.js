@@ -1,23 +1,23 @@
 /**
- * 费率管理服务
- * tariffService.js
- * 
+ * 费率管理仓库
+ * tariffRepository.js
+ *
  * 这个模块专门负责费率方案的 CRUD 操作:
  * 1. 创建费率方案
- * 2. 更新费率方案  
+ * 2. 更新费率方案
  * 3. 删除费率方案
  * 4. 查询费率方案
  * 5. 费率方案状态管理
- * 
+ *
  * 遵循单一职责原则，与 billingService 职责分离
  */
 
 const { databaseService } = require('../../lib/database/service.js');
 
 /**
- * 费率管理服务类
+ * 费率管理仓库类
  */
-class TariffService {
+class TariffRepository {
   constructor() {
     this.databaseService = databaseService;
   }
@@ -32,10 +32,10 @@ class TariffService {
   async getDefaultTariff(options = {}) {
     try {
       const { isAC = false, isDC = false } = options;
-      
-      let whereClause = { 
-        is_active: true, 
-        is_default: true 
+
+      let whereClause = {
+        is_active: true,
+        is_default: true
       };
 
       // 根据充电类型过滤
@@ -52,11 +52,11 @@ class TariffService {
       }
 
       const defaultTariff = await this.databaseService.getDefaultTariff(whereClause);
-      
+
       if (!defaultTariff) {
         throw new Error('没有找到默认费率方案');
       }
-      
+
       return defaultTariff;
     } catch (error) {
       console.error(`获取默认费率方案失败: ${error.message}`);
@@ -92,13 +92,13 @@ class TariffService {
 
       // 首先尝试获取充电枪特定的费率方案
       const gunTariff = await this.databaseService.getActiveGunTariffs(gunId);
-      
+
       if (gunTariff && gunTariff.length > 0) {
         // 获取费率方案详情
         const tariff = await this.databaseService.getTariffById(gunTariff[0].tariff_id);
         return tariff;
       }
-      
+
       // 如果没有特定费率，返回默认费率
       return await this.getDefaultTariff();
     } catch (error) {
@@ -117,11 +117,11 @@ class TariffService {
     try {
       const { activeOnly = false } = options;
       let whereClause = {};
-      
+
       if (activeOnly) {
         whereClause.is_active = true;
       }
-      
+
       const tariffs = await this.databaseService.getTariffs(whereClause);
       return tariffs;
     } catch (error) {
@@ -164,7 +164,7 @@ class TariffService {
       // 如果设置为默认费率，先取消其他默认费率
       if (tariffData.is_default) {
         await this.databaseService.updateTariffs(
-          { 
+          {
             is_default: true,
             id: { not: id }
           },
@@ -216,7 +216,7 @@ class TariffService {
     try {
       const tariff = await this.getTariffById(id);
       const newStatus = !tariff.is_active;
-      
+
       // 如果要停用默认费率，需要先检查
       if (tariff.is_default && !newStatus) {
         throw new Error('不能停用默认费率方案，请先设置其他费率为默认');
@@ -248,7 +248,7 @@ class TariffService {
         is_default: true,
         is_active: true
       });
-      
+
       return updatedTariff;
     } catch (error) {
       console.error(`设置默认费率方案失败: ${error.message}`);
@@ -305,5 +305,5 @@ class TariffService {
 }
 
 // 导出单例实例
-const tariffService = new TariffService();
-module.exports = tariffService;
+const tariffRepository = new TariffRepository();
+module.exports = tariffRepository;

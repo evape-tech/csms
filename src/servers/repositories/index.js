@@ -3,7 +3,9 @@
  */
 
 const chargePointRepository = require('./chargePointRepository');
+const tariffRepository = require('./tariffRepository');
 
 module.exports = {
-  chargePointRepository
+  chargePointRepository,
+  tariffRepository
 };

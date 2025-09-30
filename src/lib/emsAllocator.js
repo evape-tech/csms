@@ -113,35 +113,87 @@ function calculateEmsAllocation(siteSetting, allGuns, onlineCpids = []) {
       });
     }
     
-    // 分配 DC 充電槍 (按樁分配，然後分配給槍)
-    for (const dcStation of dcStationsList) {
-      const stationPower = dcStationsList.length > 0 ? availableDcPower / dcStationsList.length : 0;
-      logs.push(`[static-DC樁] ${dcStation.stationId} 樁分配功率: ${stationPower.toFixed(2)}kW (${dcStation.guns.length}支槍)`);
-      
-      // 樁內槍的功率分配：如果只有一支槍，全部給它；如果兩支槍，平均分配
-      const powerPerGun = stationPower / dcStation.guns.length;
-      
-      for (const gun of dcStation.guns) {
-        const unit = "W";
-        let limit = Math.round(powerPerGun * 1000); // 轉為瓦特
-        
-        // 應用 DC 限制
-        limit = applyDcLimits(gun, limit, logs);
-        
-        logs.push(`[static-DC] ${gun.cpid} (樁${dcStation.stationId}) 設定瓦數: ${limit}W (樁內${dcStation.guns.length}槍平分)`);
-        
-        allocations.push({
-          cpid: gun.cpid,
-          cpsn: gun.cpsn,
-          connector: gun.connector,
-          acdc: gun.acdc,
-          unit,
-          limit,
-          allocated_kw: limit / 1000, // W 轉 kW
-          original_max_kw: safeParseFloat(gun.max_kw),
-          charging: false, // 靜態模式下設為false
-          station_id: dcStation.stationId // 記錄所屬樁ID
-        });
+    // 分配 DC 充電槍 (按樁分配，考慮每個樁的最大功率，再在樁內平分給槍)
+    if (dcStationsList.length > 0) {
+      // 建立可變的樁列表，每個樁包含其最大可用功率 (假設 dcStation.maxPowerKw 表示該樁的總功率)
+      const stationPool = dcStationsList.map(s => ({
+        stationId: s.stationId,
+        guns: s.guns,
+        capacity: safeParseFloat(s.maxPowerKw) || 0,
+        assigned: 0
+      }));
+
+      let remainingDc = availableDcPower;
+      let activeStations = stationPool.filter(s => s.capacity > 0);
+
+      // 如果某些樁沒有明確的 capacity (0)，當作無限上限處理
+      const stationsWithNoCap = stationPool.filter(s => s.capacity === 0);
+
+      // 水桶分配（water-filling）：平均分配剩餘功率給每個樁，若超過該樁上限則鎖定該樁，將剩餘再次平均分配
+      while (remainingDc > 1e-6 && activeStations.length > 0) {
+        const share = remainingDc / activeStations.length;
+        let allocatedThisRound = 0;
+
+        for (const st of activeStations) {
+          const canTake = Math.max(0, st.capacity - st.assigned);
+          const give = Math.min(share, canTake);
+          st.assigned += give;
+          allocatedThisRound += give;
+        }
+
+        // 從剩餘中扣除已分配
+        remainingDc -= allocatedThisRound;
+
+        // 將已滿載的樁從 activeStations 移除
+        activeStations = activeStations.filter(s => s.assigned + 1e-6 < s.capacity);
+
+        // 如果一輪沒有分配到任何功率（例如所有 activeStations capacity 為 0），跳出
+        if (allocatedThisRound <= 1e-6) break;
+      }
+
+      // 若仍有剩餘且有沒有設定 capacity 的樁，平均分配給它們
+      if (remainingDc > 1e-6 && stationsWithNoCap.length > 0) {
+        const perNoCap = remainingDc / stationsWithNoCap.length;
+        for (const st of stationsWithNoCap) {
+          st.assigned = (st.assigned || 0) + perNoCap;
+        }
+        remainingDc = 0;
+      }
+
+      // 若仍有剩餘但沒有更多可分配的樁，剩餘功率將不再分配（可改為回流到 AC 或保留）
+      if (remainingDc > 1e-6) {
+        logs.push(`[static-DC] 有剩餘 DC 功率 ${remainingDc.toFixed(2)}kW 無法分配（所有樁達到上限）`);
+      }
+
+      // 依據每個樁的 assigned 值，在樁內平分給每支槍
+      for (const st of stationPool) {
+        const stationPower = st.assigned || 0;
+        logs.push(`[static-DC樁] ${st.stationId} 樁分配功率: ${stationPower.toFixed(2)}kW (${st.guns.length}支槍, 樁上限:${st.capacity}kW)`);
+
+        const powerPerGun = st.guns.length > 0 ? stationPower / st.guns.length : 0;
+
+        for (const gun of st.guns) {
+          const unit = "W";
+          let limit = Math.round(powerPerGun * 1000); // 轉為瓦特
+
+          // 應用 DC 限制（會把每槍限制在其單槍規格以內）
+          limit = applyDcLimits(gun, limit, logs);
+
+          logs.push(`[static-DC] ${gun.cpid} (樁${st.stationId}) 設定瓦數: ${limit}W (樁內${st.guns.length}槍平分)`);
+
+          allocations.push({
+            cpid: gun.cpid,
+            cpsn: gun.cpsn,
+            connector: gun.connector,
+            acdc: gun.acdc,
+            unit,
+            limit,
+            allocated_kw: limit / 1000, // W 轉 kW
+            original_max_kw: safeParseFloat(gun.max_kw),
+            charging: false, // 靜態模式下設為false
+            station_id: st.stationId // 記錄所屬樁ID
+          });
+        }
       }
     }
   }

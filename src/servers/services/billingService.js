@@ -8,12 +8,12 @@
  * 3. 处理账单状态更新
  * 4. 账单统计和查询
  * 
- * 费率管理已移至 tariffService.js 遵循单一职责原则
+ * 费率管理已移至 tariffRepository.js 遵循单一职责原则
  * 本服务完全通过数据库抽象层操作，不直接依赖任何特定数据库客户端
  */
 
 const { databaseService } = require('../../lib/database/service.js');
-const tariffService = require('./tariffService.js');
+const { tariffRepository } = require('../repositories');
 
 /**
  * 计费服务类
@@ -21,7 +21,7 @@ const tariffService = require('./tariffService.js');
 class BillingService {
   constructor() {
     this.databaseService = databaseService;
-    this.tariffService = tariffService;
+    this.tariffRepository = tariffRepository;
   }
 
   /**
@@ -83,7 +83,7 @@ class BillingService {
       let tariff;
       
       if (tariffId) {
-        tariff = await this.tariffService.getTariffById(tariffId);
+        tariff = await this.tariffRepository.getTariffById(tariffId);
         if (!tariff) {
           const error = `费率方案 ID ${tariffId} 不存在`;
           if (autoMode) {
@@ -95,12 +95,12 @@ class BillingService {
       } else {
         // 根据枪的tariff关联获取费率方案
         const gunId = await this.getGunIdFromCpidCpsn(transaction.cpid, transaction.cpsn);
-        tariff = await this.tariffService.getTariffForGun(gunId);
+        tariff = await this.tariffRepository.getTariffForGun(gunId);
         
         if (!tariff) {
           // 如果没有找到枪的tariff关联，使用默认费率方案
           const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
-          tariff = await this.tariffService.getDefaultTariff({ isAC, isDC: !isAC });
+          tariff = await this.tariffRepository.getDefaultTariff({ isAC, isDC: !isAC });
         }
       }
 

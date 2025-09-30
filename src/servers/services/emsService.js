@@ -10,12 +10,13 @@ const { logger } = require('../utils');
 const { chargePointRepository } = require('../repositories');
 const connectionService = require('./connectionService');
 const ocppMessageService = require('./ocppMessageService');
+const { databaseService } = require('../../lib/database/service.js');
 
 // 引入EMS分配算法
 const { calculateEmsAllocation } = require('../../lib');
 
 // 电表和充电枪相关辅助函数
-let databaseService;
+// let databaseService; // 移除懶加載，改為直接導入
 
 // 定义事件类型
 const EVENT_TYPES = {
@@ -1016,13 +1017,6 @@ async function getMeterForGun(gun) {
       return null;
     }
 
-    // 懒加载数据库服务
-    if (!databaseService) {
-      const { loadDatabaseModules } = require('../repositories/chargePointRepository');
-      const modules = await loadDatabaseModules();
-      databaseService = modules.databaseService;
-    }
-
     // 直接通过充电枪的meter_id关系获取电表
     if (gun.meter_id) {
       try {
@@ -1129,28 +1123,21 @@ async function getMetersAndGunsForStation(stationId = null) {
           guns: []
         };
         
-        // 获取电表关联的充电枪
-        if (meter.guns && Array.isArray(meter.guns)) {
-          meterInfo.guns = meter.guns;
-        } else {
-          // 如果电表没有预加载的充电枪信息，则查询数据库
-          try {
-            if (!databaseService) {
-              const { loadDatabaseModules } = require('../repositories/chargePointRepository');
-              const modules = await loadDatabaseModules();
-              databaseService = modules.databaseService;
+          // 获取电表关联的充电枪
+          if (meter.guns && Array.isArray(meter.guns)) {
+            meterInfo.guns = meter.guns;
+          } else {
+            // 如果电表没有预加载的充电枪信息，则查询数据库
+            try {
+              const gunsForMeter = await chargePointRepository.getAllGuns({ meter_id: meter.id });
+              meterInfo.guns = gunsForMeter || [];
+              logger.debug(`为电表ID=${meter.id}查询到${meterInfo.guns.length}个充电枪`);
+            } catch (err) {
+              logger.error(`查询电表ID=${meter.id}的充电枪失败: ${err.message}`);
+              meterInfo.guns = [];
             }
-            
-            const gunsForMeter = await chargePointRepository.getAllGuns({ meter_id: meter.id });
-            meterInfo.guns = gunsForMeter || [];
-            logger.debug(`为电表ID=${meter.id}查询到${meterInfo.guns.length}个充电枪`);
-          } catch (err) {
-            logger.error(`查询电表ID=${meter.id}的充电枪失败: ${err.message}`);
-            meterInfo.guns = [];
-          }
-        }
-        
-        result.push(meterInfo);
+          }        
+          result.push(meterInfo);
       }
     }
     
