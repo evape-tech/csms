@@ -95,17 +95,17 @@ export async function getRealTimeMonitoringData() {
           unit: 'kW',
         },
         todayConsumption: {
-          label: '今日用電量',
+          label: '用電量',
           value: Number(todayConsumption),
           unit: 'kWh',
         },
         todayRevenue: {
-          label: '今日營收',
+          label: '營收',
           value: Number(todayRevenue),
           unit: '元',
         },
         peakPower: {
-          label: '今日峰值功率',
+          label: '峰值功率',
           value: Number(peakPower),
           unit: 'kW',
         },
@@ -123,17 +123,17 @@ export async function getRealTimeMonitoringData() {
           unit: 'kW',
         },
         todayConsumption: {
-          label: '今日用電量',
+          label: '用電量',
           value: 0,
           unit: 'kWh',
         },
         todayRevenue: {
-          label: '今日營收',
+          label: '營收',
           value: 0,
           unit: '元',
         },
         peakPower: {
-          label: '今日峰值功率',
+          label: '峰值功率',
           value: 0,
           unit: 'kW',
         },

@@ -287,12 +287,12 @@ async function handleMeterValues(cpsn, messageBody) {
       return {};
     }
     
-    // 初始化默认值
-    let cp_data1 = "0.00"; // kWh
-    let cp_data2 = "0.00"; // Current (A)
-    let cp_data3 = "0.00"; // Voltage (V)
-    let cp_data4 = "0.00"; // Power (kW)
-    let cp_data5 = "0.00"; // 附加数据
+  // 初始化默认值 (更具可读性的变量名)
+  let energy_kwh = "0.00"; // kWh
+  let current_a = "0.00"; // Current (A)
+  let voltage_v = "0.00"; // Voltage (V)
+  let power_kw = "0.00"; // Power (kW)
+  let extra_data = "0.00"; // 附加数据
     
     // 根据厂商不同处理MeterValues
     switch (true) {
@@ -312,20 +312,20 @@ async function handleMeterValues(cpsn, messageBody) {
             const sample = sampledValues[i];
             logger.debug(`sampledValue[${i}]: ${JSON.stringify(sample)}`);
             
-            if (sample.measurand === "Energy.Active.Import.Register") {
-              cp_data1 = (parseFloat(sample.value) / 1000).toFixed(3); // Wh -> kWh
+              if (sample.measurand === "Energy.Active.Import.Register") {
+              energy_kwh = (parseFloat(sample.value) / 1000).toFixed(3); // Wh -> kWh
             } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
-              cp_data2 = parseFloat(sample.value).toFixed(2);
+              current_a = parseFloat(sample.value).toFixed(2);
             } else if (sample.measurand === "Voltage") {
-              cp_data3 = parseFloat(sample.value).toFixed(2);
+              voltage_v = parseFloat(sample.value).toFixed(2);
             } else if (sample.measurand === "Power.Active.Import") {
-              cp_data4 = parseFloat(sample.value).toFixed(3);
+              power_kw = parseFloat(sample.value).toFixed(3);
             }
           }
           
           // 如果没有直接的功率读数，计算功率 (V * A / 1000)
-          if (cp_data4 === "0.00" && cp_data2 !== "0.00" && cp_data3 !== "0.00") {
-            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3) / 1000).toFixed(3);
+          if (power_kw === "0.00" && current_a !== "0.00" && voltage_v !== "0.00") {
+            power_kw = (parseFloat(current_a) * parseFloat(voltage_v) / 1000).toFixed(3);
           }
         }
         break;
@@ -342,16 +342,16 @@ async function handleMeterValues(cpsn, messageBody) {
           
           if (sampledValues[0].unit === "Wh") {
             // 非充电状态的数据
-            cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
-            cp_data2 = "0.00";
-            cp_data3 = "0.0";
-            cp_data4 = "0.0";
+            energy_kwh = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
+            current_a = "0.00";
+            voltage_v = "0.0";
+            power_kw = "0.0";
           } else {
             // 充电状态的数据
-            cp_data1 = (parseFloat(sampledValues[1].value) / 1000).toFixed(3); // Wh -> kWh
-            cp_data2 = sampledValues[0].value;
-            cp_data3 = sampledValues[3].value;
-            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
+            energy_kwh = (parseFloat(sampledValues[1].value) / 1000).toFixed(3); // Wh -> kWh
+            current_a = sampledValues[0].value;
+            voltage_v = sampledValues[3].value;
+            power_kw = (parseFloat(current_a) * parseFloat(voltage_v)).toFixed(3); // 计算功率
           }
         }
         break;
@@ -373,16 +373,16 @@ async function handleMeterValues(cpsn, messageBody) {
           
           if (sampledValues[0].unit === "Wh") {
             // 非充电状态的数据
-            cp_data1 = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
-            cp_data2 = "0.00";
-            cp_data3 = "0.0";
-            cp_data4 = "0.0";
+            energy_kwh = (parseFloat(sampledValues[0].value) / 1000).toFixed(3); // Wh -> kWh
+            current_a = "0.00";
+            voltage_v = "0.0";
+            power_kw = "0.0";
           } else {
             // 充电状态的数据
-            cp_data1 = (parseFloat(sampledValues[4].value) / 1000).toFixed(3); // Wh -> kWh
-            cp_data2 = sampledValues[0].value; // 电流
-            cp_data3 = sampledValues[7].value; // 电压
-            cp_data4 = (parseFloat(cp_data2) * parseFloat(cp_data3)).toFixed(3); // 计算功率
+            energy_kwh = (parseFloat(sampledValues[4].value) / 1000).toFixed(3); // Wh -> kWh
+            current_a = sampledValues[0].value; // 电流
+            voltage_v = sampledValues[7].value; // 电压
+            power_kw = (parseFloat(current_a) * parseFloat(voltage_v)).toFixed(3); // 计算功率
           }
         }
         break;
@@ -401,15 +401,15 @@ async function handleMeterValues(cpsn, messageBody) {
             // 遍历所有采样值，找出我们需要的数据
             for (const sample of latestValues.sampledValue) {
               if (sample.measurand === "Energy.Active.Import.Register") {
-                cp_data1 = (parseFloat(sample.value) / (sample.unit === "Wh" ? 1000 : 1)).toFixed(3);
+                energy_kwh = (parseFloat(sample.value) / (sample.unit === "Wh" ? 1000 : 1)).toFixed(3);
               } else if (sample.measurand === "Current.Import" || sample.measurand === "Current") {
-                cp_data2 = parseFloat(sample.value).toFixed(2);
+                current_a = parseFloat(sample.value).toFixed(2);
               } else if (sample.measurand === "Voltage") {
-                cp_data3 = parseFloat(sample.value).toFixed(2);
+                voltage_v = parseFloat(sample.value).toFixed(2);
               } else if (sample.measurand === "Power.Active.Import") {
-                cp_data4 = parseFloat(sample.value).toFixed(3);
+                power_kw = parseFloat(sample.value).toFixed(3);
               } else if (sample.measurand === "Temperature") {
-                cp_data5 = parseFloat(sample.value).toFixed(2);
+                extra_data = parseFloat(sample.value).toFixed(2);
               }
             }
           }
@@ -419,14 +419,14 @@ async function handleMeterValues(cpsn, messageBody) {
     }
     
     // 更新WebSocket数据
-    logger.debug(`更新 ${cpsn}:${connectorId} 的电表读数: kWh=${cp_data1}, A=${cp_data2}, V=${cp_data3}, Power=${cp_data4}`);
+  logger.debug(`更新 ${cpsn}:${connectorId} 的电表读数: kWh=${energy_kwh}, A=${current_a}, V=${voltage_v}, Power=${power_kw}`);
     
     // 使用数据库仓库更新电表数据
     await chargePointRepository.updateGunMeterValues(cpsn, connectorId, {
-      guns_metervalue1: cp_data1, // kWh
-      guns_metervalue2: cp_data2, // A
-      guns_metervalue3: cp_data3, // V
-      guns_metervalue4: cp_data4, // Power
+      guns_metervalue1: energy_kwh, // kWh
+      guns_metervalue2: current_a, // A
+      guns_metervalue3: voltage_v, // V
+      guns_metervalue4: power_kw, // Power
       guns_memo2: new Date().toISOString() // 更新时间
     });
     
@@ -438,7 +438,7 @@ async function handleMeterValues(cpsn, messageBody) {
         
         if (activeTransaction && activeTransaction.status === 'ACTIVE') {
           // 計算累積電量（基於當前電表讀數）
-          const currentMeterReading = parseFloat(cp_data1);
+          const currentMeterReading = parseFloat(energy_kwh);
           const startMeterReading = parseFloat(activeTransaction.meter_start) || 0;
           const energyConsumed = Math.max(0, currentMeterReading - startMeterReading);
           
@@ -454,9 +454,9 @@ async function handleMeterValues(cpsn, messageBody) {
             energy_consumed: energyConsumed,
             charging_duration: chargingDuration,
             // 更新即時充電數據
-            current_power: parseFloat(cp_data4),
-            current_voltage: parseFloat(cp_data3),
-            current_current: parseFloat(cp_data2),
+            current_power: parseFloat(power_kw),
+            current_voltage: parseFloat(voltage_v),
+            current_current: parseFloat(current_a),
             last_meter_update: updateTime,
             updatedAt: updateTime
           });
@@ -509,13 +509,17 @@ async function handleStartTransaction(cpsn, messageBody) {
       };
     }
     
-    // 創建新的交易記錄
+    // OCPP 的 meterStart 為 Wh，轉換為 kWh 再儲存
+    const meterStartParsed = meterStart !== undefined && meterStart !== null ? parseFloat(meterStart) : null;
+    const meterStartKwh = meterStartParsed !== null && !isNaN(meterStartParsed) ? (meterStartParsed / 1000) : null;
+
+    // 創建新的交易記錄（存入 kWh）
     const transactionRecord = await chargePointRepository.createNewTransaction({
       cpid: cpid,
       cpsn: cpsn,
       connector_id: connectorId,
       idTag: idTag,
-      meterStart: meterStart,
+      meterStart: meterStartKwh,
       user_id: validTag.userUuid // 关联用户ID
     });
     
@@ -527,8 +531,8 @@ async function handleStartTransaction(cpsn, messageBody) {
     // 更新充电桩状态
     await chargePointRepository.updateConnectorStatus(cpid, "Charging");
     
-    // 更新WebSocket数据
-    updateTransactionStartInWsData(cpsn, connectorId, timestamp, meterStart);
+  // 更新WebSocket数据（显示为 kWh）
+  updateTransactionStartInWsData(cpsn, connectorId, timestamp, meterStartKwh);
     
     // 記錄OCPP JSON日志
     await createOcppLogEntry(cpid, cpsn, messageBody, "in", new Date(timestamp) || new Date());
@@ -602,9 +606,14 @@ async function handleStopTransaction(cpsn, messageBody) {
       };
     }
     
-    // 計算充電量和充電時長
-    const meterStart = transaction.meter_start || 0;
-    const chargingEnergy = Math.max(0, parseFloat(meterStop) - parseFloat(meterStart)).toFixed(2);
+  // OCPP 的 meterStop 為 Wh，轉為 kWh 再計算
+  const meterStopParsed = meterStop !== undefined && meterStop !== null ? parseFloat(meterStop) : null;
+  const meterStopKwh = meterStopParsed !== null && !isNaN(meterStopParsed) ? (meterStopParsed / 1000) : null;
+
+  const meterStart = transaction.meter_start || 0; // DB 中應為 kWh
+  const meterStopForCalc = meterStopKwh !== null ? meterStopKwh : parseFloat(meterStop);
+  const chargingEnergy = Math.max(0, parseFloat(meterStopForCalc) - parseFloat(meterStart)).toFixed(2);
+  logger.info(`计算充电量: 开始=${meterStart}kWh, 结束=${meterStopForCalc}kWh, 消耗=${chargingEnergy}kWh`);
     
     const startTime = new Date(transaction.start_time);
     const stopTime = new Date(timestamp);
@@ -614,12 +623,13 @@ async function handleStopTransaction(cpsn, messageBody) {
     await chargePointRepository.updateConnectorStatus(cpid, "Available");
     
     // 更新WebSocket数据
-    updateTransactionStopInWsData(transaction.cpsn, connectorId, timestamp, meterStop, chargingEnergy, chargingDuration);
+    // 更新WebSocket数据（以 kWh 顯示）
+    updateTransactionStopInWsData(transaction.cpsn, connectorId, timestamp, meterStopForCalc, chargingEnergy, chargingDuration);
     
     // 更新交易記錄
     await chargePointRepository.updateTransactionRecord(transactionId, {
       end_time: stopTime,
-      meter_stop: parseFloat(meterStop),
+      meter_stop: parseFloat(meterStopForCalc),
       energy_consumed: parseFloat(chargingEnergy),
       charging_duration: chargingDuration,
       status: 'COMPLETED'

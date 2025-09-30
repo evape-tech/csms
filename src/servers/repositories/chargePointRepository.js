@@ -447,26 +447,24 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     const newStatus = updateFields.status || originalStatus;
     const statusChanged = originalStatus !== newStatus;
     
-    console.log(`🔄 [交易狀態檢查] 交易 ${transaction.transaction_id}: 原始狀態=${originalStatus} -> 新狀態=${newStatus}, 狀態已變更=${statusChanged}`);
+    // console.log(`🔄 [交易狀態檢查] 交易 ${transaction.transaction_id}: 原始狀態=${originalStatus} -> 新狀態=${newStatus}, 狀態已變更=${statusChanged}`);
     
     if (statusChanged && ['COMPLETED', 'ERROR'].includes(newStatus)) {
-      console.log(`✅ [自動Billing] 觸發條件滿足，開始為交易 ${transaction.transaction_id} 生成billing記錄...`);
       
       try {
         // 導入billing服務並自動生成billing記錄
         const billingService = require('../services/billingService.js');
-        console.log(`📦 [自動Billing] billingService 已載入，呼叫 generateBillingForTransaction...`);
         
         const billing = await billingService.generateBillingForTransaction(
           transaction.transaction_id, 
           { autoMode: true }
         );
         
-        console.log(`🎯 [自動Billing] generateBillingForTransaction 回傳結果:`, billing ? `billing記錄 #${billing.id}` : 'null');
+        // console.log(`🎯 [自動Billing] generateBillingForTransaction 回傳結果:`, billing ? `billing記錄 #${billing.id}` : 'null');
         
         if (billing) {
-          logger.info(`✅ 已為交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
-          console.log(`💰 [自動Billing成功] 交易 ${transaction.transaction_id} -> billing記錄 #${billing.id}, 金額: ${billing.total_amount || 'N/A'}`);
+          // logger.info(`✅ 已為交易 ${transaction.transaction_id} 自動生成billing記錄 #${billing.id}`);
+          // console.log(`💰 [自動Billing成功] 交易 ${transaction.transaction_id} -> billing記錄 #${billing.id}, 金額: ${billing.total_amount || 'N/A'}`);
         } else {
           console.log(`⚠️  [自動Billing] 交易 ${transaction.transaction_id} 沒有生成billing記錄（可能是重複或其他原因）`);
         }

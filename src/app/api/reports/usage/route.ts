@@ -158,21 +158,32 @@ export async function GET(request: NextRequest) {
     const formattedRecords = records.map((record) => {
       const startTime = record.start_time ? new Date(record.start_time) : null;
       const endTime = record.end_time ? new Date(record.end_time) : null;
-      const durationFromField = record.charging_duration ?? 0;
-      const fallbackDuration = startTime && endTime ? endTime.getTime() - startTime.getTime() : undefined;
+      // charging_duration is stored in seconds across the server (see ocppMessageService)
+      // We want to display minutes in the UI. Convert seconds -> minutes when appropriate.
+      const durationFromFieldSeconds = record.charging_duration ?? 0;
+      const fallbackDurationMs = startTime && endTime ? endTime.getTime() - startTime.getTime() : undefined;
 
-      const minutes = durationFromField > 0 && durationFromField < 10000
-        ? durationFromField
-        : fallbackDuration
-          ? Math.round(fallbackDuration / 60000)
-          : 0;
+      let minutes = 0;
+
+      // If the DB field looks like a reasonable seconds value, convert to minutes
+      if (durationFromFieldSeconds && durationFromFieldSeconds > 0) {
+        // protect against accidentally-stored minutes (very large values would indicate minutes already)
+        // assume values >= 10000 are already minutes (legacy) — keep previous heuristic
+        if (durationFromFieldSeconds < 10000) {
+          minutes = Math.round(durationFromFieldSeconds / 60);
+        } else {
+          minutes = Math.round(durationFromFieldSeconds);
+        }
+      } else if (fallbackDurationMs) {
+        minutes = Math.round(fallbackDurationMs / 60000);
+      }
 
       return {
         id: record.id.toString(),
         user: formatUserName(record.users ?? undefined),
         charger: record.cpid || record.cpsn || '-',
         date: startTime?.toISOString() ?? null,
-        duration: formatDuration(minutes, fallbackDuration),
+        duration: formatDuration(minutes, fallbackDurationMs),
         kWh: decimalToNumber(record.energy_consumed)
       };
     });

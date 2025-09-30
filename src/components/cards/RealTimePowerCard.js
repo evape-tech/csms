@@ -23,7 +23,7 @@ export default function RealTimePowerCard() {
       unit: '元'
     },
     peakPower: {
-      label: '今日峰值功率',
+      label: '峰值功率',
       value: 0,
       unit: 'kW'
     }

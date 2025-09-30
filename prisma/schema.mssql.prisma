@@ -9,7 +9,7 @@ datasource db {
 }
 
 model guns {
-  id               Int           @id(map: "PK__guns__3213E83F70B5ED03") @default(autoincrement())
+  id               Int           @id(map: "PK__guns__3213E83F5FB9D291") @default(autoincrement())
   connector        String?       @db.NVarChar(45)
   cpid             String?       @db.NVarChar(255)
   cpsn             String?       @db.NVarChar(255)
@@ -40,7 +40,7 @@ model guns {
 }
 
 model stations {
-  id           Int      @id(map: "PK__stations__3213E83F7E9B8C0E") @default(autoincrement())
+  id           Int      @id(map: "PK__stations__3213E83FE8311188") @default(autoincrement())
   station_code String   @unique(map: "UQ_stations_station_code") @db.NVarChar(50)
   name         String?  @db.NVarChar(100)
   address      String?  @db.NVarChar(255)
@@ -51,7 +51,7 @@ model stations {
 }
 
 model meters {
-  id           Int      @id(map: "PK__meters__3213E83F649D75A0") @default(autoincrement())
+  id           Int      @id(map: "PK__meters__3213E83F26BEB065") @default(autoincrement())
   station_id   Int
   meter_no     String   @db.NVarChar(50)
   ems_mode     String   @default("N'static'", map: "DF__meters__ems_mode__49C3F6B7") @db.NVarChar(32)
@@ -70,7 +70,7 @@ model meters {
 }
 
 model tariffs {
-  id                    Int               @id(map: "PK__tariffs__3213E83FEAA37489") @default(autoincrement())
+  id                    Int               @id(map: "PK__tariffs__3213E83F700856F2") @default(autoincrement())
   name                  String            @db.NVarChar(100)
   description           String?           @db.NVarChar(Max)
   tariff_type           String            @default("N'FIXED_RATE'", map: "DF__tariffs__tariff___37A5467C") @db.NVarChar(20)
@@ -113,7 +113,7 @@ model tariffs {
 }
 
 model gun_tariffs {
-  id        Int      @id(map: "PK__gun_tari__3213E83F54E6AC25") @default(autoincrement())
+  id        Int      @id(map: "PK__gun_tari__3213E83FA94DCB07") @default(autoincrement())
   gun_id    Int
   tariff_id Int
   priority  Int?     @default(1, map: "DF__gun_tarif__prior__5629CD9C")
@@ -131,9 +131,9 @@ model gun_tariffs {
 }
 
 model billing_channels {
-  id                  Int                   @id(map: "PK__billing___3213E83FED028F42") @default(autoincrement())
+  id                  Int                   @id(map: "PK__billing___3213E83FF255215A") @default(autoincrement())
   name                String                @db.NVarChar(50)
-  code                String                @unique(map: "UQ__billing___357D4CF933BE2A04") @db.NVarChar(50)
+  code                String                @unique(map: "UQ__billing___357D4CF9A4AD7748") @db.NVarChar(50)
   status              Int                   @default(1, map: "DF__billing_c__statu__6E01572D") @db.TinyInt
   config              String?               @db.NVarChar(Max)
   createdAt           DateTime              @default(now(), map: "DF__billing_c__creat__6EF57B66")
@@ -143,7 +143,7 @@ model billing_channels {
 }
 
 model billing_records {
-  id                    BigInt                @id(map: "PK__billing___3213E83FD65848D4") @default(autoincrement())
+  id                    BigInt                @id(map: "PK__billing___3213E83F3E26FD4C") @default(autoincrement())
   transaction_id        String                @db.NVarChar(50)
   tariff_id             Int
   applied_price         Decimal               @db.Decimal(10, 2)
@@ -189,8 +189,8 @@ model billing_records {
 }
 
 model charging_transactions {
-  id                  BigInt                @id(map: "PK__charging__3213E83F1D5A0C40") @default(autoincrement())
-  transaction_id      String                @unique(map: "UQ__charging__85C600AEC588761C") @db.NVarChar(50)
+  id                  BigInt                @id(map: "PK__charging__3213E83F29E567A0") @default(autoincrement())
+  transaction_id      String                @unique(map: "UQ__charging__85C600AE6D22D7D8") @db.NVarChar(50)
   start_time          DateTime
   end_time            DateTime?
   cpid                String                @db.NVarChar(255)
@@ -223,7 +223,7 @@ model charging_transactions {
 }
 
 model cp_logs {
-  id        BigInt    @id(map: "PK__cp_logs__3213E83F383929D9") @default(autoincrement())
+  id        BigInt    @id(map: "PK__cp_logs__3213E83F54A3FC35") @default(autoincrement())
   cpid      String?   @db.NVarChar(255)
   cpsn      String?   @db.NVarChar(255)
   log       String?   @db.NVarChar(Max)
@@ -234,7 +234,7 @@ model cp_logs {
 }
 
 model fault_reports {
-  id                                     BigInt    @id(map: "PK__fault_re__3213E83F3C032F50") @default(autoincrement())
+  id                                     BigInt    @id(map: "PK__fault_re__3213E83FBB48CE6C") @default(autoincrement())
   cpid                                   String    @db.NVarChar(255)
   cpsn                                   String    @db.NVarChar(255)
   connector_id                           Int?
@@ -261,7 +261,7 @@ model fault_reports {
 }
 
 model maintenance_records {
-  id                                             BigInt    @id(map: "PK__maintena__3213E83F6AA90444") @default(autoincrement())
+  id                                             BigInt    @id(map: "PK__maintena__3213E83F44E8F807") @default(autoincrement())
   cpid                                           String    @db.NVarChar(255)
   cpsn                                           String    @db.NVarChar(255)
   connector_id                                   Int?
@@ -299,7 +299,7 @@ model maintenance_records {
 }
 
 model operation_logs {
-  id          BigInt   @id(map: "PK__operatio__3213E83F1FF7C834") @default(autoincrement())
+  id          BigInt   @id(map: "PK__operatio__3213E83F933A0210") @default(autoincrement())
   user_id     String?  @db.NVarChar(36)
   user_email  String?  @db.NVarChar(255)
   user_name   String?  @db.NVarChar(100)
@@ -320,9 +320,9 @@ model operation_logs {
 }
 
 model rfid_cards {
-  id          Int      @id(map: "PK__rfid_car__3213E83FA4A9BAEF") @default(autoincrement())
+  id          Int      @id(map: "PK__rfid_car__3213E83FC8CE817E") @default(autoincrement())
   user_id     String   @db.NVarChar(36)
-  card_number String   @unique(map: "UQ__rfid_car__1E6E0AF46AF3443F") @db.NVarChar(50)
+  card_number String   @unique(map: "UQ__rfid_car__1E6E0AF4B9FF56A4") @db.NVarChar(50)
   card_type   String   @default("RFID", map: "DF__rfid_card__card___1EA48E88") @db.NVarChar(20)
   status      String   @default("ACTIVE", map: "DF__rfid_card__statu__1F98B2C1") @db.NVarChar(20)
   issued_at   DateTime @default(now(), map: "DF__rfid_card__issue__2180FB33")
@@ -336,8 +336,8 @@ model rfid_cards {
 }
 
 model user_wallets {
-  id                  Int                   @id(map: "PK__user_wal__3213E83F9A9E769E") @default(autoincrement())
-  user_id             String                @unique(map: "UQ__user_wal__B9BE370E8C30FEDD") @db.NVarChar(36)
+  id                  Int                   @id(map: "PK__user_wal__3213E83FE0546D74") @default(autoincrement())
+  user_id             String                @unique(map: "UQ__user_wal__B9BE370E9718166B") @db.NVarChar(36)
   balance             Decimal               @default(0.00, map: "DF__user_wall__balan__17036CC0") @db.Decimal(10, 2)
   currency            String                @default("TWD", map: "DF__user_wall__curre__17F790F9") @db.NVarChar(3)
   createdAt           DateTime              @default(now(), map: "DF__user_wall__creat__18EBB532")
@@ -349,8 +349,8 @@ model user_wallets {
 }
 
 model users {
-  id                                                           Int                     @id(map: "PK__users__3213E83FCDCE2365") @default(autoincrement())
-  uuid                                                         String?                 @unique(map: "UQ__users__7F4279315FA8821C") @db.NVarChar(36)
+  id                                                           Int                     @id(map: "PK__users__3213E83F28D83817") @default(autoincrement())
+  uuid                                                         String?                 @unique(map: "UQ__users__7F4279314D524A65") @db.NVarChar(36)
   email                                                        String?                 @db.NVarChar(255)
   password                                                     String?                 @db.NVarChar(255)
   role                                                         String?                 @db.NVarChar(255)
@@ -384,7 +384,7 @@ model users {
 }
 
 model wallet_transactions {
-  id                      BigInt                 @id(map: "PK__wallet_t__3213E83F4815FD38") @default(autoincrement())
+  id                      BigInt                 @id(map: "PK__wallet_t__3213E83F4F4583DE") @default(autoincrement())
   user_id                 String                 @db.NVarChar(36)
   wallet_id               Int
   transaction_type        String                 @db.NVarChar(20)
