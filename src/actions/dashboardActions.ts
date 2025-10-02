@@ -17,20 +17,16 @@ export async function getRealTimeMonitoringData() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // 獲取即時功率 - 正在充電中的交易的當前功率總和
-    const currentPowerResult = await client.charging_transactions.aggregate({
+    // 計算目前正在充電的交易數（可作為 "有多少人/樁在充電" 的指標）
+    // 這在硬體不回傳功率時尤為有用
+    const activeChargingCount = await client.charging_transactions.count({
       where: {
         status: 'ACTIVE',
         last_meter_update: {
-          gte: new Date(Date.now() - 5 * 60 * 1000), // 最近5分鐘內有更新
+          gte: new Date(Date.now() - 5 * 60 * 1000), // 與 currentPower 相同的 window
         },
       },
-      _sum: {
-        current_power: true,
-      },
     });
-
-    const currentPower = currentPowerResult._sum.current_power || 0;
 
     // 獲取今日用電量 - 今日完成的交易總用電量
     const todayConsumptionResult = await client.billing_records.aggregate({
@@ -89,18 +85,18 @@ export async function getRealTimeMonitoringData() {
     return {
       success: true,
       data: {
-        currentPower: {
-          label: '即時功率',
-          value: Number(currentPower),
-          unit: 'kW',
+        activeChargingCount: {
+          label: '正在充電數',
+          value: Number(activeChargingCount || 0),
+          unit: 'count'
         },
         todayConsumption: {
-          label: '用電量',
+          label: '今日用電量',
           value: Number(todayConsumption),
           unit: 'kWh',
         },
         todayRevenue: {
-          label: '營收',
+          label: '今日營收',
           value: Number(todayRevenue),
           unit: '元',
         },
@@ -117,10 +113,10 @@ export async function getRealTimeMonitoringData() {
       success: false,
       error: error instanceof Error ? error.message : '未知錯誤',
       data: {
-        currentPower: {
-          label: '即時功率',
+        activeChargingCount: {
+          label: '正在充電數',
           value: 0,
-          unit: 'kW',
+          unit: 'count'
         },
         todayConsumption: {
           label: '用電量',

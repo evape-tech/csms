@@ -444,15 +444,6 @@ export default function CPListCard({ chargers = [], stations = [] }) {
               color="secondary"
               variant="filled"
             />
-            {Object.keys(meterEmsResults).length > 0 && (
-              <Chip 
-                label={Object.values(meterEmsResults).reduce((sum, meter) => 
-                  sum + (meter.emsResult?.summary?.charging_guns || 0), 0) + ' 個充電中'} 
-                size="small" 
-                color="warning"
-                variant="outlined"
-              />
-            )}
           </Box>
         </Box>
         <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -523,14 +514,6 @@ export default function CPListCard({ chargers = [], stations = [] }) {
                               color="default"
                               variant="outlined"
                             />
-                            {meterData.emsResult?.summary?.charging_guns > 0 && (
-                              <Chip 
-                                label={`${meterData.emsResult.summary.charging_guns}充電中`} 
-                                size="small" 
-                                color="warning"
-                                variant="filled"
-                              />
-                            )}
                             {meterData.emsResult?.summary && (
                               <Chip 
                                 label={`${meterData.emsResult.summary.total_allocated_kw.toFixed(1)}kW`} 

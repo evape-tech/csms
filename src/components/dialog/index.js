@@ -10,3 +10,4 @@ export { default as ResetPasswordDialog } from './ResetPasswordDialog';
 export { default as SiteDialog } from './SiteDialog';
 export { default as TariffDialog } from './TariffDialog';
 export { default as UserDialog } from './UserDialog';
+export { default as CreateMaintenanceDialog } from './CreateMaintenanceDialog';

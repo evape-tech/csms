@@ -36,6 +36,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoIcon from '@mui/icons-material/Info';
+import { CreateMaintenanceDialog } from '../../components/dialog';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -75,6 +76,8 @@ interface MaintenanceRecord {
   total_cost?: number;
   status: string;
   result?: string;
+  createdAt?: string;
+  updatedAt?: string;
   users_maintenance_records_technician_idTousers?: {
     id: number;
     first_name?: string;
@@ -108,6 +111,14 @@ export default function HardwareMaintenance() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleDateString('zh-TW');
+  };
 
   // 載入維護記錄數據
   const fetchMaintenanceRecords = async () => {
@@ -201,6 +212,7 @@ export default function HardwareMaintenance() {
   });
 
   return (
+    <>
     <Container
       maxWidth={false}
       sx={{
@@ -229,6 +241,7 @@ export default function HardwareMaintenance() {
         <Typography variant="body1" color="text.secondary">
           管理充電樁設備的維護工單和維修調度
         </Typography>
+        {/* 建立工單按鈕已移至搜尋與篩選區 */}
       </Box>
 
       {/* 統計概覽 */}
@@ -543,6 +556,28 @@ export default function HardwareMaintenance() {
           >
             {loading ? <CircularProgress size={20} /> : '查詢'}
           </Button>
+          <Button
+            variant="contained"
+            size="medium"
+            onClick={() => setCreateDialogOpen(true)}
+            disabled={loading}
+            sx={{
+              ml: 2,
+              px: 4,
+              py: 1,
+              borderRadius: 2,
+              fontWeight: 600,
+              textTransform: 'none',
+              boxShadow: (theme) => theme.shadows[4],
+              '&:hover': {
+                boxShadow: (theme) => theme.shadows[8],
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            建立工單
+          </Button>
         </Box>
       </Paper>
 
@@ -661,7 +696,7 @@ export default function HardwareMaintenance() {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <ScheduleIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary }} />
                       <Typography variant="body2">
-                        {record.scheduled_date ? new Date(record.scheduled_date).toLocaleDateString('zh-TW') : '-'}
+                        {formatDate(record.createdAt)}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -743,5 +778,15 @@ export default function HardwareMaintenance() {
         )}
       </Paper>
     </Container>
+    <CreateMaintenanceDialog
+      open={createDialogOpen}
+      onClose={() => setCreateDialogOpen(false)}
+      onCreate={(record) => {
+        // 新增完成後重新載入表格
+        fetchMaintenanceRecords();
+        setCreateDialogOpen(false);
+      }}
+    />
+    </>
   );
 }

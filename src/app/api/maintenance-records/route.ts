@@ -5,6 +5,21 @@ import DatabaseUtils from '../../../lib/database/utils.js';
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
 
+const serializePrismaData = (input: any): any => {
+  if (input === null || input === undefined) return input;
+  if (typeof input === 'bigint') return input.toString();
+  if (input instanceof Date) return input.toISOString();
+  if (Array.isArray(input)) return input.map(serializePrismaData);
+  if (typeof input === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+      out[key] = serializePrismaData(value);
+    }
+    return out;
+  }
+  return input;
+};
+
 // GET - 取得維護記錄列表
 export async function GET(request: NextRequest) {
   try {
@@ -107,7 +122,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        records: maintenanceRecords,
+        records: serializePrismaData(maintenanceRecords),
         pagination: {
           page,
           limit,
@@ -178,9 +193,9 @@ export async function POST(request: NextRequest) {
         priority,
         description,
         scheduled_date: scheduled_date ? new Date(scheduled_date) : null,
-        technician_id: technician_id ? parseInt(technician_id) : null,
-        technician_name,
-        created_by: created_by ? parseInt(created_by) : null,
+  technician_id: technician_id || null,
+  technician_name,
+  created_by: created_by || null,
         status: 'SCHEDULED'
       },
       include: {
@@ -205,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: maintenanceRecord,
+      data: serializePrismaData(maintenanceRecord),
       message: '維護記錄建立成功'
     });
 

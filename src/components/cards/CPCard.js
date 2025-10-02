@@ -71,7 +71,6 @@ const getOcppStatusText = (status) => {
 export default function CPCard({ chargers, stations, meters }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('id');
   const [viewMode, setViewMode] = useState('card');
   const [searchTerm, setSearchTerm] = useState('');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -333,12 +332,7 @@ export default function CPCard({ chargers, stations, meters }) {
 
       return {
         ...group,
-        guns: filteredGuns.sort((a, b) => {
-          if (sortBy === 'id') return a.id - b.id;
-          if (sortBy === 'status') return a.status.localeCompare(b.status);
-          if (sortBy === 'power') return (b.max_kw || 0) - (a.max_kw || 0);
-          return 0;
-        })
+        guns: filteredGuns.sort((a, b) => a.id - b.id)
       };
     }); // 顯示所有電表群組，包括沒有充電樁的
   };
@@ -364,13 +358,7 @@ export default function CPCard({ chargers, stations, meters }) {
         { value: 'DC', label: '直流充電' }
       ]
     },
-    {
-      label: '排序方式', value: sortBy, setValue: setSortBy, options: [
-        { value: 'id', label: '按編號' },
-        { value: 'status', label: '按狀態' },
-        { value: 'power', label: '按功率' }
-      ]
-    }
+    // 排序功能已移除，預設以 id 排序
   ];
 
   return (

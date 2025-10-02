@@ -5,17 +5,30 @@ import DatabaseUtils from '../../../../lib/database/utils.js';
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
 
+const serializePrismaData = (input: any): any => {
+  if (input === null || input === undefined) return input;
+  if (typeof input === 'bigint') return input.toString();
+  if (input instanceof Date) return input.toISOString();
+  if (Array.isArray(input)) return input.map(serializePrismaData);
+  if (typeof input === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+      out[key] = serializePrismaData(value);
+    }
+    return out;
+  }
+  return input;
+};
+
 // GET - 取得單一維護記錄
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, context: any) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient();
 
-    const id = parseInt(params.id);
+    const params = await context.params;
+    const id = BigInt(params.id);
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -24,7 +37,7 @@ export async function GET(
       );
     }
 
-    const maintenanceRecord = await prisma.maintenance_records.findUnique({
+    const maintenanceRecord = await client.maintenance_records.findUnique({
       where: { id },
       include: {
         users_maintenance_records_created_byTousers: {
@@ -55,7 +68,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: maintenanceRecord
+      data: serializePrismaData(maintenanceRecord)
     });
 
   } catch (error) {
@@ -74,9 +87,14 @@ export async function GET(
 // PUT - 更新維護記錄
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: any
 ) {
   try {
+    // 確保資料庫已初始化
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+    const client = getDatabaseClient();
+
+    const params = await context.params;
     const id = BigInt(params.id);
     const body = await request.json();
     const {
@@ -95,7 +113,7 @@ export async function PUT(
     } = body;
 
     // 檢查維護記錄是否存在
-    const existingRecord = await prisma.maintenance_records.findUnique({
+    const existingRecord = await client.maintenance_records.findUnique({
       where: { id }
     });
 
@@ -167,7 +185,7 @@ export async function PUT(
       updateData.actual_end_date = new Date();
     }
 
-    const updatedRecord = await prisma.maintenance_records.update({
+    const updatedRecord = await client.maintenance_records.update({
       where: { id },
       data: updateData,
       include: {
@@ -192,7 +210,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      data: updatedRecord,
+      data: serializePrismaData(updatedRecord),
       message: '維護記錄更新成功'
     });
 
@@ -212,13 +230,18 @@ export async function PUT(
 // DELETE - 刪除維護記錄
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: any
 ) {
   try {
+    // 確保資料庫已初始化
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+    const client = getDatabaseClient();
+
+    const params = await context.params;
     const id = BigInt(params.id);
 
     // 檢查維護記錄是否存在
-    const existingRecord = await prisma.maintenance_records.findUnique({
+    const existingRecord = await client.maintenance_records.findUnique({
       where: { id }
     });
 
@@ -229,7 +252,7 @@ export async function DELETE(
       );
     }
 
-    await prisma.maintenance_records.delete({
+    await client.maintenance_records.delete({
       where: { id }
     });
 

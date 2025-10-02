@@ -7,10 +7,10 @@ import { getRealTimeMonitoringData } from '../../actions/dashboardActions';
 
 export default function RealTimePowerCard() {
   const [data, setData] = useState({
-    currentPower: {
-      label: '即時功率',
+    activeChargingCount: {
+      label: '正在充電數',
       value: 0,
-      unit: 'kW'
+      unit: 'count'
     },
     todayConsumption: {
       label: '今日用電量',
