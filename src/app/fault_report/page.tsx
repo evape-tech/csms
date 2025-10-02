@@ -206,9 +206,7 @@ export default function FaultReport() {
       if (status) params.append('status', status);
       params.append('limit', '100');
 
-      const response = await fetch(`/api/fault-reports?${params.toString()}`, {
-        cache: 'no-store'
-      });
+      const response = await fetch(`/api/fault-reports?${params.toString()}`);
       const data = await response.json();
 
       if (!response.ok || !data.success) {

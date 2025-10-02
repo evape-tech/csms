@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
         console.log(`✅ [API /api/billing/records] Found ${total} total records, returning ${records.length} records for page ${page}`);
 
         // 返回標準格式
-        const response = NextResponse.json({
+        return NextResponse.json({
             success: true,
             data: records,
             pagination: {
@@ -92,13 +92,6 @@ export async function GET(req: NextRequest) {
             },
             timestamp: new Date().toISOString()
         });
-
-        // 設置快取控制標頭，確保不會被快取
-        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-        response.headers.set('Pragma', 'no-cache');
-        response.headers.set('Expires', '0');
-
-        return response;
 
     } catch (error: any) {
         console.error('[API /api/billing/records] 獲取失敗:', error instanceof Error ? error.stack : error);

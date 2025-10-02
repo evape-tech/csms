@@ -59,8 +59,8 @@ export default function CreateMaintenanceDialog({ open, onClose, onCreate }: Pro
 
       try {
         const [cpRes, techRes] = await Promise.all([
-          fetch('/api/guns', { cache: 'no-store' }),
-          fetch('/api/users?role=admin', { cache: 'no-store' })
+          fetch('/api/guns'),
+          fetch('/api/users?role=admin')
         ]);
 
         if (!cancelled) {

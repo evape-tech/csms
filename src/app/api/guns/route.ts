@@ -17,14 +17,7 @@ export async function GET() {
     const rows = await databaseService.getGuns({});
     console.log(`✅ [API /api/guns] Found ${rows.length} guns records via databaseService`);
     
-    const response = NextResponse.json(rows);
-    
-    // 設置快取控制標頭，確保不會被快取
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
-    
-    return response;
+  return NextResponse.json(rows);
   } catch (err: unknown) {
     console.error('API /api/guns error', err instanceof Error ? err.stack : err);
     const errorMessage = err instanceof Error ? err.message : String(err);

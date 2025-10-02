@@ -259,9 +259,7 @@ const Reports = memo(function Reports() {
     setSummaryError(null);
 
     try {
-      const response = await fetch('/api/reports/summary', {
-        cache: 'no-store'
-      });
+      const response = await fetch('/api/reports/summary');
       const json = await response.json();
 
       if (!response.ok || !json.success) {

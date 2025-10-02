@@ -91,9 +91,7 @@ export default function SystemRecords() {
         params.set('endDate', appliedEnd);
       }
 
-      const response = await fetch(`/api/reports/system?${params.toString()}`, {
-        cache: 'no-store'
-      });
+      const response = await fetch(`/api/reports/system?${params.toString()}`);
       const json = await response.json();
 
       if (!response.ok || !json.success) {

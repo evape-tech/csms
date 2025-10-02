@@ -101,9 +101,7 @@ export default function ChargingRecords() {
         params.set('endDate', appliedEnd);
       }
 
-      const response = await fetch(`/api/reports/charging?${params.toString()}`, {
-        cache: 'no-store'
-      });
+      const response = await fetch(`/api/reports/charging?${params.toString()}`);
       const json = await response.json();
 
       if (!response.ok || !json.success) {

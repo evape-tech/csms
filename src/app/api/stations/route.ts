@@ -56,14 +56,7 @@ export async function GET(req: Request) {
     const stations = await databaseService.getStations();
     console.log(`✅ [API /api/stations] Found ${stations.length} stations with meters and guns via databaseService`);
     
-    const response = NextResponse.json(stations);
-    
-    // 設置快取控制標頭，確保不會被快取
-    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    response.headers.set('Pragma', 'no-cache');
-    response.headers.set('Expires', '0');
-    
-    return response;
+  return NextResponse.json(stations);
   } catch (err: unknown) {
     console.error('/api/stations GET error', err instanceof Error ? err.stack : err);
     const errorMessage = err instanceof Error ? err.message : String(err);
