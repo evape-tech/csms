@@ -69,7 +69,8 @@ class DatabaseService {
             tariffs: true
           },
           orderBy: { priority: 'asc' }
-        }
+        },
+        charging_standards: true
       }
     });
   }
@@ -84,7 +85,8 @@ class DatabaseService {
             tariffs: true
           },
           orderBy: { priority: 'asc' }
-        }
+        },
+        charging_standards: true
       }
     });
   }
@@ -99,7 +101,8 @@ class DatabaseService {
             tariffs: true
           },
           orderBy: { priority: 'asc' }
-        }
+        },
+        charging_standards: true
       }
     });
   }
@@ -319,7 +322,8 @@ class DatabaseService {
                   include: {
                     tariffs: true
                   }
-                }
+                },
+                charging_standards: true
               }
             }
           }
@@ -342,7 +346,8 @@ class DatabaseService {
                   include: {
                     tariffs: true
                   }
-                }
+                },
+                charging_standards: true
               }
             }
           }

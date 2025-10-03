@@ -20,29 +20,32 @@ model cp_logs {
 }
 
 model guns {
-  id               Int           @id @default(autoincrement())
-  connector        String?       @db.VarChar(45)
-  cpid             String?       @db.VarChar(255)
-  cpsn             String?       @db.VarChar(255)
-  guns_status      String?       @db.VarChar(45)
-  createdAt        DateTime?     @db.Date
-  updatedAt        DateTime?     @db.Date
-  guns_metervalue1 String?       @db.VarChar(255)
-  guns_metervalue2 String?       @db.VarChar(255)
-  guns_metervalue3 String?       @db.VarChar(255)
-  guns_metervalue4 String?       @db.VarChar(255)
-  guns_metervalue5 String?       @db.VarChar(255)
-  guns_metervalue6 String?       @db.VarChar(255)
-  guns_memo1       String?       @db.VarChar(255)
-  guns_memo2       String?       @db.VarChar(255)
-  transactionid    String?       @db.VarChar(255)
-  acdc             guns_acdc?    @default(AC)
-  max_kw           Int?          @default(0)
-  meter_id         Int
-  gun_tariffs      gun_tariffs[]
-  meter            meters        @relation("meter_guns", fields: [meter_id], references: [id], onDelete: Cascade, map: "fk_guns_meter")
+  id                   Int                 @id @default(autoincrement())
+  connector            String?             @db.VarChar(45)
+  cpid                 String?             @db.VarChar(255)
+  cpsn                 String?             @db.VarChar(255)
+  guns_status          String?             @db.VarChar(45)
+  createdAt            DateTime?           @db.Date
+  updatedAt            DateTime?           @db.Date
+  guns_metervalue1     String?             @db.VarChar(255)
+  guns_metervalue2     String?             @db.VarChar(255)
+  guns_metervalue3     String?             @db.VarChar(255)
+  guns_metervalue4     String?             @db.VarChar(255)
+  guns_metervalue5     String?             @db.VarChar(255)
+  guns_metervalue6     String?             @db.VarChar(255)
+  guns_memo1           String?             @db.VarChar(255)
+  guns_memo2           String?             @db.VarChar(255)
+  transactionid        String?             @db.VarChar(255)
+  acdc                 guns_acdc?          @default(AC)
+  max_kw               Int?                @default(0)
+  charging_standard_id Int?
+  meter_id             Int
+  gun_tariffs          gun_tariffs[]
+  charging_standards   charging_standards? @relation(fields: [charging_standard_id], references: [id], map: "fk_guns_charging_standard")
+  meter                meters              @relation("meter_guns", fields: [meter_id], references: [id], onDelete: Cascade, map: "fk_guns_meter")
 
   @@index([meter_id], map: "IX_guns_meter_id")
+  @@index([charging_standard_id], map: "IX_guns_charging_standard_id")
 }
 
 model stations {
@@ -420,6 +423,22 @@ model maintenance_records {
   @@index([technician_id], map: "idx_technician_id")
 }
 
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model charging_standards {
+  id            Int                              @id @default(autoincrement())
+  name          String                           @db.VarChar(100)
+  code          String                           @unique(map: "code") @db.VarChar(20)
+  charging_type charging_standards_charging_type
+  description   String?                          @db.VarChar(255)
+  is_active     Boolean                          @default(true)
+  createdAt     DateTime                         @default(now()) @db.DateTime(0)
+  updatedAt     DateTime                         @default(now()) @db.DateTime(0)
+  guns          guns[]
+
+  @@index([charging_type], map: "idx_charging_type")
+  @@index([is_active], map: "idx_is_active")
+}
+
 enum guns_acdc {
   AC
   DC
@@ -572,4 +591,9 @@ enum maintenance_records_status {
   COMPLETED
   CANCELLED
   FAILED
+}
+
+enum charging_standards_charging_type {
+  AC
+  DC
 }

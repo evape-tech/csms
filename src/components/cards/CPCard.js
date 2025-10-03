@@ -141,6 +141,14 @@ export default function CPCard({ chargers, stations, meters }) {
       desc: gun.guns_memo1 ?? gun.desc ?? gun.memo ?? null,
       // tariff information
       gun_tariffs: gun.gun_tariffs || [],
+      // charging standard information
+      charging_standard: gun.charging_standards ? {
+        id: gun.charging_standards.id,
+        name: gun.charging_standards.name,
+        code: gun.charging_standards.code,
+        charging_type: gun.charging_standards.charging_type,
+        description: gun.charging_standards.description
+      } : null,
       // meter information
       meter_id: meter.id,
       meter: {
@@ -863,6 +871,14 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
             <Typography variant="body2" color="text.secondary">類型 (AC/DC)</Typography>
             <Typography variant="body2" fontWeight="bold" color="secondary.main" sx={{ fontSize: '1rem', ml: 1 }}>
               {charger.type ?? (charger.ACDC ?? '—')}
+            </Typography>
+          </Box>
+
+          {/* Show 充電標準 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
+            <Typography variant="body2" color="text.secondary">充電標準</Typography>
+            <Typography variant="body2" fontWeight="bold" color="success.main" sx={{ fontSize: '1rem', ml: 1 }}>
+              {charger.charging_standard?.code?.toUpperCase() || '—'}
             </Typography>
           </Box>
 
