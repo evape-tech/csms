@@ -5,6 +5,41 @@ import DatabaseUtils from '../../../../lib/database/utils';
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
 
+function normalizePrismaData<T>(value: T): T {
+    if (value === null || value === undefined) {
+        return value;
+    }
+
+    if (typeof value === 'bigint') {
+        return value.toString() as unknown as T;
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString() as unknown as T;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => normalizePrismaData(item)) as unknown as T;
+    }
+
+    if (typeof value === 'object') {
+        if (typeof (value as any).toNumber === 'function') {
+            try {
+                return (value as any).toNumber();
+            } catch {
+                return (value as any).toString();
+            }
+        }
+
+        const normalizedEntries = Object.entries(value as Record<string, unknown>)
+            .map(([key, nestedValue]) => [key, normalizePrismaData(nestedValue)]);
+
+        return Object.fromEntries(normalizedEntries) as T;
+    }
+
+    return value;
+}
+
 // 檢查管理員權限
 async function isAdmin(req: NextRequest) {
     try {
@@ -74,14 +109,15 @@ export async function GET(req: NextRequest) {
 
         // 分頁計算
         const skip = (page - 1) * limit;
-        const records = allRecords.slice(skip, skip + limit);
+    const records = allRecords.slice(skip, skip + limit);
+    const normalizedRecords = normalizePrismaData(records);
 
         console.log(`✅ [API /api/billing/records] Found ${total} total records, returning ${records.length} records for page ${page}`);
 
         // 返回標準格式
         return NextResponse.json({
             success: true,
-            data: records,
+            data: normalizedRecords,
             pagination: {
                 page,
                 limit,

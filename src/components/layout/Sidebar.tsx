@@ -47,7 +47,7 @@ const groupedMenuItems = [
     group: '用戶與權限',
     items: [
       { label: '用戶資料管理', path: '/user_management', icon: PeopleIcon },
-      { label: '支付方式管理', path: '/payment_management', icon: PaymentIcon },
+      { label: '儲值與支付方式管理', path: '/payment_management', icon: PaymentIcon },
     ],
   },
   {

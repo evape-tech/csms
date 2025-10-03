@@ -50,6 +50,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PaymentMethodDialog from '../../components/dialog/PaymentMethodDialog';
+import PaymentDetailDialog from '../../components/dialog/PaymentDetailDialog';
 
 // 定義類型
 interface PaymentMethod {
@@ -66,6 +67,7 @@ interface PaymentRecord {
   transactionId: string;
   userId: string;
   idTag: string;
+  userName?: string;
   amount: number;
   energyConsumed: number;
   paymentMethod: string;
@@ -79,6 +81,108 @@ interface PaymentRecord {
   invoiceNumber: string;
   createdAt: string;
 }
+
+const safeNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  if (value && typeof (value as any).toNumber === 'function') {
+    try {
+      const parsed = (value as any).toNumber();
+      return Number.isFinite(parsed) ? parsed : fallback;
+    } catch (error) {
+      console.warn('[PaymentManagement] Failed to parse numeric value from Prisma Decimal:', error);
+    }
+  }
+
+  return fallback;
+};
+
+const toIsoString = (value: unknown): string => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return '';
+};
+
+type UiPaymentStatus = 'success' | 'fail' | 'refund' | 'pending';
+
+const mapBillingStatusToUiStatus = (status: string | null | undefined): UiPaymentStatus => {
+  switch (status) {
+    case 'PAID':
+    case 'INVOICED':
+    case 'COMPLETED':
+      return 'success';
+    case 'ERROR':
+    case 'FAILED':
+      return 'fail';
+    case 'CANCELLED':
+    case 'REFUNDED':
+      return 'refund';
+    case 'PENDING':
+    case 'CALCULATED':
+    default:
+      return 'pending';
+  }
+};
+
+const transformBillingRecord = (record: any): PaymentRecord => {
+  const amount = safeNumber(record.total_amount ?? record.amount ?? record.energy_fee, 0);
+  const energyConsumed = safeNumber(record.energy_consumed ?? record.energyConsumed, 0);
+  const chargingDuration = safeNumber(record.charging_duration ?? record.chargingDuration, 0);
+  const connectorId = safeNumber(record.connector_id ?? record.connectorId, 0);
+  const user = record.users ?? record.user ?? null;
+  const firstName = user?.first_name ?? user?.firstName ?? '';
+  const lastName = user?.last_name ?? user?.lastName ?? '';
+  const userDisplayName = (firstName + lastName)?.trim() || user?.full_name || user?.fullName || user?.name || '';
+
+  return {
+    id: String(record.id ?? record.transaction_id ?? record.billing_record_id ?? globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)),
+    transactionId: String(record.transaction_id ?? record.transactionId ?? ''),
+    userId: String(record.user_id ?? record.userId ?? ''),
+    idTag: String(record.id_tag ?? record.idTag ?? ''),
+    userName: userDisplayName || undefined,
+    amount,
+    energyConsumed,
+    paymentMethod: String(record.payment_method ?? record.paymentMethod ?? '錢包扣款'),
+    status: mapBillingStatusToUiStatus(record.status),
+    startTime: toIsoString(record.start_time ?? record.startTime),
+    endTime: toIsoString(record.end_time ?? record.endTime),
+    chargingDuration,
+    cpid: String(record.cpid ?? ''),
+    cpsn: String(record.cpsn ?? ''),
+    connectorId,
+    invoiceNumber: String(record.invoice_number ?? record.invoiceNumber ?? ''),
+    createdAt: toIsoString(record.createdAt ?? record.created_at ?? record.start_time)
+  };
+};
+
+const statusChipMap: Record<UiPaymentStatus, { label: string; color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' }> = {
+  success: { label: '成功', color: 'success' },
+  fail: { label: '失敗', color: 'error' },
+  refund: { label: '退款', color: 'warning' },
+  pending: { label: '處理中', color: 'info' }
+};
 
 interface FormData {
   name: string;
@@ -99,6 +203,7 @@ const statusOptions = [
   { label: '成功', value: 'success' },
   { label: '失敗', value: 'fail' },
   { label: '退款', value: 'refund' },
+  { label: '處理中', value: 'pending' },
 ];
 
 export default function PaymentManagement() {
@@ -110,11 +215,12 @@ export default function PaymentManagement() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
-  const [method, setMethod] = useState('');
   const [keyword, setKeyword] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<PaymentMethod | null>(null);
+  const [openDetailDialog, setOpenDetailDialog] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<PaymentRecord | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -152,7 +258,6 @@ export default function PaymentManagement() {
         page: page.toString(),
         limit: limit.toString(),
         ...(status && { status }),
-        ...(method && { paymentMethod: method }),
         ...(keyword && { keyword })
       });
 
@@ -160,9 +265,20 @@ export default function PaymentManagement() {
       const result = await response.json();
 
       if (result.success) {
-        setPaymentRecords(result.data);
-        setPagination(result.pagination);
-        setCurrentPage(page);
+        const normalizedRecords = Array.isArray(result.data)
+          ? result.data.map(transformBillingRecord)
+          : [];
+
+        const nextPagination = {
+          page: result.pagination?.page ?? page,
+          limit: result.pagination?.limit ?? limit,
+          total: result.pagination?.total ?? normalizedRecords.length,
+          totalPages: result.pagination?.totalPages ?? result.pagination?.pages ?? Math.ceil((result.pagination?.total ?? normalizedRecords.length) / (result.pagination?.limit ?? limit))
+        };
+
+        setPaymentRecords(normalizedRecords);
+        setPagination(nextPagination);
+        setCurrentPage(nextPagination.page);
       } else {
         console.error('Error fetching payment records:', result.error);
         setPaymentRecords([]);
@@ -305,11 +421,17 @@ export default function PaymentManagement() {
     await handleSaveChannel(formData);
   };
 
-  // 動態生成支付方式選項
-  const methodOptions = [
-    { label: '全部方式', value: '' },
-    ...paymentMethods.map(m => ({ label: m.name, value: m.name }))
-  ];
+  // 處理查看詳情
+  const handleViewDetail = (record: PaymentRecord) => {
+    setSelectedRecord(record);
+    setOpenDetailDialog(true);
+  };
+
+  // 關閉詳情對話框
+  const handleCloseDetailDialog = () => {
+    setOpenDetailDialog(false);
+    setSelectedRecord(null);
+  };
 
   // 計算統計數據
   const totalPayments = paymentRecords.length;
@@ -321,13 +443,22 @@ export default function PaymentManagement() {
   const filteredRows = paymentRecords.filter((record: PaymentRecord) => {
     const matchesKeyword = !keyword ||
       record.userId?.toLowerCase().includes(keyword.toLowerCase()) ||
-      record.transactionId?.toLowerCase().includes(keyword.toLowerCase()) ||
-      record.idTag?.toLowerCase().includes(keyword.toLowerCase());
+      record.userName?.toLowerCase().includes(keyword.toLowerCase()) ||
+      record.transactionId?.toLowerCase().includes(keyword.toLowerCase());
 
-    const matchesMethod = !method || record.paymentMethod === method;
     const matchesStatus = !status || record.status === status;
 
-    return matchesKeyword && matchesMethod && matchesStatus;
+    return matchesKeyword && matchesStatus;
+  });
+
+  const formatCurrency = (value: number) => safeNumber(value).toLocaleString('zh-TW', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+  const formatNumber = (value: number, fractionDigits = 2) => safeNumber(value).toLocaleString('zh-TW', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
   });
 
   return (
@@ -347,7 +478,7 @@ export default function PaymentManagement() {
           }}
         >
           <PaymentIcon sx={{ fontSize: '2rem' }} />
-          支付管理系統
+          儲值與支付管理系統
         </Typography>
         <Typography variant="body1" color="text.secondary">
           管理支付方式和查看支付記錄
@@ -397,7 +528,7 @@ export default function PaymentManagement() {
                     color: theme.palette.primary.main,
                     lineHeight: 1
                   }}>
-                    ${totalAmount}
+                    ${formatCurrency(totalAmount)}
                   </Typography>
                 </Box>
               </Box>
@@ -483,7 +614,7 @@ export default function PaymentManagement() {
           </Card>
         </Box>
       </Box>
-      {/* 支付方式管理區域 */}
+      {/* 儲值與支付方式管理區域 */}
       <Paper
         elevation={2}
         sx={{
@@ -510,7 +641,7 @@ export default function PaymentManagement() {
             gap: 1
           }}>
             <CreditCardIcon sx={{ color: theme.palette.primary.main }} />
-            支付方式管理
+            儲值方式管理
           </Typography>
           <Button
             variant="contained"
@@ -522,7 +653,7 @@ export default function PaymentManagement() {
               fontWeight: 500
             }}
           >
-            新增支付方式
+            新增儲值方式
           </Button>
         </Box>
         <Box sx={{ p: 3 }}>
@@ -664,33 +795,6 @@ export default function PaymentManagement() {
           />
           <TextField
             select
-            label="支付方式"
-            size="medium"
-            value={method}
-            onChange={e => setMethod(e.target.value)}
-            sx={{
-              minWidth: { xs: '100%', md: 160 },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                bgcolor: theme.palette.background.default
-              }
-            }}
-          >
-            {methodOptions.map(opt => (
-              <MenuItem key={opt.value} value={opt.value}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {opt.value === '信用卡' && <CreditCardIcon sx={{ color: 'primary.main', fontSize: '1rem' }} />}
-                  {opt.value === 'Line Pay' && <AccountBalanceWalletIcon sx={{ color: 'success.main', fontSize: '1rem' }} />}
-                  {opt.value === 'Apple Pay' && <AccountBalanceWalletIcon sx={{ color: 'info.main', fontSize: '1rem' }} />}
-                  {opt.value === '悠遊卡' && <AccountBalanceWalletIcon sx={{ color: 'warning.main', fontSize: '1rem' }} />}
-                  {opt.value === 'RFID' && <AccountBalanceWalletIcon sx={{ color: 'secondary.main', fontSize: '1rem' }} />}
-                  {opt.label}
-                </Box>
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
             label="狀態"
             size="medium"
             value={status}
@@ -820,24 +924,26 @@ export default function PaymentManagement() {
                     <TableCell sx={{ py: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
-                          {row.idTag?.charAt(0) || row.userId?.charAt(0) || 'U'}
+                          {row.userName?.charAt(0) || row.userId?.charAt(0) || 'U'}
                         </Avatar>
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {row.idTag || row.userId || '未知用戶'}
+                            {row.userName || row.userId || '未知用戶'}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {row.transactionId}
-                          </Typography>
+                          {row.transactionId && (
+                            <Typography variant="caption" color="text.secondary">
+                              {row.transactionId}
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
                       <Typography variant="body1" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
-                        ${row.amount.toFixed(2)}
+                        ${formatCurrency(row.amount)}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {row.energyConsumed.toFixed(2)} kWh
+                        {formatNumber(row.energyConsumed)} kWh
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
@@ -853,19 +959,24 @@ export default function PaymentManagement() {
                       </Box>
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
-                      <Chip
-                        label={row.status === 'success' ? '成功' : row.status === 'fail' ? '失敗' : '退款'}
-                        size="small"
-                        color={row.status === 'success' ? 'success' : row.status === 'fail' ? 'error' : 'warning'}
-                        variant="filled"
-                      />
+                      {(() => {
+                        const chipConfig = statusChipMap[(row.status as UiPaymentStatus)] ?? statusChipMap.pending;
+                        return (
+                          <Chip
+                            label={chipConfig.label}
+                            size="small"
+                            color={chipConfig.color}
+                            variant="filled"
+                          />
+                        );
+                      })()}
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
                       <Typography variant="body2" color="text.secondary">
-                        {new Date(row.startTime).toLocaleString('zh-TW')}
+                        {row.startTime ? new Date(row.startTime).toLocaleString('zh-TW') : '—'}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        持續 {row.chargingDuration} 分鐘
+                        持續 {Math.max(0, Math.round(row.chargingDuration ?? 0))} 分鐘
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
@@ -880,6 +991,7 @@ export default function PaymentManagement() {
                       <Button
                         size="small"
                         variant="outlined"
+                        onClick={() => handleViewDetail(row)}
                         sx={{
                           minWidth: 'auto',
                           px: 2,
@@ -945,6 +1057,13 @@ export default function PaymentManagement() {
         onClose={() => setOpenDialog(false)}
         onSubmit={handleFormSubmit}
         editingChannel={editingChannel}
+      />
+
+      {/* 訂單詳情對話框 */}
+      <PaymentDetailDialog
+        open={openDetailDialog}
+        onClose={handleCloseDetailDialog}
+        record={selectedRecord}
       />
 
       {/* Snackbar 提示 */}

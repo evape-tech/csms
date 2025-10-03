@@ -576,7 +576,8 @@ class DatabaseService {
     return await client.billing_records.findMany({
       where: filter,
       include: {
-        tariff: true
+        tariff: true,
+        users: true
       },
       orderBy: { createdAt: 'desc' }
     });
