@@ -531,9 +531,38 @@ class DatabaseService {
   // Billing Records Operations
   // ===============================
 
-  async createBillingRecord(data) {
-    const client = getDatabaseClient();
+  async createBillingRecord(data, prismaClient = null) {
+    const client = prismaClient || getDatabaseClient();
     return await client.billing_records.create({ 
+      data: {
+        ...data,
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date()
+      }
+    });
+  }
+
+  async getUserWalletByUserId(userId, prismaClient = null) {
+    const client = prismaClient || getDatabaseClient();
+    return await client.user_wallets.findUnique({
+      where: { user_id: userId }
+    });
+  }
+
+  async updateUserWallet(id, data, prismaClient = null) {
+    const client = prismaClient || getDatabaseClient();
+    return await client.user_wallets.update({
+      where: { id },
+      data: {
+        ...data,
+        updatedAt: data.updatedAt || new Date()
+      }
+    });
+  }
+
+  async createWalletTransaction(data, prismaClient = null) {
+    const client = prismaClient || getDatabaseClient();
+    return await client.wallet_transactions.create({
       data: {
         ...data,
         createdAt: data.createdAt || new Date(),
@@ -688,6 +717,11 @@ class DatabaseService {
       },
       orderBy: { priority: 'asc' }
     });
+  }
+
+  async withTransaction(callback) {
+    const client = getDatabaseClient();
+    return await client.$transaction(async (prisma) => callback(prisma));
   }
 }
 

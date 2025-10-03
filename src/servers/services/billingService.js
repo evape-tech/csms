@@ -115,12 +115,34 @@ class BillingService {
 
       // 计算费用
       const billing = await this.calculateBilling(transaction, tariff);
+      const paymentTime = new Date();
 
-      // 保存账单记录
-      const billingRecord = await this.databaseService.createBillingRecord(billing);
+      const billingData = {
+        ...billing,
+        status: 'PAID',
+        payment_time: paymentTime,
+        payment_reference: billing.payment_reference || transaction.transaction_id
+      };
+
+      const { billingRecord, walletTransaction, updatedWallet } = await this.databaseService.withTransaction(async (prisma) => {
+        const createdBillingRecord = await this.createBillingRecordForTransaction(billingData, prisma);
+        const walletResult = await this.applyWalletDeductionForBilling(
+          transaction,
+          createdBillingRecord,
+          paymentTime,
+          prisma
+        );
+
+        return {
+          billingRecord: createdBillingRecord,
+          ...walletResult
+        };
+      });
 
       if (autoMode) {
-        console.info(`[自动计费] 已为交易 ${transactionId} 生成账单记录 #${billingRecord.id}`);
+        console.info(
+          `[自动计费] 已为交易 ${transactionId} 生成账单记录 #${billingRecord.id} 并完成钱包扣款 ${walletTransaction.amount.toString()}，余额 ${updatedWallet.balance.toString()}`
+        );
       }
 
       return billingRecord;
@@ -135,6 +157,83 @@ class BillingService {
         throw new Error(errorMsg);
       }
     }
+  }
+
+  /**
+   * 建立交易的帳單紀錄
+   * @param {Object} billingData - 需儲存的帳單資料
+   * @param {Object} prisma - Prisma 交易客戶端
+   * @returns {Promise<Object>} 新建立的帳單紀錄
+   */
+  async createBillingRecordForTransaction(billingData, prisma) {
+    return await this.databaseService.createBillingRecord(billingData, prisma);
+  }
+
+  /**
+   * 針對已產生的帳單進行錢包扣款與交易紀錄
+   * @param {Object} transaction - 充電交易資料
+   * @param {Object} billingRecord - 已建立的帳單紀錄
+   * @param {Date} paymentTime - 扣款時間
+   * @param {Object} prisma - Prisma 交易客戶端
+   * @returns {Promise<{walletTransaction: Object, updatedWallet: Object}>}
+   */
+  async applyWalletDeductionForBilling(transaction, billingRecord, paymentTime, prisma) {
+    if (!transaction.user_id) {
+      throw new Error(`交易 ${transaction.transaction_id} 缺少用户信息，无法执行扣款`);
+    }
+
+    const userWallet = await this.databaseService.getUserWalletByUserId(transaction.user_id, prisma);
+
+    if (!userWallet) {
+      throw new Error(`用户 ${transaction.user_id} 未建立钱包，无法执行扣款`);
+    }
+
+    const walletBalance = parseFloat(userWallet.balance.toString());
+    const totalAmount = parseFloat(billingRecord.total_amount.toString());
+    const roundedWalletBalance = Math.round(walletBalance * 100) / 100;
+    const roundedTotalAmount = Math.round(totalAmount * 100) / 100;
+
+    if (roundedTotalAmount <= 0) {
+      throw new Error(`交易 ${transaction.transaction_id} 账单金额无效 (${roundedTotalAmount})`);
+    }
+
+    if (roundedWalletBalance < roundedTotalAmount) {
+      throw new Error(`用户 ${transaction.user_id} 钱包余额不足 (余额: ${roundedWalletBalance}, 所需: ${roundedTotalAmount})`);
+    }
+
+    const newBalance = Math.round((roundedWalletBalance - roundedTotalAmount) * 100) / 100;
+
+    const updatedWalletRecord = await this.databaseService.updateUserWallet(
+      userWallet.id,
+      {
+        balance: newBalance.toFixed(2),
+        updatedAt: paymentTime
+      },
+      prisma
+    );
+
+    const createdWalletTransaction = await this.databaseService.createWalletTransaction(
+      {
+        user_id: transaction.user_id,
+        wallet_id: userWallet.id,
+        transaction_type: 'PAYMENT',
+        amount: roundedTotalAmount.toFixed(2),
+        balance_before: roundedWalletBalance.toFixed(2),
+        balance_after: newBalance.toFixed(2),
+        billing_record_id: billingRecord.id,
+        charging_transaction_id: transaction.transaction_id,
+        description: `充电交易扣款 - 交易 ${transaction.transaction_id}`,
+        status: 'COMPLETED',
+        createdAt: paymentTime,
+        updatedAt: paymentTime
+      },
+      prisma
+    );
+
+    return {
+      walletTransaction: createdWalletTransaction,
+      updatedWallet: updatedWalletRecord
+    };
   }
 
   /**
