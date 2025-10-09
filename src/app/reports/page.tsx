@@ -395,7 +395,7 @@ const Reports = memo(function Reports() {
                 fontWeight: 600
               }}
             />
-            <Button
+{/*             <Button
               variant="contained"
               startIcon={<DownloadIcon />}
               sx={{
@@ -408,7 +408,7 @@ const Reports = memo(function Reports() {
               disabled={summaryLoading}
             >
               匯出報表
-            </Button>
+            </Button> */}
             <Button
               variant="outlined"
               startIcon={summaryLoading ? <CircularProgress size={18} color="inherit" /> : <RefreshIcon />}
