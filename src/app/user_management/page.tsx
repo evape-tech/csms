@@ -254,7 +254,7 @@ export default function UserManagement() {
           }}
         >
           <AdminPanelSettingsIcon sx={{ fontSize: '2rem' }} />
-          用戶管理系統
+          用戶資料管理
         </Typography>
         <Typography variant="body1" color="text.secondary">
           管理系統中的所有用戶帳戶和權限設定
