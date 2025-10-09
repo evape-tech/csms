@@ -133,12 +133,46 @@ export default function TransactionRecords() {
     await fetchRecords();
   }, [fetchRecords]);
 
-  const handleExport = useCallback(() => {
-    console.info('導出交易記錄', {
-      range: rangeRef.current,
-      count: records.length
-    });
-  }, [records]);
+  const handleExport = useCallback(async () => {
+    try {
+      const { start, end } = rangeRef.current;
+      const params = new URLSearchParams();
+      if (start) params.set('startDate', start);
+      if (end) params.set('endDate', end);
+      params.set('format', 'xlsx');
+
+      // Debug log to verify export trigger and URL
+      console.info('開始導出交易記錄', {
+        url: `/api/reports/transactions?${params.toString()}`,
+        range: { start, end }
+      });
+
+      const response = await fetch(`/api/reports/transactions?${params.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream;q=0.9, */*;q=0.8'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('下載失敗');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `交易記錄_${start ?? ''}_${end ?? ''}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('導出交易記錄失敗:', err);
+      alert('導出失敗，請稍後再試');
+    }
+  }, [records]); 
 
   return (
     <RecordsPage
