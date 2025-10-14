@@ -144,11 +144,44 @@ export default function ChargingRecords() {
     await fetchRecords();
   }, [fetchRecords]);
 
-  const handleExport = useCallback(() => {
-    console.info('導出充電記錄', {
-      range: rangeRef.current,
-      count: records.length
-    });
+  const handleExport = useCallback(async () => {
+    try {
+      const { start, end } = rangeRef.current;
+      const params = new URLSearchParams();
+      if (start) params.set('startDate', start);
+      if (end) params.set('endDate', end);
+      params.set('format', 'xlsx');
+
+      console.info('開始導出充電記錄', {
+        url: `/api/reports/charging?${params.toString()}`,
+        range: { start, end }
+      });
+
+      const response = await fetch(`/api/reports/charging?${params.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream;q=0.9, */*;q=0.8'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('下載失敗');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `充電記錄_${start ?? ''}_${end ?? ''}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('導出充電記錄失敗:', err);
+      alert('導出失敗，請稍後再試');
+    }
   }, [records]);
 
   return (

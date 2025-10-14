@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '@/lib/database/utils.js';
 import { getDatabaseClient } from '@/lib/database/adapter.js';
+import ExcelJS from 'exceljs';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 const parseDate = (value: string | null, isEnd = false) => {
   if (!value) return null;
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
@@ -135,7 +137,7 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    const formattedRecords = records.map((record) => ({
+    const formattedRecords = records.map((record: any) => ({
       id: record.id.toString(),
       user: formatUserName(record.users ?? undefined),
       charger: record.cpid || record.cpsn || '-',
@@ -144,6 +146,64 @@ export async function GET(request: NextRequest) {
       kWh: decimalToNumber(record.energy_consumed, 3),
       fee: decimalToNumber(record.total_amount)
     }));
+
+    // Export as Excel if requested
+    const format = (searchParams.get('format') || '').toLowerCase();
+    if (format === 'xlsx') {
+      const exportLimit = Math.min(
+        Math.max(parseInt(searchParams.get('exportLimit') || '5000', 10), 1),
+        20000
+      );
+      const exportRecords = await client.billing_records.findMany({
+        where,
+        include: {
+          users: {
+            select: { first_name: true, last_name: true, email: true }
+          }
+        },
+        orderBy: { start_time: 'desc' },
+        take: exportLimit
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('充電記錄');
+      sheet.columns = [
+        { header: '用戶', key: 'user', width: 22 },
+        { header: '充電樁', key: 'charger', width: 16 },
+        { header: '開始時間', key: 'startTime', width: 22 },
+        { header: '結束時間', key: 'endTime', width: 22 },
+        { header: '電量 (kWh)', key: 'kWh', width: 14 },
+        { header: '費用 (NT$)', key: 'fee', width: 14 }
+      ];
+
+      for (const r of exportRecords) {
+        sheet.addRow({
+          user: formatUserName(r.users ?? undefined),
+          charger: r.cpid || r.cpsn || '-',
+          startTime: r.start_time ? new Date(r.start_time).toISOString() : '',
+          endTime: r.end_time ? new Date(r.end_time).toISOString() : '',
+          kWh: decimalToNumber(r.energy_consumed, 3),
+          fee: decimalToNumber(r.total_amount)
+        });
+      }
+      sheet.getRow(1).font = { bold: true };
+
+      const arrayBuffer = await workbook.xlsx.writeBuffer();
+      const nodeBuffer = Buffer.from(new Uint8Array(arrayBuffer));
+      const start = searchParams.get('startDate') || '';
+      const end = searchParams.get('endDate') || '';
+      const fileName = `charging_${start}_${end}.xlsx`;
+
+      return new NextResponse(nodeBuffer as any, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${fileName}"`,
+          'Cache-Control': 'no-store',
+          'Content-Length': String(nodeBuffer.byteLength),
+          'X-Content-Type-Options': 'nosniff'
+        }
+      });
+    }
 
     const totalPages = Math.ceil(totalCount / limit) || 1;
 
