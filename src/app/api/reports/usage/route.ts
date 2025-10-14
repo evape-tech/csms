@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '@/lib/database/utils.js';
 import { getDatabaseClient } from '@/lib/database/adapter.js';
+import ExcelJS from 'exceljs';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 const parseDate = (value: string | null, isEnd = false) => {
   if (!value) return null;
@@ -119,7 +121,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
     const { searchParams } = new URL(request.url);
 
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
@@ -155,7 +157,7 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    const formattedRecords = records.map((record) => {
+    const formattedRecords = records.map((record: any) => {
       const startTime = record.start_time ? new Date(record.start_time) : null;
       const endTime = record.end_time ? new Date(record.end_time) : null;
       // charging_duration is stored in seconds across the server (see ocppMessageService)
@@ -187,6 +189,77 @@ export async function GET(request: NextRequest) {
         kWh: decimalToNumber(record.energy_consumed)
       };
     });
+
+    // Export as Excel if requested
+    const format = (searchParams.get('format') || '').toLowerCase();
+    if (format === 'xlsx') {
+      const exportLimit = Math.min(
+        Math.max(parseInt(searchParams.get('exportLimit') || '5000', 10), 1),
+        20000
+      );
+      const exportRecords = await client.charging_transactions.findMany({
+        where,
+        include: {
+          users: {
+            select: { first_name: true, last_name: true, email: true }
+          }
+        },
+        orderBy: { start_time: 'desc' },
+        take: exportLimit
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('使用記錄');
+      sheet.columns = [
+        { header: '用戶', key: 'user', width: 22 },
+        { header: '充電樁', key: 'charger', width: 16 },
+        { header: '日期', key: 'date', width: 14 },
+        { header: '使用時間', key: 'duration', width: 14 },
+        { header: '電量 (kWh)', key: 'kWh', width: 14 }
+      ];
+
+      for (const r of exportRecords) {
+        const startTime = r.start_time ? new Date(r.start_time) : null;
+        const endTime = r.end_time ? new Date(r.end_time) : null;
+        const durationFromFieldSeconds = r.charging_duration ?? 0;
+        const fallbackDurationMs = startTime && endTime ? endTime.getTime() - startTime.getTime() : undefined;
+        let minutes = 0;
+        if (durationFromFieldSeconds && durationFromFieldSeconds > 0) {
+          if (durationFromFieldSeconds < 10000) {
+            minutes = Math.round(durationFromFieldSeconds / 60);
+          } else {
+            minutes = Math.round(durationFromFieldSeconds);
+          }
+        } else if (fallbackDurationMs) {
+          minutes = Math.round(fallbackDurationMs / 60000);
+        }
+
+        sheet.addRow({
+          user: r.users ? `${r.users.first_name ?? ''}${r.users.last_name ?? ''}`.trim() || r.users.email || '未提供' : '未提供',
+          charger: r.cpid || r.cpsn || '-',
+          date: startTime ? startTime.toISOString().split('T')[0] : '',
+          duration: minutes > 0 ? `${minutes}分鐘` : '—',
+          kWh: Number((Number(r.energy_consumed ?? 0)).toFixed(3))
+        });
+      }
+      sheet.getRow(1).font = { bold: true };
+
+      const arrayBuffer = await workbook.xlsx.writeBuffer();
+      const nodeBuffer = Buffer.from(new Uint8Array(arrayBuffer));
+      const start = searchParams.get('startDate') || '';
+      const end = searchParams.get('endDate') || '';
+      const fileName = `usage_${start}_${end}.xlsx`;
+
+      return new NextResponse(nodeBuffer as any, {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${fileName}"`,
+          'Cache-Control': 'no-store',
+          'Content-Length': String(nodeBuffer.byteLength),
+          'X-Content-Type-Options': 'nosniff'
+        }
+      });
+    }
 
     const totalPages = Math.ceil(totalCount / limit) || 1;
 
