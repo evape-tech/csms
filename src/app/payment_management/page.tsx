@@ -975,9 +975,7 @@ export default function PaymentManagement() {
                       <Typography variant="body2" color="text.secondary">
                         {row.startTime ? new Date(row.startTime).toLocaleString('zh-TW') : '—'}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        持續 {Math.max(0, Math.round(row.chargingDuration ?? 0))} 分鐘
-                      </Typography>
+                      {/* charging duration removed per request */}
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>

@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// CORS configuration
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*', // 生產環境建議改為特定網域
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Max-Age': '86400', // 24小時
+};
+
 // Simple JWT verification using Web Crypto API (Edge Runtime compatible)
 function verifyJWT(token: string, secret: string) {
   try {
@@ -26,10 +34,27 @@ function verifyJWT(token: string, secret: string) {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allowlist: don't run middleware for Next internals, API routes, static files and login page
+  // Handle CORS preflight requests for all API routes
+  if (pathname.startsWith('/api') && req.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
+  // For API routes, add CORS headers to response
+  if (pathname.startsWith('/api')) {
+    // Continue with the request and add CORS headers to response
+    const response = NextResponse.next();
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
+    return response;
+  }
+
+  // Allowlist: don't run auth middleware for Next internals, static files and login page
   if (
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api') ||
     pathname.startsWith('/static') ||
     pathname.startsWith('/public') ||
     pathname === '/login' ||

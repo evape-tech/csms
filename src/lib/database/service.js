@@ -155,6 +155,12 @@ class DatabaseService {
     return await client.users.findFirst({ where: { email } });
   }
 
+  async getUserByPhone(phone) {
+    const client = getDatabaseClient();
+    console.log(`🔍 [DatabaseService] getUserByPhone() called with phone: ${phone}`);
+    return await client.users.findFirst({ where: { phone } });
+  }
+
   async getUserByRfidCard(cardNumber) {
     const client = getDatabaseClient();
     console.log(`🔍 [DatabaseService] getUserByRfidCard() called with cardNumber: ${cardNumber}`);
@@ -199,6 +205,73 @@ class DatabaseService {
   async deleteUser(id) {
     const client = getDatabaseClient();
     return await client.users.delete({ where: { id } });
+  }
+
+  // OTP 相關操作
+  async updateUserOTP(uuid, otpCode, otpExpiresAt) {
+    const client = getDatabaseClient();
+    console.log(`🔍 [DatabaseService] updateUserOTP() for UUID: ${uuid}`);
+    return await client.users.updateMany({
+      where: { uuid },
+      data: {
+        otp_code: otpCode,
+        otp_expires_at: otpExpiresAt,
+        failed_login_attempts: 0, // 重置失敗次數
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async incrementFailedAttempts(uuid) {
+    const client = getDatabaseClient();
+    const user = await client.users.findFirst({ where: { uuid } });
+    if (!user) return null;
+    
+    return await client.users.update({
+      where: { id: user.id },
+      data: {
+        failed_login_attempts: (user.failed_login_attempts || 0) + 1,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async updateUserAfterOTPVerification(uuid) {
+    const client = getDatabaseClient();
+    console.log(`🔍 [DatabaseService] updateUserAfterOTPVerification() for UUID: ${uuid}`);
+    
+    const user = await client.users.findFirst({ where: { uuid } });
+    if (!user) return null;
+
+    return await client.users.update({
+      where: { id: user.id },
+      data: {
+        phone_verified: true,
+        account_status: 'ACTIVE',
+        otp_code: null,
+        otp_expires_at: null,
+        failed_login_attempts: 0,
+        last_login_at: new Date(),
+        login_count: (user.login_count || 0) + 1,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async cleanupExpiredOTPs() {
+    const client = getDatabaseClient();
+    const now = new Date();
+    return await client.users.updateMany({
+      where: {
+        otp_expires_at: { lt: now },
+        otp_code: { not: null }
+      },
+      data: {
+        otp_code: null,
+        otp_expires_at: null,
+        updatedAt: new Date()
+      }
+    });
   }
 
   // 獲取用戶的所有RFID卡片
@@ -309,10 +382,18 @@ class DatabaseService {
 // Station Operations
 // ===============================
 
-  async getStations() {
+  async getStations(filter = {}) {
     const client = getDatabaseClient();
-    // 獲取所有場域及其相關的電表資訊
+    // 構建 where 條件，如果傳入 station_code 則只查詢符合的場域
+    const where = {};
+    if (filter.station_code) {
+      // 支援 exact match 或可以擴展為包含/like
+      where.station_code = filter.station_code;
+    }
+
+    // 獲取場域及其相關的電表與充電槍資訊（包含費率與充電標準）
     const stations = await client.stations.findMany({
+      where,
       include: {
         meters: {
           include: {

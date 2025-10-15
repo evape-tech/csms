@@ -85,6 +85,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 檢查角色：僅允許管理者使用此端點
+    if (user.role !== 'admin') {
+      // 記錄登入失敗日誌
+      try {
+        await OperationLogger.logAuthOperation(
+          'LOGIN',
+          email,
+          false,
+          `登入失敗: 非管理者嘗試使用管理者登入 (role: ${user.role}, IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
+        );
+      } catch (logError) {
+        console.error('記錄登入失敗日誌錯誤:', logError);
+      }
+      
+      return NextResponse.json(
+        { error: '此登入方式僅供管理者使用，一般使用者請使用其他登入方式' },
+        { status: 403 }
+      );
+    }
+
     // Create JWT token
     const token = jwt.sign(
       { 
@@ -98,17 +118,20 @@ export async function POST(request: NextRequest) {
       { expiresIn: '24h' }
     );
 
-    // Create response with session cookie
+    // Create response with session cookie and token
     const response = NextResponse.json({
       success: true,
+      token: token, // 返回 token 供外部網站使用（例如使用者網站）
       user: {
         id: user.uuid, // 使用 UUID 保持一致性
         email: user.email,
-        role: user.role
+        role: user.role,
+        firstName: user.first_name || user.firstName || null,
+        lastName: user.last_name || user.lastName || null
       }
     });
 
-    // Set HTTP-only cookie
+    // Set HTTP-only cookie (用於管理後台)
     response.cookies.set('session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
