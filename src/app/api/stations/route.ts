@@ -51,12 +51,18 @@ export async function GET(req: Request) {
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    
-    // 獲取所有場域及其相關的電表和充電槍資訊
-    const stations = await databaseService.getStations();
-    console.log(`✅ [API /api/stations] Found ${stations.length} stations with meters and guns via databaseService`);
-    
-  return NextResponse.json(stations);
+    // 解析 query string，支援按 station_code 過濾
+    const url = new URL(req.url);
+    const stationCode = url.searchParams.get('station_code') || url.searchParams.get('stationCode');
+
+    const filter: Record<string, any> = {};
+    if (stationCode) filter['station_code'] = stationCode;
+
+      // 獲取場域（可根據filter過濾）及其相關的電表和充電槍資訊
+      const stations = await databaseService.getStations(filter);
+      console.log(`✅ [API /api/stations] Found ${stations.length} stations with meters and guns via databaseService` + (stationCode ? ` (filtered by station_code=${stationCode})` : ''));
+      
+    return NextResponse.json(stations);
   } catch (err: unknown) {
     console.error('/api/stations GET error', err instanceof Error ? err.stack : err);
     const errorMessage = err instanceof Error ? err.message : String(err);
