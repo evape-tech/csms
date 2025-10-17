@@ -80,10 +80,10 @@ export async function POST(request: NextRequest) {
         if (!user) {
           // 自動創建新用戶
           console.log(`📝 [API /api/auth/thirdparty] Creating new user for phone: ${phone}`);
-          const { v4: uuidv4 } = await import('uuid');
+          const { nanoid } = await import('nanoid');
           
           user = await databaseService.createUser({
-            uuid: uuidv4(),
+            uuid: nanoid(20),
             phone: phone,
             role: 'user',
             account_status: 'ACTIVE',
@@ -116,10 +116,10 @@ export async function POST(request: NextRequest) {
         if (!user) {
           // 自動創建新用戶
           console.log(`📝 [API /api/auth/thirdparty] Creating new user for ${provider}: ${email}`);
-          const { v4: uuidv4 } = await import('uuid');
+          const { nanoid } = await import('nanoid');
           
           user = await databaseService.createUser({
-            uuid: uuidv4(),
+            uuid: nanoid(20),
             email: email,
             phone: phone || null,
             role: 'user',
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
         } else {
           // 更新用戶資訊（如果提供了）
           if (firstName || lastName || phone) {
-            await databaseService.updateUser(user.id, {
+            await databaseService.updateUserByUuid(user.uuid, {
               first_name: firstName || user.first_name,
               last_name: lastName || user.last_name,
               phone: phone || user.phone,
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     // 更新用戶登入資訊
     try {
-      await databaseService.updateUser(user.id, {
+      await databaseService.updateUserByUuid(user.uuid, {
         last_login_at: new Date(),
         login_count: (user.login_count || 0) + 1,
         failed_login_attempts: 0

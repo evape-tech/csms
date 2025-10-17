@@ -8,13 +8,20 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 獲取當前用戶的個人資料
+ * 
  * 支援：
  * - Cookie 認證（管理後台使用）
  * - Authorization Bearer Token 認證（外部使用者網站使用）
+ * 
+ * 無論是管理員還是一般用戶，都只能查詢自己的資料
+ * 
+ * @route GET /api/users/me
+ * @auth Cookie 或 Bearer Token
+ * @returns { success: boolean, user: { id, email, role, ... } }
  */
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 [API /api/user/profile] 獲取用戶資料請求');
+    console.log('🔍 [API /api/users/me] 獲取用戶資料請求');
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
@@ -29,14 +36,14 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    console.log('🔍 [API /api/user/profile] 當前用戶:', {
+    console.log('🔍 [API /api/users/me] 當前用戶:', {
       userId: currentUser.userId,
       email: currentUser.email,
       role: currentUser.role
     });
     
-    // 獲取完整的用戶資料
-    const user = await databaseService.getUserById(currentUser.userId);
+    // 獲取完整的用戶資料（使用 UUID）
+    const user = await databaseService.getUserByUuid(currentUser.userId);
     
     if (!user) {
       return NextResponse.json(
@@ -68,7 +75,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('[API /api/user/profile] 錯誤:', error);
+    console.error('[API /api/users/me] 錯誤:', error);
     return NextResponse.json(
       { error: '獲取用戶資料失敗' },
       { status: 500 }
@@ -78,10 +85,21 @@ export async function GET(request: NextRequest) {
 
 /**
  * 更新當前用戶的個人資料
+ * 
+ * 支援：
+ * - Cookie 認證（管理後台使用）
+ * - Authorization Bearer Token 認證（外部使用者網站使用）
+ * 
+ * 用戶只能更新自己的資料，不能更新其他用戶
+ * 
+ * @route PATCH /api/users/me
+ * @auth Cookie 或 Bearer Token
+ * @body { firstName?: string, lastName?: string, phone?: string, dateOfBirth?: string }
+ * @returns { success: boolean, message: string, user: { ... } }
  */
 export async function PATCH(request: NextRequest) {
   try {
-    console.log('🔍 [API /api/user/profile] 更新用戶資料請求');
+    console.log('🔍 [API /api/users/me] 更新用戶資料請求');
     
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     
@@ -118,8 +136,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
     
-    // 更新用戶資料
-    const updatedUser = await databaseService.updateUser(currentUser.userId, updateData);
+    // 更新用戶資料（使用 UUID）
+    const updatedUser = await databaseService.updateUserByUuid(currentUser.userId, updateData);
     
     return NextResponse.json({
       success: true,
@@ -135,7 +153,7 @@ export async function PATCH(request: NextRequest) {
     });
     
   } catch (error) {
-    console.error('[API /api/user/profile] 更新錯誤:', error);
+    console.error('[API /api/users/me] 更新錯誤:', error);
     return NextResponse.json(
       { error: '更新用戶資料失敗' },
       { status: 500 }

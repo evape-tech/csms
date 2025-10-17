@@ -157,7 +157,7 @@ const transformBillingRecord = (record: any): PaymentRecord => {
   const userDisplayName = (firstName + lastName)?.trim() || user?.full_name || user?.fullName || user?.name || '';
 
   return {
-    id: String(record.id ?? record.transaction_id ?? record.billing_record_id ?? globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)),
+    id: String(record.id ?? record.transaction_id ?? record.billing_record_id ?? Math.random().toString(36).slice(2)),
     transactionId: String(record.transaction_id ?? record.transactionId ?? ''),
     userId: String(record.user_id ?? record.userId ?? ''),
     idTag: String(record.id_tag ?? record.idTag ?? ''),

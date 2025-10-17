@@ -166,7 +166,7 @@ function initializeRoutes() {
   app.post(API_PATHS.CHARGEPOINT_REMOTE_START, async (req, res) => {
     try {
       const { cpsn } = req.params;
-      const { connectorId, idTag, userUuid, userRole } = req.body;
+      const { connectorId, idTag, userUuid } = req.body;
       
       if (!connectorId || !idTag) {
         return res.status(400).json({ 
@@ -175,8 +175,8 @@ function initializeRoutes() {
         });
       }
       
-      logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
-      const success = await ocppController.startRemoteCharging(cpsn, connectorId, idTag, userUuid, userRole);
+      logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}`);
+      const success = await ocppController.startRemoteCharging(cpsn, connectorId, idTag, userUuid);
       
       if (success) {
         res.status(200).json({ status: 'success', message: '远程启动命令已发送' });

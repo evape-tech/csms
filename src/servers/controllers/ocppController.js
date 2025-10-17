@@ -312,11 +312,11 @@ async function handleCallErrorMessage(cpsn, messageId, payload) {
  * @param {string} userRole 用戶角色
  * @returns {Promise<boolean>} 是否成功发送命令
  */
-async function startRemoteCharging(cpsn, connectorId, idTag, userUuid = null, userRole = null) {
-  logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
+async function startRemoteCharging(cpsn, connectorId, idTag, userUuid) {
+  logger.info(`启动远程充电: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用戶UUID: ${userUuid || '未提供'}`);
   
   try {
-    return await ocppMessageService.sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid, userRole);
+    return await ocppMessageService.sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid);
   } catch (err) {
     logger.error(`启动远程充电时出错: ${err.message}`, err);
     return false;
@@ -369,6 +369,50 @@ async function getOnlineChargePoints() {
   } catch (err) {
     logger.error(`获取在线充电桩列表时出错: ${err.message}`, err);
     return [];
+  }
+}
+
+/**
+ * 查詢充電樁狀態
+ * @param {Object} query - 查詢參數 { cpid?, cpsn? }
+ * @returns {Promise<Object|Array>} 充電樁狀態資料
+ */
+async function getChargePointsStatus(query = {}) {
+  try {
+    const { cpid, cpsn } = query;
+    
+    // 根據查詢參數建立過濾條件
+    const filter = {};
+    if (cpid) filter.cpid = cpid;
+    if (cpsn) filter.cpsn = cpsn;
+    
+    // 查詢充電樁資料
+    const guns = await chargePointRepository.getAllGuns(filter);
+    
+    // 轉換資料格式，只返回狀態相關的欄位
+    const statusData = guns.map(gun => ({
+      id: gun.id,
+      cpid: gun.cpid,
+      cpsn: gun.cpsn,
+      connector: gun.connector,
+      guns_status: gun.guns_status,
+      acdc: gun.acdc,
+      max_kw: gun.max_kw,
+      guns_memo1: gun.guns_memo1,
+      createdAt: gun.createdAt,
+      updatedAt: gun.updatedAt
+    }));
+    
+    // 如果有指定 cpid 或 cpsn，且只找到一筆，直接返回該物件
+    if ((cpid || cpsn) && statusData.length === 1) {
+      return statusData[0];
+    }
+    
+    // 返回陣列格式（多筆或無過濾條件）
+    return statusData;
+  } catch (err) {
+    logger.error(`查詢充電樁狀態時出錯: ${err.message}`, err);
+    throw err;
   }
 }
 
@@ -481,6 +525,7 @@ module.exports = {
   stopRemoteCharging,
   resetChargePoint,
   getOnlineChargePoints,
+  getChargePointsStatus,
   trigger_profile_update,
   trigger_meter_reallocation,
   trigger_station_reallocation

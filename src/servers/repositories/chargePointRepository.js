@@ -275,7 +275,7 @@ async function validateIdTag(idTag) {
 
     // 依據 RFID 卡片號碼取得關聯用戶
     try {
-      const user = await databaseService.getUserByRfidCard(idTag);
+      const user = await databaseService.getUserByUuid(idTag);
 
       if (user) {
         logger.info(`✅ [IdTag驗證] 卡片 ${idTag} 對應用戶: ${user.email} (角色: ${user.role})`);
