@@ -49,7 +49,7 @@ export default function ChargingStatusCard({ stations = [], guns = [] }) {
   const [chargingStatus, setChargingStatus] = useState([
     { label: '充電中', count: 0, percentage: 0, color: '#1976d2', ocppStatus: 'Charging' },
     { label: '閒置', count: 0, percentage: 0, color: '#4caf50', ocppStatus: 'Available' },
-    { label: '不可用', count: 0, percentage: 0, color: '#ff9800', ocppStatus: 'Unavailable' },
+    /* { label: '不可用', count: 0, percentage: 0, color: '#ff9800', ocppStatus: 'Unavailable' }, */
     { label: '故障', count: 0, percentage: 0, color: '#f44336', ocppStatus: 'Faulted' },
   ]);
   const [totalStations, setTotalStations] = useState(20);
@@ -86,7 +86,7 @@ export default function ChargingStatusCard({ stations = [], guns = [] }) {
           return;
         }
 
-        if (rawStatus.includes('unavail') || rawStatus.includes('offline')) counts.Unavailable++;
+        if (rawStatus.includes('unavail') || rawStatus.includes('offline')) counts.Faulted++;
         else if (rawStatus.includes('charg') || rawStatus.includes('inuse') || rawStatus.includes('charging')) counts.Charging++;
         else if (rawStatus.includes('available') || rawStatus.includes('idle') || rawStatus.includes('free')) counts.Available++;
         else if (rawStatus.includes('fault') || rawStatus.includes('error') || rawStatus.includes('fail')) counts.Faulted++;
@@ -106,7 +106,7 @@ export default function ChargingStatusCard({ stations = [], guns = [] }) {
       const chargingStatus = [
         { label: '充電中', count: counts.Charging, percentage: chargingPct, color: '#1976d2', ocppStatus: 'Charging' },
         { label: '閒置', count: counts.Available, percentage: availablePct, color: '#4caf50', ocppStatus: 'Available' },
-        { label: '不可用', count: unavailableCount, percentage: unavailablePct, color: '#ff9800', ocppStatus: 'Unavailable' },
+        // { label: '不可用', count: unavailableCount, percentage: unavailablePct, color: '#ff9800', ocppStatus: 'Unavailable' },
         { label: '故障', count: counts.Faulted, percentage: faultedPct, color: '#f44336', ocppStatus: 'Faulted' },
       ];
 
