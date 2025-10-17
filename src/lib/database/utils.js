@@ -11,7 +11,7 @@ class DatabaseUtils {
     try {
       await databaseManager.initialize(provider);
       const currentProvider = databaseManager.getProvider();
-      console.log(`🎉 [DatabaseUtils] Database connection established successfully with ${currentProvider?.toUpperCase()}`);
+      // console.log(`🎉 [DatabaseUtils] Database connection established successfully with ${currentProvider?.toUpperCase()}`);
       
       return true;
     } catch (error) {

@@ -145,7 +145,15 @@ class DatabaseService {
 
   async getUserById(id) {
     const client = getDatabaseClient();
-    return await client.users.findUnique({ where: { id } });
+    // 數字 ID 或可轉換為數字的字串
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    return await client.users.findUnique({ where: { id: numericId } });
+  }
+
+  async getUserByUuid(uuid) {
+    const client = getDatabaseClient();
+    // 使用 UUID/nanoid 字串查詢
+    return await client.users.findUnique({ where: { uuid } });
   }
 
   async getUserByEmail(email) {
@@ -193,8 +201,22 @@ class DatabaseService {
 
   async updateUser(id, data) {
     const client = getDatabaseClient();
+    // 數字 ID 或可轉換為數字的字串
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
     return await client.users.update({ 
-      where: { id }, 
+      where: { id: numericId }, 
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async updateUserByUuid(uuid, data) {
+    const client = getDatabaseClient();
+    // 使用 UUID/nanoid 字串查詢
+    return await client.users.update({ 
+      where: { uuid }, 
       data: {
         ...data,
         updatedAt: new Date()
@@ -204,7 +226,15 @@ class DatabaseService {
 
   async deleteUser(id) {
     const client = getDatabaseClient();
-    return await client.users.delete({ where: { id } });
+    // 數字 ID 或可轉換為數字的字串
+    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+    return await client.users.delete({ where: { id: numericId } });
+  }
+
+  async deleteUserByUuid(uuid) {
+    const client = getDatabaseClient();
+    // 使用 UUID/nanoid 字串查詢
+    return await client.users.delete({ where: { uuid } });
   }
 
   // OTP 相關操作

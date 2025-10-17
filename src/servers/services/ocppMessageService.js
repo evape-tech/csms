@@ -688,8 +688,8 @@ async function handleStopTransaction(cpsn, messageBody) {
  * @param {string} userRole 用户角色
  * @returns {Promise<boolean>} 是否成功
  */
-async function sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid = null, userRole = null) {
-  logger.info(`发送远程启动交易请求: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用户UUID: ${userUuid || '未提供'}, 角色: ${userRole || '未知'}`);
+async function sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid) {
+  logger.info(`发送远程启动交易请求: ${cpsn}, 连接器: ${connectorId}, IdTag: ${idTag}, 用户UUID: ${userUuid || '未提供'}}`);
   
   try {
     const messageId = generateUniqueId();
@@ -716,7 +716,6 @@ async function sendRemoteStartTransaction(cpsn, connectorId, idTag, userUuid = n
           ...message,
           userContext: {
             userUuid: userUuid,
-            userRole: userRole,
             timestamp: new Date().toISOString()
           }
         };

@@ -177,9 +177,11 @@ export default function CPCard({ chargers, stations, meters }) {
 
   // helper to POST to local server route which handles OCPP forwarding and API key
   const callOcppEndpoint = async (id, body) => {
-    const url = `/api/guns/${id}/ocpp`;
+    const url = `/api/guns/ocpp`;
     try {
-      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      // 將 id 加入 body 中傳遞
+      const requestBody = { ...body, id };
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) });
       if (!res.ok) {
         const text = await res.text().catch(() => null);
         throw new Error(text || res.statusText || 'OCSP controller request failed');
@@ -231,9 +233,9 @@ export default function CPCard({ chargers, stations, meters }) {
       // 管理後台的啟動與停止充電先寫死
       const body = {
         cmd: 'cmd_start_charging',
-        cp_id: targetCharger.cpid,
+        cpid: targetCharger.cpid,
         connectorId: targetCharger.connector,
-        user_uuid: 'cc2bccd0-c979-11e9-ba8d-d70282892727',
+        user_uuid: 'qfxzB1ieahqFlqfEPvvZ',
         user_id_tag: 'RFID002',
       };
       await callOcppEndpoint(id, body);
