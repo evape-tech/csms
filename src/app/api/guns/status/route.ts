@@ -6,6 +6,74 @@ import { databaseService } from '../../../../lib/database/service.js';
 export const dynamic = 'force-dynamic';
 
 /**
+ * 輔助函數：為 gun 資料附加對應的 transaction 資訊
+ * 如果 gun.transactionid 有值，會查詢對應的 charging_transactions
+ */
+async function attachTransactionToGun(gun: any) {
+  const baseData = {
+    id: gun.id,
+    cpid: gun.cpid,
+    cpsn: gun.cpsn,
+    connector: gun.connector,
+    guns_status: gun.guns_status,
+    acdc: gun.acdc,
+    max_kw: gun.max_kw,
+    guns_memo1: gun.guns_memo1,
+    transactionid: gun.transactionid,
+    createdAt: gun.createdAt,
+    updatedAt: gun.updatedAt
+  };
+
+  // 如果有 transactionid，查詢對應的 transaction
+  if (gun.transactionid && gun.transactionid.trim() !== '') {
+    try {
+      // 先嘗試用 transaction_id (字串) 查詢
+      let transaction = await databaseService.getTransaction(gun.transactionid);
+      
+      // 如果找不到，且 transactionid 是數字，則嘗試用 id (主鍵) 查詢
+      if (!transaction && !isNaN(Number(gun.transactionid))) {
+        transaction = await databaseService.getTransactionById(Number(gun.transactionid));
+      }
+      
+      if (transaction) {
+        return {
+          ...baseData,
+          transaction: {
+            id: Number(transaction.id),
+            transaction_id: transaction.transaction_id,
+            start_time: transaction.start_time,
+            end_time: transaction.end_time,
+            cpid: transaction.cpid,
+            cpsn: transaction.cpsn,
+            connector_id: transaction.connector_id,
+            user_id: transaction.user_id,
+            id_tag: transaction.id_tag,
+            meter_start: transaction.meter_start ? Number(transaction.meter_start) : null,
+            meter_stop: transaction.meter_stop ? Number(transaction.meter_stop) : null,
+            energy_consumed: transaction.energy_consumed ? Number(transaction.energy_consumed) : null,
+            current_power: transaction.current_power ? Number(transaction.current_power) : null,
+            current_voltage: transaction.current_voltage ? Number(transaction.current_voltage) : null,
+            current_current: transaction.current_current ? Number(transaction.current_current) : null,
+            last_meter_update: transaction.last_meter_update,
+            charging_duration: transaction.charging_duration,
+            status: transaction.status,
+            stop_reason: transaction.stop_reason,
+            createdAt: transaction.createdAt,
+            updatedAt: transaction.updatedAt
+          }
+        };
+      }
+    } catch (error) {
+      console.warn(`⚠️ [attachTransactionToGun] Failed to fetch transaction ${gun.transactionid}:`, error);
+      // 即使查詢失敗，也返回基本資料
+    }
+  }
+
+  // 沒有 transactionid 或查詢失敗，只返回 gun 基本資料
+  return baseData;
+}
+
+/**
  * 查詢充電樁狀態 API
  * 
  * 用途：查詢所有充電樁或特定充電樁的狀態資訊
@@ -56,7 +124,7 @@ export async function GET(request: NextRequest) {
         );
       }
       
-      // 返回單一充電樁狀態
+      // 返回單一充電樁狀態（使用 id 查詢時不附加 transaction）
       const statusData = {
         id: gun.id,
         cpid: gun.cpid,
@@ -97,20 +165,10 @@ export async function GET(request: NextRequest) {
     
     console.log(`✅ [API /api/guns/status] Found ${guns.length} guns`);
     
-    // 轉換資料格式，只返回狀態相關的欄位
-    const statusData = guns.map((gun: any) => ({
-      id: gun.id,
-      cpid: gun.cpid,
-      cpsn: gun.cpsn,
-      connector: gun.connector,
-      guns_status: gun.guns_status,
-      acdc: gun.acdc,
-      max_kw: gun.max_kw,
-      guns_memo1: gun.guns_memo1,
-      transactionid: gun.transactionid,
-      createdAt: gun.createdAt,
-      updatedAt: gun.updatedAt
-    }));
+    // 轉換資料格式，只返回狀態相關的欄位，並附加 transaction 資料（如果有）
+    const statusData = await Promise.all(
+      guns.map((gun: any) => attachTransactionToGun(gun))
+    );
     
     // 如果有指定 cpid 或 cpsn，且只找到一筆，直接返回該物件
     if ((cpid || cpsn) && statusData.length === 1) {
@@ -189,7 +247,7 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // 返回單一充電樁狀態
+      // 返回單一充電樁狀態（使用 id 查詢時不附加 transaction）
       const statusData = {
         id: gun.id,
         cpid: gun.cpid,
@@ -230,20 +288,10 @@ export async function POST(request: NextRequest) {
     
     console.log(`✅ [API /api/guns/status POST] Found ${guns.length} guns`);
     
-    // 轉換資料格式，只返回狀態相關的欄位
-    const statusData = guns.map((gun: any) => ({
-      id: gun.id,
-      cpid: gun.cpid,
-      cpsn: gun.cpsn,
-      connector: gun.connector,
-      guns_status: gun.guns_status,
-      acdc: gun.acdc,
-      max_kw: gun.max_kw,
-      guns_memo1: gun.guns_memo1,
-      transactionid: gun.transactionid,
-      createdAt: gun.createdAt,
-      updatedAt: gun.updatedAt
-    }));
+    // 轉換資料格式，只返回狀態相關的欄位，並附加 transaction 資料（如果有）
+    const statusData = await Promise.all(
+      guns.map((gun: any) => attachTransactionToGun(gun))
+    );
     
     // 如果有指定 cpid 或 cpsn，且只找到一筆，直接返回該物件
     if ((cpid || cpsn) && statusData.length === 1) {

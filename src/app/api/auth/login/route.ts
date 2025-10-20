@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create JWT token
+    // Create JWT token (7 days expiration)
     const token = jwt.sign(
       { 
         userId: user.uuid, // 使用 UUID 而不是數字 ID，因為外鍵約束需要 UUID
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         lastName: user.last_name || user.lastName || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
+      { expiresIn: '7d' } // 延長到 7 天
     );
 
     // Create response with session cookie and token

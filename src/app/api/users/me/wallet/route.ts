@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthHelper } from '../../../../../lib/auth/authHelper';
 import DatabaseUtils from '../../../../../lib/database/utils.js';
-import { getDatabaseClient } from '../../../../../lib/database/adapter';
+import { databaseService } from '../../../../../lib/database/service.js';
 
 // 強制動態渲染
 export const dynamic = 'force-dynamic';
@@ -42,41 +42,15 @@ export async function GET(request: NextRequest) {
       role: currentUser.role
     });
     
-    const db = getDatabaseClient();
-    
     // 查詢錢包資訊
-    let walletResult: any = await db.$queryRaw`
-      SELECT id, user_id, balance, currency, status, createdAt, updatedAt 
-      FROM user_wallets 
-      WHERE user_id = ${currentUser.userId}
-    `;
+    let wallet = await databaseService.getUserWalletByUserId(currentUser.userId);
     
     // 如果錢包不存在，自動創建一個
-    if (!Array.isArray(walletResult) || walletResult.length === 0) {
+    if (!wallet) {
       console.log('📝 [API /api/users/me/wallet] 錢包不存在，自動創建新錢包');
-      
-      const now = new Date();
-      const initialBalance = 5000;
-      const currency = 'TWD';
-      const status = 'ACTIVE';
-      
-      // 創建新錢包
-      await db.$executeRaw`
-        INSERT INTO user_wallets (user_id, balance, currency, status, createdAt, updatedAt)
-        VALUES (${currentUser.userId}, ${initialBalance}, ${currency}, ${status}, ${now}, ${now})
-      `;
-      
-      // 重新查詢剛創建的錢包
-      walletResult = await db.$queryRaw`
-        SELECT id, user_id, balance, currency, status, createdAt, updatedAt 
-        FROM user_wallets 
-        WHERE user_id = ${currentUser.userId}
-      `;
-      
+      wallet = await databaseService.createUserWallet(currentUser.userId, 5000);
       console.log('✅ [API /api/users/me/wallet] 新錢包已創建');
     }
-    
-    const wallet = walletResult[0] as any;
     
     console.log('✅ [API /api/users/me/wallet] 查詢成功:', {
       userId: currentUser.userId,
