@@ -840,6 +840,173 @@ class DatabaseService {
     const client = getDatabaseClient();
     return await client.$transaction(async (prisma) => callback(prisma));
   }
+
+  // ===============================
+  // User Vehicles Operations
+  // ===============================
+
+  async getUserVehicles(userId, statusFilter = null) {
+    const client = getDatabaseClient();
+    const where = { user_id: userId };
+    if (statusFilter) {
+      where.status = statusFilter;
+    }
+    return await client.user_vehicles.findMany({
+      where,
+      include: {
+        vehicle_brands: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async getUserVehicleById(vehicleId) {
+    const client = getDatabaseClient();
+    return await client.user_vehicles.findUnique({
+      where: { id: vehicleId },
+      include: {
+        vehicle_brands: true
+      }
+    });
+  }
+
+  async countUserVehicles(userId) {
+    const client = getDatabaseClient();
+    return await client.user_vehicles.count({
+      where: { user_id: userId }
+    });
+  }
+
+  async checkLicensePlateExists(licensePlate) {
+    const client = getDatabaseClient();
+    const result = await client.user_vehicles.findUnique({
+      where: { license_plate: licensePlate }
+    });
+    return !!result;
+  }
+
+  async createUserVehicle(data) {
+    const client = getDatabaseClient();
+    return await client.user_vehicles.create({
+      data: {
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      include: {
+        vehicle_brands: true
+      }
+    });
+  }
+
+  async deleteUserVehicle(vehicleId) {
+    const client = getDatabaseClient();
+    return await client.user_vehicles.delete({
+      where: { id: vehicleId }
+    });
+  }
+
+  async getVehicleBrands(activeOnly = true) {
+    const client = getDatabaseClient();
+    const where = activeOnly ? { is_active: true } : {};
+    return await client.vehicle_brands.findMany({
+      where,
+      orderBy: { name: 'asc' }
+    });
+  }
+
+  async getVehicleBrandById(brandId) {
+    const client = getDatabaseClient();
+    return await client.vehicle_brands.findUnique({
+      where: { id: brandId }
+    });
+  }
+
+  // ===============================
+  // Wallet Operations
+  // ===============================
+
+  async getUserWalletByUserId(userId) {
+    const client = getDatabaseClient();
+    return await client.user_wallets.findUnique({
+      where: { user_id: userId }
+    });
+  }
+
+  async createUserWallet(userId, initialBalance = 5000) {
+    const client = getDatabaseClient();
+    return await client.user_wallets.create({
+      data: {
+        user_id: userId,
+        balance: initialBalance,
+        currency: 'TWD',
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  // ===============================
+  // Transactions Operations
+  // ===============================
+
+  async getUserWalletTransactions(userId, limit = 50, offset = 0) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.findMany({
+      where: { user_id: userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset
+    });
+  }
+
+  async countUserWalletTransactions(userId) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.count({
+      where: { user_id: userId }
+    });
+  }
+
+  async getUserTopups(userId, limit = 50, offset = 0) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.findMany({
+      where: { 
+        user_id: userId,
+        transaction_type: 'DEPOSIT'
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset
+    });
+  }
+
+  async countUserTopups(userId) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.count({
+      where: { 
+        user_id: userId,
+        transaction_type: 'DEPOSIT'
+      }
+    });
+  }
+
+  async getUserChargingTransactions(userId, limit = 50, offset = 0) {
+    const client = getDatabaseClient();
+    return await client.charging_transactions.findMany({
+      where: { user_id: userId },
+      orderBy: { start_time: 'desc' },
+      take: limit,
+      skip: offset
+    });
+  }
+
+  async countUserChargingTransactions(userId) {
+    const client = getDatabaseClient();
+    return await client.charging_transactions.count({
+      where: { user_id: userId }
+    });
+  }
 }
 
 // 導出單例實例
