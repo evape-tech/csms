@@ -751,6 +751,86 @@ class DatabaseService {
   }
 
   // ===============================
+  // Fault Reports Operations
+  // ===============================
+
+  async getFaultReports(filter = {}) {
+    const client = getDatabaseClient();
+    return await client.fault_reports.findMany({
+      where: filter,
+      include: {
+        users_fault_reports_user_idTousers: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true
+          }
+        },
+        users_fault_reports_assigned_toTousers: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { reported_at: 'desc' }
+    });
+  }
+
+  async getFaultReportById(id) {
+    const client = getDatabaseClient();
+    return await client.fault_reports.findUnique({
+      where: { id: BigInt(id) },
+      include: {
+        users_fault_reports_user_idTousers: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true
+          }
+        },
+        users_fault_reports_assigned_toTousers: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true
+          }
+        }
+      }
+    });
+  }
+
+  async createFaultReport(data) {
+    const client = getDatabaseClient();
+    return await client.fault_reports.create({
+      data: {
+        ...data,
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date()
+      }
+    });
+  }
+
+  async updateFaultReport(id, data) {
+    const client = getDatabaseClient();
+    return await client.fault_reports.update({
+      where: { id: BigInt(id) },
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  async deleteFaultReport(id) {
+    const client = getDatabaseClient();
+    return await client.fault_reports.delete({
+      where: { id: BigInt(id) }
+    });
+  }
+
+  // ===============================
   // Gun Tariffs Operations
   // ===============================
 

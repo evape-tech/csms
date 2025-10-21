@@ -61,20 +61,26 @@ interface StationData {
   [key: string]: unknown;
 }
 
+interface FaultReportData {
+  [key: string]: unknown;
+}
+
 export default async function Dashboard() {
   // --- load Gun table directly via databaseService on the server ---
   let gunsData: GunData[] = [];
   let stations: StationData[] = [];
+  let faultReports: FaultReportData[] = [];
   
   try {
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     
-    // 並行獲取 guns 和 stations 數據
-    const [gunsRows, siteSettingsRows] = await Promise.all([
+    // 並行獲取 guns、stations 和 fault_reports 數據
+    const [gunsRows, siteSettingsRows, faultReportsRows] = await Promise.all([
       databaseService.getGuns({}),
-      databaseService.getStations()
+      databaseService.getStations(),
+      (databaseService as any).getFaultReports({}) // 獲取所有故障報告
     ]);
     
     // 處理 guns 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
@@ -82,6 +88,9 @@ export default async function Dashboard() {
     
     // 處理 stations 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據
     stations = siteSettingsRows.map((r: Record<string, unknown>) => serializeData(r));
+    
+    // 處理 fault_reports 數據
+    faultReports = faultReportsRows.map((r: Record<string, unknown>) => serializeData(r));
 
     
     // 打印 guns 數據的詳細信息以便調試
@@ -102,10 +111,12 @@ export default async function Dashboard() {
     // 最後一次驗證確保所有數據都被序列化為純 JavaScript 對象
     gunsData = JSON.parse(JSON.stringify(gunsData));
     stations = JSON.parse(JSON.stringify(stations));
+    faultReports = JSON.parse(JSON.stringify(faultReports));
   } catch (err) {
     console.error('Failed to load data from DB:', err);
     gunsData = [];
     stations = [];
+    faultReports = [];
   }
 
   return (
@@ -124,7 +135,7 @@ export default async function Dashboard() {
           </Box>
           {/* 右側即時異常監控 */}
           <Box sx={{ width: { xs: '100%', md: '50%' }, display: 'flex' }}>
-            <ErrorMonitorCard />
+            <ErrorMonitorCard guns={gunsData as any} faultReports={faultReports as any} />
           </Box>
         </Stack>
       </Box>
