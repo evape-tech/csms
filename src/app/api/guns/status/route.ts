@@ -1,13 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '../../../../lib/database/utils.js';
 import { databaseService } from '../../../../lib/database/service.js';
+import { tariffRepository } from '../../../../servers/repositories/index.js';
+import { calculateRateByType } from '../../../../lib/rateCalculator.js';
 
 // 強制動態渲染
 export const dynamic = 'force-dynamic';
 
 /**
- * 輔助函數：為 gun 資料附加對應的 transaction 資訊
- * 如果 gun.transactionid 有值，會查詢對應的 charging_transactions
+ * 計算實時充電費用
+ * @param transaction - 充電交易資料
+ * @param gunId - 充電槍ID
+ * @returns 費用資訊或null
+ */
+async function calculateRealtimeCost(transaction: any, gunId: number) {
+  try {
+    // 檢查是否有充電量
+    if (!transaction.energy_consumed || parseFloat(transaction.energy_consumed) <= 0) {
+      return null;
+    }
+
+    // 獲取適用的費率方案
+    const chargingTime = transaction.start_time || new Date();
+    const tariff = await tariffRepository.getTariffForGun(gunId, chargingTime);
+
+    if (!tariff) {
+      console.warn(`⚠️ [calculateRealtimeCost] 未找到費率方案 for gun ${gunId}`);
+      return null;
+    }
+
+    // 使用 rateCalculator 計算費用
+    const result = calculateRateByType(transaction, tariff) as any;
+    const { energyFee, appliedPrice, discountAmount, billingDetails } = result;
+
+    return {
+      tariff_id: (tariff as any).id,
+      tariff_name: (tariff as any).name,
+      tariff_type: (tariff as any).tariff_type,
+      energy_consumed: parseFloat(transaction.energy_consumed),
+      applied_price: appliedPrice,
+      energy_fee: parseFloat(energyFee.toFixed(2)),
+      discount_amount: parseFloat(discountAmount.toFixed(2)),
+      estimated_total: parseFloat((energyFee - discountAmount).toFixed(2)),
+      currency: 'TWD',
+      billing_details: billingDetails,
+      calculation_time: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error(`❌ [calculateRealtimeCost] 計算費用失敗:`, error);
+    return null;
+  }
+}
+
+/**
+ * 輔助函數：為 gun 資料附加對應的 transaction 資訊以及實時費用
+ * 如果 gun.transactionid 有值，會查詢對應的 charging_transactions 並計算實時費用
  */
 async function attachTransactionToGun(gun: any) {
   const baseData = {
@@ -36,6 +83,9 @@ async function attachTransactionToGun(gun: any) {
       }
       
       if (transaction) {
+        // 計算實時費用
+        const realtimeCost = await calculateRealtimeCost(transaction, gun.id);
+        
         return {
           ...baseData,
           transaction: {
@@ -60,7 +110,8 @@ async function attachTransactionToGun(gun: any) {
             stop_reason: transaction.stop_reason,
             createdAt: transaction.createdAt,
             updatedAt: transaction.updatedAt
-          }
+          },
+          realtime_cost: realtimeCost
         };
       }
     } catch (error) {
@@ -77,6 +128,7 @@ async function attachTransactionToGun(gun: any) {
  * 查詢充電樁狀態 API
  * 
  * 用途：查詢所有充電樁或特定充電樁的狀態資訊
+ * 功能：當充電槍正在充電時（有 transaction），自動計算並返回實時費用
  * 
  * 查詢參數：
  * - cpid: 充電樁 ID（選填）
@@ -93,7 +145,24 @@ async function attachTransactionToGun(gun: any) {
  *   data: {
  *     id, cpid, cpsn, connector, 
  *     guns_status, acdc, max_kw, 
- *     guns_memo1, createdAt, updatedAt 
+ *     guns_memo1, transactionid, 
+ *     createdAt, updatedAt,
+ *     transaction?: {
+ *       // 充電交易資訊
+ *       id, transaction_id, start_time, end_time,
+ *       energy_consumed, current_power, current_voltage,
+ *       current_current, status, ...
+ *     },
+ *     realtime_cost?: {
+ *       // 實時費用資訊（僅在充電中時返回）
+ *       tariff_id, tariff_name, tariff_type,
+ *       energy_consumed, applied_price, energy_fee,
+ *       discount_amount, estimated_total, currency,
+ *       billing_details: {
+ *         rateType, calculation, timeFrame?, ...
+ *       },
+ *       calculation_time
+ *     }
  *   } | Array,
  *   count?: number 
  * }
