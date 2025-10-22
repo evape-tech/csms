@@ -3,23 +3,22 @@
  * 包含所有与消息队列相关的配置项
  */
 
-// 导入全局环境配置
-const { ENV, MQ } = require('./envConfig');
+require('dotenv').config();
 
 // 是否启用MQ功能
-const MQ_ENABLED = MQ.ENABLED;
+const MQ_ENABLED = process.env.ENABLE_MQ !== 'false';
 
 // RabbitMQ连接配置
 const MQ_CONFIG = {
   // 基本连接配置
   connection: {
-    user: MQ.RABBIT.USER,
-    password: MQ.RABBIT.PASS,
-    host: MQ.RABBIT.HOST,
-    port: MQ.RABBIT.PORT,
-    vhost: MQ.RABBIT.VHOST,
+    user: process.env.RABBITMQ_USER || 'guest',
+    password: process.env.RABBITMQ_PASS || 'guest',
+    host: process.env.RABBITMQ_HOST || 'localhost',
+    port: parseInt(process.env.RABBITMQ_PORT || '5672', 10),
+    vhost: process.env.RABBITMQ_VHOST || '/',
     // 如果在Docker环境中运行，使用Docker网络中的RabbitMQ地址
-    hostDocker: MQ.RABBIT.HOST_DOCKER,
+    hostDocker: process.env.RABBITMQ_HOST_DOCKER || 'rabbitmq',
     // 连接选项
     options: {
       timeout: parseInt(process.env.RABBITMQ_TIMEOUT || '10000', 10),

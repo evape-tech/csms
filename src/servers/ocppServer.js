@@ -12,22 +12,21 @@ const cors = require('cors');
 const { logger } = require('./utils');
 
 // 引入配置
-const { envConfig, mqConfig, apiConfig } = require('./config');
-const { SERVER } = envConfig;
+const { mqConfig, apiConfig } = require('./config');
 const { MQ_ENABLED } = mqConfig;
 const { API_PATHS } = apiConfig;
 
 // 创建Express应用
 const app = express();
 app.use(cors({
-  origin: SERVER.CORS_ORIGIN
+  origin: process.env.CORS_ORIGIN || '*'
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 创建HTTP服务器
 const server = http.createServer(app);
-const PORT = SERVER.PORT || 8089;
+const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
 
 // 创建WebSocket服务器
 const wss = new WebSocket.Server({
@@ -512,8 +511,8 @@ async function startServer() {
       // 异步初始化其他服务
       initializeServices().then((mqInitialized) => {
         // 启动HTTP服务器
-        const HOST = SERVER.HOST || 'localhost';
-        const PORT = SERVER.PORT || 8089;
+        const HOST = process.env.OCPP_HOST || 'localhost';
+        const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
         const serverInstance = server.listen(PORT, HOST, () => {
           logger.info(`OCPP服务器正在监听端口 ${PORT} (綁定到: ${HOST})`);
           logger.info(`REST API: http://${HOST}:${PORT}${apiConfig.API.BASE_PATH}/${apiConfig.API.VERSION}`);
@@ -534,7 +533,7 @@ async function startServer() {
             systemStatusService.updateServerStatus('running');
             
             // 定期发送状态报告
-            const statusReportInterval = SERVER.STATUS_REPORT_INTERVAL;
+            const statusReportInterval = parseInt(process.env.STATUS_REPORT_INTERVAL || '600000', 10);
             if (statusReportInterval > 0) {
               setInterval(() => {
                 systemStatusService.sendStatusReport('periodic');
@@ -599,13 +598,13 @@ async function initializeServices() {
     if (!healthMonitoringService.isRunning) {
       const isDevelopment = process.env.NODE_ENV !== 'production';
       const HOST = process.env.OCPP_HOST || 'localhost';
-      const PORT = process.env.OCPP_PORT || 8089;
+      const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
       
       healthMonitoringService.start({
         checkIntervalSeconds: isDevelopment ? 5 : 60,  // 開發環境5秒，生產環境60秒
         enableAutoRestart: isDevelopment,               // 只在開發環境啟用自動重啟
         maxConsecutiveFailures: -1,                     // -1 表示無限制重試，不放棄
-        healthEndpoint: `http://${SERVER.HOST || 'localhost'}:${SERVER.PORT || 8089}/ocpp/api/health`, // 健康檢查端點
+        healthEndpoint: `http://${HOST}:${PORT}/ocpp/api/health`, // 健康檢查端點
         onRestartRequired: () => {
           // 當需要重啟時的回調函數
           logger.warn('🔄 健康監控服務檢測到需要重啟服務器');
