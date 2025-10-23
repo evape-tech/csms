@@ -14,6 +14,7 @@
 
 const { databaseService } = require('../../lib/database/service.js');
 const { tariffRepository } = require('../repositories');
+const { calculateRateByType } = require('../../lib/rateCalculator');
 
 /**
  * 计费服务类
@@ -80,9 +81,11 @@ class BillingService {
       }
 
       // 获取适用的费率方案
+      // 支持多種費率類型: FIXED_RATE, TIME_OF_USE, PROGRESSIVE, MEMBERSHIP, SPECIAL_PROMOTION
       let tariff;
       
       if (tariffId) {
+        // 情況1: 手動指定費率方案ID
         tariff = await this.tariffRepository.getTariffById(tariffId);
         if (!tariff) {
           const error = `费率方案 ID ${tariffId} 不存在`;
@@ -93,17 +96,29 @@ class BillingService {
           throw new Error(error);
         }
       } else {
-        // 根据枪的tariff关联获取费率方案
+        // 情況2: 自動選擇費率方案
+        // 步驟1: 取得該充電槍ID
         const gunId = await this.getGunIdFromCpidCpsn(transaction.cpid, transaction.cpsn);
-        tariff = await this.tariffRepository.getTariffForGun(gunId);
+        const chargingTime = transaction.start_time || new Date();
         
+        // 步驟2: 根據充電槍和時間選擇費率
+        // getTariffForGun 會自動處理：
+        // - 充電槍綁定的費率列表（支持多種tariff_type）
+        // - 根據充電時間過濾（有效期限 valid_from/valid_to）
+        // - 季節匹配（season_start_month/season_end_month，如TIME_OF_USE）
+        // - 優先級排序（priority欄位）
+        // - 如果該槍沒有綁定費率，自動返回預設費率
+        tariff = await this.tariffRepository.getTariffForGun(gunId, chargingTime);
+        
+        // 步驟3: 若仍未找到（理論上getTariffForGun最後會返回默認費率），額外安全檢查
         if (!tariff) {
-          // 如果没有找到枪的tariff关联，使用默认费率方案
+          console.warn(`[計費] 交易 ${transactionId} 的充電槍 ${gunId} 未找到綁定費率，使用預設費率`);
           const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
           tariff = await this.tariffRepository.getDefaultTariff({ isAC, isDC: !isAC });
         }
       }
 
+      // 最終檢查：確保有費率方案
       if (!tariff) {
         const error = '未找到合适的费率方案';
         if (autoMode) {
@@ -288,146 +303,21 @@ class BillingService {
         throw new Error('交易缺少用电量数据，无法计算账单');
       }
 
-      const energyConsumed = parseFloat(transaction.energy_consumed);
-      let appliedPrice = parseFloat(tariff.base_price);
-      let energyFee = 0;
-      let serviceFee = 0;
-      let discountAmount = 0;
-      let taxAmount = 0;
-      let totalAmount = 0;
-      let billingDetails = {};
-
-      // 根据不同费率类型计算
-      switch (tariff.tariff_type) {
-        case 'FIXED_RATE':
-          // 固定费率
-          energyFee = energyConsumed * appliedPrice;
-          billingDetails = {
-            rateType: 'FIXED_RATE',
-            unitPrice: appliedPrice,
-            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
-          };
-          break;
-
-        case 'TIME_OF_USE':
-          // 分时费率 (这里简化处理，实际应按照充电的具体时段分别计费)
-          const chargingStartHour = transaction.start_time.getHours();
-          const chargingEndHour = transaction.end_time.getHours();
-          
-          const peakStartHour = parseInt(tariff.peak_hours_start?.split(':')[0] || '9');
-          const peakEndHour = parseInt(tariff.peak_hours_end?.split(':')[0] || '18');
-          
-          // 简化计算，检查是否在尖峰时段
-          const isPeakTime = (chargingStartHour >= peakStartHour && chargingStartHour < peakEndHour);
-          
-          if (isPeakTime) {
-            appliedPrice = parseFloat(tariff.peak_hours_price) || appliedPrice;
-            billingDetails.rateType = 'PEAK_HOURS';
-          } else {
-            appliedPrice = parseFloat(tariff.off_peak_price) || appliedPrice;
-            billingDetails.rateType = 'OFF_PEAK_HOURS';
-          }
-          
-          energyFee = energyConsumed * appliedPrice;
-          billingDetails = {
-            ...billingDetails,
-            unitPrice: appliedPrice,
-            timeFrame: isPeakTime ? '尖峰时段' : '离峰时段',
-            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
-          };
-          break;
-
-        case 'PROGRESSIVE':
-          // 累进费率
-          const tier1Max = parseFloat(tariff.tier1_max_kwh) || 0;
-          const tier2Max = parseFloat(tariff.tier2_max_kwh) || 0;
-          const tier1Price = parseFloat(tariff.tier1_price) || appliedPrice;
-          const tier2Price = parseFloat(tariff.tier2_price) || appliedPrice;
-          const tier3Price = parseFloat(tariff.tier3_price) || appliedPrice;
-          
-          let remainingEnergy = energyConsumed;
-          let tier1Energy = 0;
-          let tier2Energy = 0;
-          let tier3Energy = 0;
-          let tier1Cost = 0;
-          let tier2Cost = 0;
-          let tier3Cost = 0;
-          
-          if (remainingEnergy > 0 && tier1Max > 0) {
-            tier1Energy = Math.min(remainingEnergy, tier1Max);
-            tier1Cost = tier1Energy * tier1Price;
-            remainingEnergy -= tier1Energy;
-          }
-          
-          if (remainingEnergy > 0 && tier2Max > tier1Max) {
-            tier2Energy = Math.min(remainingEnergy, tier2Max - tier1Max);
-            tier2Cost = tier2Energy * tier2Price;
-            remainingEnergy -= tier2Energy;
-          }
-          
-          if (remainingEnergy > 0) {
-            tier3Energy = remainingEnergy;
-            tier3Cost = tier3Energy * tier3Price;
-          }
-          
-          energyFee = tier1Cost + tier2Cost + tier3Cost;
-          appliedPrice = energyFee / energyConsumed; // 平均单价
-          
-          billingDetails = {
-            rateType: 'PROGRESSIVE',
-            tiers: [
-              { maxKwh: tier1Max, price: tier1Price, energy: tier1Energy, cost: tier1Cost },
-              { maxKwh: tier2Max, price: tier2Price, energy: tier2Energy, cost: tier2Cost },
-              { price: tier3Price, energy: tier3Energy, cost: tier3Cost }
-            ],
-            calculation: `阶梯1: ${tier1Energy.toFixed(2)} kWh × ${tier1Price} = ${tier1Cost.toFixed(2)}\n` +
-                         `阶梯2: ${tier2Energy.toFixed(2)} kWh × ${tier2Price} = ${tier2Cost.toFixed(2)}\n` +
-                         `阶梯3: ${tier3Energy.toFixed(2)} kWh × ${tier3Price} = ${tier3Cost.toFixed(2)}\n` +
-                         `总计: ${energyFee.toFixed(2)}`
-          };
-          break;
-
-        case 'SPECIAL_PROMOTION':
-        case 'MEMBERSHIP':
-          // 特殊促销或会员费率
-          energyFee = energyConsumed * appliedPrice;
-          
-          // 应用折扣
-          if (tariff.discount_percentage && tariff.discount_percentage > 0) {
-            discountAmount = (energyFee * parseFloat(tariff.discount_percentage)) / 100;
-            energyFee -= discountAmount;
-          }
-          
-          billingDetails = {
-            rateType: tariff.tariff_type,
-            unitPrice: appliedPrice,
-            discountPercentage: tariff.discount_percentage,
-            originalAmount: energyConsumed * appliedPrice,
-            discountAmount,
-            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${(energyConsumed * appliedPrice).toFixed(2)}\n` +
-                         `折扣: ${tariff.discount_percentage}% = ${discountAmount.toFixed(2)}\n` +
-                         `折后金额: ${energyFee.toFixed(2)}`
-          };
-          break;
-
-        default:
-          // 自定义费率或其他
-          energyFee = energyConsumed * appliedPrice;
-          billingDetails = {
-            rateType: 'CUSTOM',
-            unitPrice: appliedPrice,
-            calculation: `${energyConsumed} kWh × ${appliedPrice} = ${energyFee.toFixed(2)}`
-          };
-      }
+      // 使用 rateCalculator 計算費用
+      const { energyFee, appliedPrice, discountAmount, billingDetails } = calculateRateByType(transaction, tariff);
+      
+      // 其他費用項目
+      const serviceFee = 0;
+      const taxAmount = 0;
       
       // 计算总额
-      totalAmount = energyFee + serviceFee - discountAmount + taxAmount;
+      const totalAmount = energyFee + serviceFee - discountAmount + taxAmount;
 
       return {
         transaction_id: transaction.transaction_id,
         tariff_id: tariff.id,
         applied_price: appliedPrice,
-        energy_consumed: energyConsumed,
+        energy_consumed: parseFloat(transaction.energy_consumed),
         energy_fee: energyFee,
         service_fee: serviceFee,
         discount_amount: discountAmount,

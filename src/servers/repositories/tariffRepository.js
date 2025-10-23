@@ -80,26 +80,78 @@ class TariffRepository {
   }
 
   /**
-   * 获取指定充电枪的费率方案
+   * 获取指定充电枪的费率方案（根據充電時間選擇適當季節的費率）
    * @param {number} gunId - 充电枪ID
+   * @param {Date} chargingTime - 充電時間（用於判斷季節和有效期），預設為當前時間
    * @returns {Promise<Object|null>} 费率方案对象
    */
-  async getTariffForGun(gunId) {
+  async getTariffForGun(gunId, chargingTime = new Date()) {
     try {
       if (!gunId) {
         return null;
       }
 
-      // 首先尝试获取充电枪特定的费率方案
-      const gunTariff = await this.databaseService.getActiveGunTariffs(gunId);
+      // 步驟1: 獲取該充電槍綁定的所有啟用費率
+      const gunTariffs = await this.databaseService.getActiveGunTariffs(gunId);
 
-      if (gunTariff && gunTariff.length > 0) {
-        // 获取费率方案详情
-        const tariff = await this.databaseService.getTariffById(gunTariff[0].tariff_id);
-        return tariff;
+      if (gunTariffs && gunTariffs.length > 0) {
+        // 步驟2: 根據充電時間過濾出有效的費率（檢查有效期限）
+        const currentMonth = chargingTime.getMonth() + 1; // getMonth() 返回 0-11，需要 +1 變成 1-12
+        const currentDate = chargingTime;
+        
+        // 過濾出符合條件的費率
+        const validTariffs = gunTariffs.filter(gt => {
+          const tariff = gt.tariffs;
+          
+          // 檢查1: 有效期限 (valid_from / valid_to)
+          if (tariff.valid_from) {
+            const validFrom = new Date(tariff.valid_from);
+            if (currentDate < validFrom) {
+              return false; // 還未到有效期
+            }
+          }
+          
+          if (tariff.valid_to) {
+            const validTo = new Date(tariff.valid_to);
+            if (currentDate > validTo) {
+              return false; // 已過有效期
+            }
+          }
+          
+          // 檢查2: 季節匹配
+          if (tariff.season_start_month && tariff.season_end_month) {
+            const startMonth = tariff.season_start_month;
+            const endMonth = tariff.season_end_month;
+            
+            // 處理跨年的季節（例如 10月-5月）
+            if (startMonth > endMonth) {
+              // 跨年：當前月份 >= 開始月份 或 當前月份 <= 結束月份
+              if (!(currentMonth >= startMonth || currentMonth <= endMonth)) {
+                return false; // 不在季節範圍內
+              }
+            } else {
+              // 不跨年：當前月份在開始和結束月份之間
+              if (!(currentMonth >= startMonth && currentMonth <= endMonth)) {
+                return false; // 不在季節範圍內
+              }
+            }
+          }
+          
+          // 通過所有檢查
+          return true;
+        });
+        
+        if (validTariffs.length > 0) {
+          // 找到符合條件的費率，返回優先級最高的（第一個，因為已按 priority 排序）
+          return validTariffs[0].tariffs;
+        }
+        
+        // 如果沒有找到符合條件的費率，使用優先級最高的（不檢查有效期和季節）
+        console.warn(`充電槍 ${gunId} 在 ${currentMonth} 月/${currentDate.toISOString()} 沒有找到符合條件的費率，使用優先級最高的費率`);
+        return gunTariffs[0].tariffs;
       }
 
-      // 如果没有特定费率，返回默认费率
+      // 步驟3: 如果沒有綁定特定費率，返回默認費率
       return await this.getDefaultTariff();
     } catch (error) {
       console.error(`获取充电枪费率方案失败: ${error.message}`);

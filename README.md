@@ -537,7 +537,7 @@ csms-nextjs/
 │   ├── models/               # 資料庫模型定義 (Sequelize)
 │   └── servers/              # 後端微服務架構
 │       ├── config/           # 服務配置管理
-│       │   ├── envConfig.js  # 環境變數配置
+│       │   ├── apiConfig.js  # API 路徑配置
 │       │   └── mqConfig.js   # MQ 消息隊列配置
 │       ├── connectors/       # 外部系統連接器  
 │       │   └── ocppMqConnector.js # OCPP-MQ 橋接器

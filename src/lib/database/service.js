@@ -643,6 +643,71 @@ class DatabaseService {
     });
   }
 
+  /**
+   * 查詢特定充電槍的所有費率（返回完整列表，由前端判斷適用費率）
+   * @param {number} gunId - 充電槍 ID
+   * @param {boolean} activeOnly - 是否只查詢啟用的費率，預設 true
+   * @returns {Promise<Array>} 費率列表（按優先級排序）
+   */
+  async getGunTariffs(gunId, activeOnly = true) {
+    const client = getDatabaseClient();
+    
+    const where = {
+      gun_id: parseInt(gunId),
+      ...(activeOnly && { is_active: true })
+    };
+
+    const gunTariffs = await client.gun_tariffs.findMany({
+      where,
+      include: {
+        tariffs: true
+      },
+      orderBy: [
+        { priority: 'asc' },
+        { createdAt: 'desc' }
+      ]
+    });
+
+    // 只過濾啟用狀態和有效期，不過濾季節（讓前端自行判斷）
+    const now = new Date();
+    
+    return gunTariffs
+      .filter(gt => {
+        const tariff = gt.tariffs;
+        
+        // 檢查費率是否啟用
+        if (!tariff.is_active) return false;
+        
+        // 檢查 valid_from 和 valid_to（排除過期或未生效的費率）
+        if (tariff.valid_from && new Date(tariff.valid_from) > now) return false;
+        if (tariff.valid_to && new Date(tariff.valid_to) < now) return false;
+        
+        return true;
+      })
+      .map(gt => gt.tariffs);
+  }
+
+  /**
+   * 根據 cpid 查詢充電槍的所有可用費率
+   * @param {string} cpid - 充電樁 ID
+   * @returns {Promise<Array>} 費率列表（由前端根據季節/時段選擇適用費率）
+   */
+  async getGunTariffsByCpid(cpid) {
+    const client = getDatabaseClient();
+    
+    // 先找到對應的 gun
+    const gun = await client.guns.findFirst({
+      where: { cpid }
+    });
+
+    if (!gun) {
+      return [];
+    }
+
+    // 返回該 gun 的所有可用費率
+    return await this.getGunTariffs(gun.id, true);
+  }
+
   // ===============================
   // Billing Records Operations
   // ===============================
@@ -831,7 +896,7 @@ class DatabaseService {
   }
 
   // ===============================
-  // Gun Tariffs Operations
+  // Gun Tariffs Operations (中間表操作)
   // ===============================
 
   async createGunTariff(data) {
@@ -845,7 +910,12 @@ class DatabaseService {
     });
   }
 
-  async getGunTariffs(gunId) {
+  /**
+   * 查詢 gun_tariffs 關聯記錄（包含中間表資訊）
+   * @param {number} gunId - 充電槍 ID
+   * @returns {Promise<Array>} gun_tariffs 記錄陣列（包含 tariffs 關聯）
+   */
+  async getGunTariffAssociations(gunId) {
     const client = getDatabaseClient();
     return await client.gun_tariffs.findMany({
       where: { gun_id: gunId },
@@ -1068,6 +1138,14 @@ class DatabaseService {
         user_id: userId,
         transaction_type: 'DEPOSIT'
       }
+    });
+  }
+
+  async getWalletTransactionByChargingId(chargingTransactionId) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.findFirst({
+      where: { charging_transaction_id: chargingTransactionId },
+      orderBy: { createdAt: 'desc' }
     });
   }
 
