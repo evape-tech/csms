@@ -27,9 +27,9 @@ export default function PowerQuery() {
       </Box>
 
       {/* 營收統計卡片 */}
-      <Box sx={{ mb: 2 }}>
+      {/* <Box sx={{ mb: 2 }}>
         <RevenueStatisticsCard />
-      </Box>
+      </Box>  */}
     </Box>
   );
 } 
