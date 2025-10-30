@@ -1,14 +1,14 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
   Typography,
   Box,
   Paper,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
-import {
-} from 'recharts';
 import ReactECharts from 'echarts-for-react';
 import { 
   AttachMoney, 
@@ -21,10 +21,95 @@ import PowerOverviewIndicatorCard from '../common/PowerOverviewIndicatorCard';
 
 
 
+// 從資料庫獲取帳單記錄數據
+async function fetchBillingRecords(startDate, endDate) {
+  try {
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      status: 'CALCULATED' // 只獲取已計算的交易
+    });
+    
+    const response = await fetch(`/api/billing-records?${params}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    // 安全檢查：確保一定回傳陣列
+    if (Array.isArray(result)) return result;
+    if (Array.isArray(result.transactions)) return result.transactions;
+    if (Array.isArray(result?.data)) return result.data;
+    console.warn("⚠️ API 回傳格式非預期：", result);
+    return [];
+  } catch (error) {
+    console.error("❌ Failed to fetch billing records:", error);
+    return [];
+  }
+}
+
+// 分組營收數據
+function groupRevenueByDimension(billingRecords, dimension) {
+  const grouped = {};
+  
+  billingRecords.forEach(record => {
+    const d = new Date(record.start_time);
+    let key = '';
+    if (dimension === '日') {
+      key = d.toISOString().slice(0, 10);
+    } else if (dimension === '週') {
+      const year = d.getFullYear();
+      const firstDay = new Date(d.getFullYear(), 0, 1);
+      const dayOfYear = Math.floor((d - firstDay) / 86400000) + 1;
+      const week = Math.ceil(dayOfYear / 7);
+      key = `${year}-W${week.toString().padStart(2, '0')}`;
+    } else if (dimension === '月') {
+      key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    } else if (dimension === '年') {
+      key = `${d.getFullYear()}`;
+    }
+    
+    if (!grouped[key]) grouped[key] = 0;
+    grouped[key] += parseFloat(record.total_amount) || 0;
+  });
+  
+  return Object.entries(grouped)
+    .map(([period, revenue]) => ({ period, revenue }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+}
+
 const RevenueStatisticsCard = () => {
-  const [startDate, setStartDate] = React.useState('2025-08-01'); // Default start date
-  const [endDate, setEndDate] = React.useState('2025-08-11'); // Default end date
-  const [dimension, setDimension] = React.useState('日'); // Default dimension
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [rawData, setRawData] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  
+  const today = new Date();
+  const defaultEnd = today.toISOString().slice(0, 10);
+  const defaultStart = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [startDate, setStartDate] = React.useState(defaultStart);
+  const [endDate, setEndDate] = React.useState(defaultEnd);
+  const [dimension, setDimension] = React.useState('日');
+
+  // 獲取數據
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const billingRecords = await fetchBillingRecords(startDate, endDate);
+      setRawData(billingRecords);
+      const grouped = groupRevenueByDimension(billingRecords, dimension);
+      setChartData(grouped);
+    } catch (err) {
+      setError('獲取營收數據失敗: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [startDate, endDate, dimension]);
 
   const handleStartDateChange = (date) => {
     setStartDate(date);
@@ -38,119 +123,65 @@ const RevenueStatisticsCard = () => {
     setDimension(newDimension);
   };
 
-  const calculateAverageRevenue = () => {
-    // Mock calculation logic based on dimension
-    switch (dimension) {
-      case '日':
-        return '$22,000'; // Daily average
-      case '週':
-        return '$154,000'; // Weekly average
-      case '月':
-        return '$660,000'; // Monthly average
-      case '年':
-        return '$7,920,000'; // Yearly average
-      default:
-        return '$0';
-    }
-  };
+  // 計算統計數據
+  const totalRevenue = rawData.reduce((sum, record) => sum + (parseFloat(record.total_amount) || 0), 0);
+  const avgRevenue = chartData.length > 0 ? totalRevenue / chartData.length : 0;
+  const avgDailyRevenue = totalRevenue / Math.max(1, Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)));
+  const avgPricePerKwh = rawData.length > 0 ? totalRevenue / Math.max(1, rawData.reduce((sum, record) => sum + (parseFloat(record.energy_consumed) || 0), 0)) : 0;
 
-  const getUpdatedChartData = () => {
-    const xAxis = getXAxisData();
-
-    // Generate fallback data dynamically
-    const generateData = (label) => {
-      return { label, revenue: Math.floor(Math.random() * 10000) };
-    };
-
-    let rawData;
-    if (dimension === '日') {
-      rawData = xAxis.map((date) => generateData(date));
-    } else if (dimension === '週') {
-      rawData = xAxis.map((week) => generateData(week));
-    } else if (dimension === '月') {
-      rawData = xAxis.map((month) => generateData(month));
-    } else if (dimension === '年') {
-      rawData = xAxis.map((year) => generateData(year));
-    }
-
-    return rawData.map((item) => ({
-      label: item.label,
-      revenue: item.revenue
-    }));
-  };
-
-  const getXAxisData = () => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const xAxis = [];
-
-    if (dimension === '日') {
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        xAxis.push(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`);
-      }
-    } else if (dimension === '週') {
-      let weekIndex = 1;
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
-        xAxis.push(`第${weekIndex++}週`);
-      }
-    } else if (dimension === '月') {
-      for (let d = new Date(start); d <= end; d.setMonth(d.getMonth() + 1)) {
-        xAxis.push(`${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`);
-      }
-    } else if (dimension === '年') {
-      for (let d = new Date(start); d <= end; d.setFullYear(d.getFullYear() + 1)) {
-        xAxis.push(`${d.getFullYear()}年`);
-      }
-    }
-
-    return xAxis;
-  };
-
-  const updatedRevenue = calculateAverageRevenue();
-  const updatedChartData = getUpdatedChartData();
-  const xAxisData = getXAxisData();
+  const xAxisData = chartData.map(item => item.period);
 
   // ECharts options for monthly revenue trend
-  const revenueOption = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: params => {
-        const data = params && params[0] && params[0].data ? params[0].data : {};
-        const label = params && params[0] && params[0].name ? params[0].name : '未知';
-        const revenue = typeof data.value === 'number' ? `$${data.value.toLocaleString()}` : '未知';
-        return `${label}<br/>營收: ${revenue}`;
-      }
+ const revenueOption = {
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: { type: 'shadow' },
+    formatter: (params) => {
+      if (!params?.length) return '';
+      const { name, value } = params[0];
+      return `${name}<br/>營收：$${value.toLocaleString()}`;
     },
-    grid: { left: '2%', right: '20', top: '40', bottom: '40', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: xAxisData, // Dynamically generated X-axis data
-      name: dimension === '日' ? '日期' : dimension === '週' ? '週次' : dimension === '月' ? '月份' : '年份'
-    },
-    yAxis: {
-      type: 'value',
+  },
+  grid: { left: '2%', right: '20', top: '40', bottom: '40', containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: chartData.map((item) => item.period),
+    name:
+      dimension === '日'
+        ? '日期'
+        : dimension === '週'
+        ? '週次'
+        : dimension === '月'
+        ? '月份'
+        : '年份',
+  },
+  yAxis: {
+    type: 'value',
+    name: '營收',
+    axisLabel: { formatter: (value) => `$${value}` },
+  },
+  series: [
+    {
       name: '營收',
-      axisLabel: { formatter: value => `$${value}` }
+      type: 'bar',
+      data: chartData.map((d) => d.revenue),
+      itemStyle: { color: '#8884d8' },
+      barWidth: 24,
     },
-    series: [
-      {
-        type: 'bar',
-        data: updatedChartData.map(d => ({
-          value: d.revenue,
-          label: d.label
-        })),
-        itemStyle: { color: '#8884d8' },
-        barWidth: 24
-      }
-    ]
-  };
+  ],
+};
   return (
     <Card sx={{ width: '100%' }}>
       <CardContent>
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-          充電樁 營收統計
+          營收統計
         </Typography>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {/* 上層統計卡片 */}
@@ -158,34 +189,34 @@ const RevenueStatisticsCard = () => {
             <PowerOverviewIndicatorCard
               icon={<AttachMoney />}
               label={`${dimension}平均營收`}
-              value={updatedRevenue}
+              value={`$${avgRevenue.toFixed(0)}`}
               valueColor="success"
               iconColor="success"
             />
             <PowerOverviewIndicatorCard
               icon={<TrendingUp />}
               label="平均每日營收"
-              value="$108.5"
+              value={`$${avgDailyRevenue.toFixed(0)}`}
               valueColor="primary"
               iconColor="primary"
             />
             <PowerOverviewIndicatorCard
               icon={<AccountBalance />}
               label="累計總營收"
-              value="$108,000"
+              value={`$${totalRevenue.toFixed(0)}`}
               valueColor="info"
               iconColor="info"
             />
             <PowerOverviewIndicatorCard
               icon={<MonetizationOn />}
               label="平均每度價格"
-              value="$2.75"
+              value={`$${avgPricePerKwh.toFixed(2)}`}
               valueColor="warning"
               iconColor="warning"
             />
           </Box>
 
-                    {/* 篩選條件區 */}
+          {/* 篩選條件區 */}
           <Box sx={{ mb: 2 }}>
             <DimensionDatePicker
               startDate={startDate}
@@ -202,13 +233,17 @@ const RevenueStatisticsCard = () => {
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Paper elevation={0} sx={{ width: '100%', height: '400px', p: 1.5 }}>
               <Typography variant="h6" gutterBottom>
-                月度營收趨勢
+                營收趨勢
               </Typography>
-              <ReactECharts option={revenueOption} style={{ height: '340px', width: '100%' }} />
+              {loading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" sx={{ height: '340px' }}>
+                  <CircularProgress size={40} />
+                </Box>
+              ) : (
+                <ReactECharts option={revenueOption} style={{ height: '340px', width: '100%' }} />
+              )}
             </Paper>
           </Box>
-
-
 
         </Box>
       </CardContent>
