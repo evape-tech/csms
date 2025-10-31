@@ -5,7 +5,8 @@ import type { NextRequest } from 'next/server';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*', // 生產環境建議改為特定網域
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, ngrok-skip-browser-warning',
+  'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Max-Age': '86400', // 24小時
 };
 
