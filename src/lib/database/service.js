@@ -1085,6 +1085,140 @@ class DatabaseService {
       where: { user_id: userId }
     });
   }
+
+  // ===============================
+  // Payment/TapPay Operations
+  // ===============================
+
+  /**
+   * 建立支付訂單記錄
+   */
+  async createPaymentOrder(data) {
+    const client = getDatabaseClient();
+    
+    // 1. 取得或建立用戶錢包
+    let wallet = await client.user_wallets.findUnique({
+      where: { user_id: data.userId }
+    });
+
+    if (!wallet) {
+      wallet = await client.user_wallets.create({
+        data: {
+          user_id: data.userId,
+          balance: 0,
+          currency: data.currency || 'TWD',
+          status: 'ACTIVE'
+        }
+      });
+    }
+
+    // 2. 記錄錢包交易（充值）
+    const amount = typeof data.amount === 'number' ? data.amount : parseFloat(data.amount);
+    const balanceBefore = typeof wallet.balance === 'number' ? wallet.balance : wallet.balance.toNumber ? wallet.balance.toNumber() : parseFloat(wallet.balance);
+    const balanceAfter = balanceBefore + amount;
+
+    const walletTransaction = await client.wallet_transactions.create({
+      data: {
+        user_id: data.userId,
+        wallet_id: wallet.id,
+        transaction_type: 'DEPOSIT',
+        amount: amount,
+        balance_before: balanceBefore,
+        balance_after: balanceAfter,
+        payment_method: data.paymentMethod,
+        payment_reference: data.orderId, // 第三方金流訂單號
+        description: data.description,
+        status: 'PENDING',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+
+    return walletTransaction;
+  }
+
+  /**
+   * 查詢支付訂單（錢包交易）
+   */
+  async getPaymentOrder(orderId) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.findFirst({
+      where: { payment_reference: orderId }
+    });
+  }
+
+  /**
+   * 更新支付訂單狀態
+   */
+  async updatePaymentOrderStatus(orderId, status) {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.updateMany({
+      where: { payment_reference: orderId },
+      data: {
+        status: status,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * 更新支付訂單的支付參考和狀態
+   */
+  async updatePaymentOrderReference(orderId, paymentReference, status = 'PENDING') {
+    const client = getDatabaseClient();
+    return await client.wallet_transactions.updateMany({
+      where: { payment_reference: orderId },
+      data: {
+        description: `TapPay ${paymentReference}`,
+        status: status,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * 更新支付訂單（含回調資訊）
+   */
+  async updatePaymentOrderWithCallback(orderId, callbackData, finalStatus) {
+    const client = getDatabaseClient();
+    
+    const existingOrder = await this.getPaymentOrder(orderId);
+    if (!existingOrder) {
+      throw new Error(`支付訂單不存在: ${orderId}`);
+    }
+
+    // 支付成功時，更新錢包餘額
+    if (finalStatus === 'COMPLETED') {
+      const wallet = await client.user_wallets.findUnique({
+        where: { id: existingOrder.wallet_id }
+      });
+
+      if (wallet) {
+        const currentBalance = typeof wallet.balance === 'number' ? wallet.balance : wallet.balance.toNumber ? wallet.balance.toNumber() : parseFloat(wallet.balance);
+        const amount = typeof existingOrder.amount === 'number' ? existingOrder.amount : existingOrder.amount.toNumber ? existingOrder.amount.toNumber() : parseFloat(existingOrder.amount);
+        const newBalance = currentBalance + amount;
+
+        await client.user_wallets.update({
+          where: { id: wallet.id },
+          data: {
+            balance: newBalance,
+            updatedAt: new Date()
+          }
+        });
+      }
+    }
+
+    return await client.wallet_transactions.updateMany({
+      where: { payment_reference: orderId },
+      data: {
+        status: finalStatus,
+        description: finalStatus === 'COMPLETED' 
+          ? `TapPay 充值成功 (${callbackData.rec_trade_id})`
+          : `TapPay 充值失敗 (${callbackData.rec_trade_id})`,
+        updatedAt: new Date()
+      }
+    });
+  }
 }
 
 // 導出單例實例
