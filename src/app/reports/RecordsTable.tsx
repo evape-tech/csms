@@ -1,23 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TableSortLabel,
-  Paper,
-  Button,
-  TextField,
-  InputAdornment,
-  Chip,
-  TablePagination,
-  Typography,
-  Stack
+  Box, Card, CardContent, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, TableSortLabel, Paper, Button, TextField,
+  InputAdornment, Chip, TablePagination, Typography, Stack
 } from '@mui/material';
 import {
   Download as DownloadIcon,
@@ -48,6 +33,7 @@ interface RecordsTableProps {
   loading?: boolean;
   error?: string | null;
   onRefresh?: () => void;
+  onAdvancedFilter?: () => void;
 }
 
 export default function RecordsTable({
@@ -60,7 +46,8 @@ export default function RecordsTable({
   onExport,
   loading = false,
   error,
-  onRefresh
+  onRefresh,
+  onAdvancedFilter
 }: RecordsTableProps) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -193,6 +180,7 @@ export default function RecordsTable({
                 variant="outlined"
                 startIcon={<FilterIcon />}
                 size="small"
+                onClick={onAdvancedFilter || (() => {})}
               >
                 進階篩選
               </Button>

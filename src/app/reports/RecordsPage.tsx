@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Box } from '@mui/material';
 import DateFilter from './DateFilter';
 import RecordsTable from './RecordsTable';
+import { FilterField } from './types/filter';
+import {
+  Box, Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, TextField, Select, MenuItem, FormControl, InputLabel,
+  Checkbox, ListItemText, OutlinedInput, Stack
+} from '@mui/material';
 
 interface Column {
   id: string;
@@ -25,6 +30,9 @@ interface RecordsPageProps {
   error?: string | null;
   initialStartDate?: string;
   initialEndDate?: string;
+  filterable?: boolean;
+  filterConfig?: FilterField[];  // 每個欄位的篩選設定
+  onAdvancedFilter?: (filters: Record<string, any>) => void;
 }
 
 export default function RecordsPage({
@@ -39,11 +47,16 @@ export default function RecordsPage({
   loading,
   error,
   initialStartDate,
-  initialEndDate
+  initialEndDate,
+  filterable = false,
+  filterConfig = [],
+  onAdvancedFilter
 }: RecordsPageProps) {
   const [startDate, setStartDate] = useState(initialStartDate ?? '');
   const [endDate, setEndDate] = useState(initialEndDate ?? '');
   const [filteredData, setFilteredData] = useState(data);
+  const [openAdvFilter, setOpenAdvFilter] = useState(false);
+  const [advFilters, setAdvFilters] = useState<Record<string, any>>({});
 
   useEffect(() => {
     setFilteredData(data);
@@ -95,6 +108,15 @@ export default function RecordsPage({
     setFilteredData(data);
   };
 
+  const handleAdvFilter = () => {
+    onAdvancedFilter?.(advFilters);
+    setOpenAdvFilter(false);
+  };
+
+  const handleAdvFilterChange = (id: string, value: any) => {
+    setAdvFilters(prev => ({ ...prev, [id]: value }));
+  };
+  
   return (
     <Box>
       <DateFilter
@@ -116,7 +138,101 @@ export default function RecordsPage({
         error={error || undefined}
         onExport={onExport}
         onRefresh={onRefresh}
+        filterable={filterable}
+        onAdvancedFilter={() => setOpenAdvFilter(true)}  // 新增
       />
+      {/* 進階篩選 Modal */}
+      <Dialog open={openAdvFilter} onClose={() => setOpenAdvFilter(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>進階篩選</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            {filterConfig.map(field => {
+              if (field.type === 'text') {
+                return (
+                  <TextField
+                    key={field.id}
+                    label={field.label}
+                    value={advFilters[field.id] || ''}
+                    onChange={e => handleAdvFilterChange(field.id, e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                );
+              }
+              if (field.type === 'select') {
+                return (
+                  <FormControl key={field.id} fullWidth size="small">
+                    <InputLabel>{field.label}</InputLabel>
+                    <Select
+                      value={advFilters[field.id] || ''}
+                      onChange={e => handleAdvFilterChange(field.id, e.target.value)}
+                      label={field.label}
+                    >
+                      <MenuItem value=""><em>全部</em></MenuItem>
+                      {field.options?.map(opt => (
+                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                );
+              }
+              if (field.type === 'multi-select') {
+                return (
+                  <FormControl key={field.id} fullWidth size="small">
+                    <InputLabel>{field.label}</InputLabel>
+                    <Select
+                      multiple
+                      value={advFilters[field.id] || []}
+                      onChange={e => handleAdvFilterChange(field.id, e.target.value)}
+                      input={<OutlinedInput label={field.label} />}
+                      renderValue={(selected) => (selected as string[]).join(', ')}
+                    >
+                      {field.options?.map(opt => (
+                        <MenuItem key={opt} value={opt}>
+                          <Checkbox checked={(advFilters[field.id] || []).includes(opt)} />
+                          <ListItemText primary={opt} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                );
+              }
+              if (field.type === 'range') {
+                return (
+                  <Stack direction="row" spacing={1} key={field.id}>
+                    <TextField
+                      label={`最小${field.label}`}
+                      type="number"
+                      size="small"
+                      value={advFilters[field.minField!] || ''}
+                      onChange={e => handleAdvFilterChange(field.minField!, e.target.value)}
+                      sx={{ flex: 1 }}
+                    />
+                    <TextField
+                      label={`最大${field.label}`}
+                      type="number"
+                      size="small"
+                      value={advFilters[field.maxField!] || ''}
+                      onChange={e => handleAdvFilterChange(field.maxField!, e.target.value)}
+                      sx={{ flex: 1 }}
+                    />
+                  </Stack>
+                );
+              }
+              return null;
+            })}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenAdvFilter(false)}>取消</Button>
+          <Button onClick={() => { setAdvFilters({}); setOpenAdvFilter(false); }} color="inherit">
+            清除
+          </Button>
+          <Button onClick={handleAdvFilter} variant="contained">
+            套用篩選
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

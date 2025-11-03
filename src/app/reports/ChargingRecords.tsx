@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
+import { FilterField } from './types/filter';
 
 const columns = [
   {
@@ -56,6 +57,13 @@ const columns = [
     sortable: true,
     format: (value: number) => `$${value.toLocaleString()}`
   }
+];
+
+const filterConfig: FilterField[] = [
+  { id: 'user', label: '用戶', type: 'text' },
+  { id: 'charger', label: '充電樁', type: 'select', options: ['A01', 'B02', 'C03'] },
+  { id: 'kWh', label: '電量範圍 (kWh)', type: 'range', minField: 'minKWh', maxField: 'maxKWh' },
+  { id: 'fee', label: '費用範圍 (NT$)', type: 'range', minField: 'minFee', maxField: 'maxFee' },
 ];
 
 const getDefaultRange = (days = 30) => {
@@ -198,6 +206,12 @@ export default function ChargingRecords() {
       error={error}
       initialStartDate={appliedRange.start}
       initialEndDate={appliedRange.end}
+      filterable={true}
+      filterConfig={filterConfig}
+      onAdvancedFilter={(filters) => {
+      // 合併日期 + 進階篩選，呼叫 fetchRecords
+      fetchRecords({ ...rangeRef.current, ...filters });
+      }}
     />
   );
 }
