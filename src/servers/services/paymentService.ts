@@ -11,6 +11,7 @@
  */
 
 import axios from 'axios';
+import { nanoid } from 'nanoid';
 import { databaseService } from '../../lib/database/service.js';
 
 interface CreateOrderParams {
@@ -434,7 +435,7 @@ export class PaymentService {
         ],
         result_url: {
           frontend_redirect_url: process.env.TAPPAY_FRONTEND_REDIRECT_URL,
-          backend_notify_url: process.env.TAPPAY_BACKEND_NOTIFY_URL + '/api/payment/tappay-linepay-callback'
+          backend_notify_url: process.env.TAPPAY_BACKEND_NOTIFY_URL + '/api/payment/tappay-callback'
         },
         three_domain_secure: true,
         remember: false,
@@ -516,7 +517,7 @@ export class PaymentService {
         ],
         result_url: {
           frontend_redirect_url: process.env.TAPPAY_FRONTEND_REDIRECT_URL,
-          backend_notify_url: process.env.TAPPAY_BACKEND_NOTIFY_URL + '/api/payment/tappay-linepay-callback'
+          backend_notify_url: process.env.TAPPAY_BACKEND_NOTIFY_URL + '/api/payment/tappay-callback'
         },
         payment_method: 'EASYWALLET',
         three_domain_secure: false,
@@ -642,7 +643,7 @@ export class PaymentService {
    */
   private static generateOrderId(): string {
     const timestamp = Date.now();
-    const random = Math.random().toString(36).substr(2, 9);
-    return `ORDER_${timestamp}_${random}`;
+    const nanoId = nanoid(9);
+    return `ORDER_${timestamp}_${nanoId}`;
   }
 }
