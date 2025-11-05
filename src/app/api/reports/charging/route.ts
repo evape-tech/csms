@@ -28,6 +28,7 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
   const search = searchParams.get('search');
   const cpid = searchParams.get('cpid');
   const status = searchParams.get('status');
+  const charger = searchParams.get('charger');
 
   const where: Record<string, any> = {};
 
@@ -43,6 +44,18 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
 
   if (status) {
     where.status = status;
+  }
+
+  // 🔹 Charger (cpid / cpsn) 過濾
+  if (charger) {
+    const chargerList = charger.split(',').map(v => v.trim()).filter(Boolean);
+    if (chargerList.length > 0) {
+      where.OR = [
+        ...(where.OR || []),
+        { cpid: { in: chargerList } },
+        { cpsn: { in: chargerList } }
+      ];
+    }
   }
 
   const orConditions: any[] = [];

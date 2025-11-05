@@ -177,13 +177,65 @@ export default function RecordsPage({
                 );
               }
               if (field.type === 'multi-select') {
+                const selectedValues = advFilters[field.id] || [];
+                const allSelected = field.options?.length && selectedValues.length === field.options.length;
+              
+                const handleToggleAll = () => {
+                  const newValue = allSelected ? [] : field.options || [];
+                  handleAdvFilterChange(field.id, newValue);              
+                  // 🔥 全選/取消全選時立即觸發充電樁更新
+                  if (field.id === 'meterNo') {
+                    onAdvancedFilter?.({ ...advFilters, [field.id]: newValue });
+                  }
+                };
+              
+                const handleSelectChange = (value: string[]) => {
+                  handleAdvFilterChange(field.id, value);              
+                  // 🔥 單選/多選時，如果是電表，也立即觸發
+                  if (field.id === 'meterNo') {
+                    onAdvancedFilter?.({ ...advFilters, [field.id]: value });
+                  }
+                };
+
                 return (
                   <FormControl key={field.id} fullWidth size="small">
-                    <InputLabel>{field.label}</InputLabel>
+                    {/* <InputLabel>{field.label}</InputLabel> */}
+                     <Stack
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      sx={{ mb: 0.5 }}
+                    >
+                      <Box
+                        component="label"
+                        sx={{
+                          fontSize: '0.9rem',
+                          color: 'text.secondary',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {field.label}
+                      </Box>
+              
+                      <Button
+                        onClick={handleToggleAll}
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: '0.8rem',
+                          padding: '2px 6px',
+                          minWidth: 'unset',
+                        }}
+                      >
+                        {allSelected ? '取消全選' : '全選'}
+                      </Button>
+                    </Stack>
                     <Select
                       multiple
-                      value={advFilters[field.id] || []}
-                      onChange={e => handleAdvFilterChange(field.id, e.target.value)}
+                      value={advFilters[field.id] || []}                      
+                      onChange={e => handleSelectChange(e.target.value)}
                       input={<OutlinedInput label={field.label} />}
                       renderValue={(selected) => (selected as string[]).join(', ')}
                     >
