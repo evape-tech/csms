@@ -38,6 +38,22 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
   const actionType = searchParams.get('actionType');
   const entityType = searchParams.get('entityType');
   const status = searchParams.get('status');
+  const actionTypeMap: Record<string, string> = {
+    '建立': 'CREATE',
+    '更新': 'UPDATE',
+    '刪除': 'DELETE',
+    '登入': 'LOGIN',
+    '登出': 'LOGOUT',
+    '匯出': 'EXPORT',
+    '匯入': 'IMPORT',
+    '核准': 'APPROVE',
+    '駁回': 'REJECT',
+    '重置': 'RESET'
+  };
+  const statusMap: Record<string, string> = {
+    '成功': 'SUCCESS',
+    '失敗': 'FAILED'
+  };
 
   const where: Record<string, any> = {};
 
@@ -52,7 +68,7 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
   }
 
   if (actionType) {
-    where.action_type = actionType;
+    where.action_type = actionTypeMap[actionType] ?? actionType;
   }
 
   if (entityType) {
@@ -60,7 +76,7 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
   }
 
   if (status) {
-    where.status = status;
+    where.status = statusMap[status] ?? status;
   }
 
   const orConditions: any[] = [];
