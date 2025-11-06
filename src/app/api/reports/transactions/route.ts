@@ -52,8 +52,19 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
   const userId = searchParams.get('userId');
   const type = searchParams.get('type');
   const status = searchParams.get('status');
+  const minAmount = searchParams.get('minAmount');
+  const minBalance = searchParams.get('minBalance');
 
   const where: Record<string, any> = {};
+  //中文類型對應 DB 代碼
+  const typeMap: Record<string, string> = {
+    '儲值': 'DEPOSIT',
+    '扣款': 'PAYMENT',
+    '退款': 'REFUND',
+    '提領': 'WITHDRAWAL',
+    '調整': 'ADJUSTMENT'
+  };  
+  const mappedType = typeMap[type ?? ''] || type;
 
   if (startDate || endDate) {
     where.createdAt = {};
@@ -69,12 +80,21 @@ const buildWhereClause = (searchParams: URLSearchParams) => {
     where.user_id = userId;
   }
 
-  if (type) {
-    where.transaction_type = type;
+  if (mappedType) {
+    where.transaction_type = mappedType;
   }
 
   if (status) {
     where.status = status;
+  }
+
+  //進階條件：金額、餘額（皆為「以上」）
+  if (minAmount && !isNaN(Number(minAmount))) {
+    where.amount = { gte: Number(minAmount) };
+  }
+
+  if (minBalance && !isNaN(Number(minBalance))) {
+    where.balance_after = { gte: Number(minBalance) };
   }
 
   const orConditions: any[] = [];

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
+import { FilterField } from './types/filter';
 
 const columns = [
   {
@@ -58,6 +59,25 @@ const getDefaultRange = (days = 30) => {
   };
 };
 
+const filterConfig: FilterField[] = [
+  {
+    id: 'type',
+    label: '類型',
+    type: 'select',
+    options: ['儲值', '扣款', '退款']
+  },
+  {
+    id: 'minAmount',
+    label: '金額 (以上)',
+    type: 'text'
+  },
+  {
+    id: 'minBalance',
+    label: '餘額 (以上)',
+    type: 'text'
+  }
+];
+
 interface DateRange {
   start: string;
   end: string;
@@ -71,14 +91,14 @@ export default function TransactionRecords() {
   const [appliedRange, setAppliedRange] = useState<DateRange>(defaultRange);
   const rangeRef = useRef<DateRange>(defaultRange);
 
-  const fetchRecords = useCallback(async (range?: Partial<DateRange>) => {
+  const fetchRecords = useCallback(async (paramsInput?: Partial<DateRange> & Record<string, any>) => {
     setLoading(true);
     setError(null);
 
     try {
       const currentRange = rangeRef.current;
-      const appliedStart = range?.start ?? currentRange.start;
-      const appliedEnd = range?.end ?? currentRange.end;
+      const appliedStart = paramsInput?.start ?? currentRange.start;
+      const appliedEnd = paramsInput?.end ?? currentRange.end;
 
       const params = new URLSearchParams({ limit: '500' });
 
@@ -89,6 +109,11 @@ export default function TransactionRecords() {
       if (appliedEnd) {
         params.set('endDate', appliedEnd);
       }
+
+      //加上進階篩選條件
+      if (paramsInput?.type) params.set('type', paramsInput.type);
+      if (paramsInput?.minAmount) params.set('minAmount', paramsInput.minAmount);
+      if (paramsInput?.minBalance) params.set('minBalance', paramsInput.minBalance);
 
       const response = await fetch(`/api/reports/transactions?${params.toString()}`);
       const json = await response.json();
@@ -188,6 +213,12 @@ export default function TransactionRecords() {
       error={error}
       initialStartDate={appliedRange.start}
       initialEndDate={appliedRange.end}
+      filterable={true}
+      filterConfig={filterConfig}
+      onAdvancedFilter={(filters) => {
+      // 合併日期 + 進階篩選，呼叫 fetchRecords
+      fetchRecords({ ...rangeRef.current, ...filters });
+      }}
     />
   );
 }

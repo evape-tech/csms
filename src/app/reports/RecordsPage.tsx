@@ -109,6 +109,13 @@ export default function RecordsPage({
   };
 
   const handleAdvFilter = () => {
+    // 🔍 過濾掉空值欄位
+    const cleanedFilters = Object.fromEntries(
+      Object.entries(advFilters).filter(([_, v]) => {
+        if (Array.isArray(v)) return v.length > 0; // 保留有選項的多選
+        return v !== '' && v !== null && v !== undefined; // 過濾空值
+      })
+    );
     //若有充電樁欄位但未選擇，提示錯誤並中止
     const hasChargerField = filterConfig.some(f => f.id === 'charger');
     if (hasChargerField && (!advFilters['charger'] || advFilters['charger'].length === 0)) {
@@ -154,14 +161,18 @@ export default function RecordsPage({
           <Stack spacing={2} mt={1}>
             {filterConfig.map(field => {
               if (field.type === 'text') {
+                // 自動判斷是否為數字欄位
+                const isNumberField = /(以上|以下|金額|餘額|數量|次數)/.test(field.label);
                 return (
                   <TextField
                     key={field.id}
                     label={field.label}
+                    type={isNumberField ? 'number' : 'text'} // ✅ 自動切換輸入類型
                     value={advFilters[field.id] || ''}
                     onChange={e => handleAdvFilterChange(field.id, e.target.value)}
                     fullWidth
                     size="small"
+                    inputProps={isNumberField ? { min: 0, step: 'any' } : undefined}
                   />
                 );
               }
@@ -171,12 +182,17 @@ export default function RecordsPage({
                     <InputLabel>{field.label}</InputLabel>
                     <Select
                       value={advFilters[field.id] || ''}
-                      onChange={e => handleAdvFilterChange(field.id, e.target.value)}
+                      onChange={e =>
+                        handleAdvFilterChange(field.id, e.target.value === '全部' ? '' : e.target.value)
+                      }
                       label={field.label}
+                      // ✅ 若值為空字串時顯示「全部」
+                      renderValue={(selected) => selected === '' ? '全部' : selected}
                     >
-                      <MenuItem value=""><em>全部</em></MenuItem>
                       {field.options?.map(opt => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                        <MenuItem key={opt} value={opt}>
+                          {opt}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
