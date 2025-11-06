@@ -70,9 +70,6 @@ export default function UsageRecords() {
   // 動態選項  
   const [meterOptions, setMeterOptions] = useState<string[]>([]);
   const [chargerOptions, setChargerOptions] = useState<string[]>([]);
-  // 新增 state 追蹤多選
-  const [selectedMeters, setSelectedMeters] = useState<string[]>([]); 
-  const [selectedChargers, setSelectedChargers] = useState<string[]>([]);
   
   // 抓充電樁選項，依選中的電表過濾
   const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
@@ -170,12 +167,7 @@ export default function UsageRecords() {
     }, [fetchChargersByMeters]);
     // onAdvancedFilter 處理：電表改變時自動刷新充電樁選項
     const handleAdvancedFilter = useCallback((filters: Record<string, any>) => {
-      const meters: string[] = filters.meterNo || [];
-      setSelectedMeters(meters);
-      
-      const chargers: string[] = filters.charger || [];
-      setSelectedChargers(chargers);
-    
+      const meters: string[] = filters.meterNo || [];   
       // 更新充電樁選項
       fetchChargersByMeters(meters);
     

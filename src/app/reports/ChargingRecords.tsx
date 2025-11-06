@@ -94,33 +94,32 @@ export default function ChargingRecords() {
   const [meterOptions, setMeterOptions] = useState<string[]>([]);
   const [chargerOptions, setChargerOptions] = useState<string[]>([]);
   // 新增 state 追蹤多選
-const [selectedMeters, setSelectedMeters] = useState<string[]>([]); 
-const [selectedChargers, setSelectedChargers] = useState<string[]>([]);
+  //const [selectedMeters, setSelectedMeters] = useState<string[]>([]); 
+  //const [selectedChargers, setSelectedChargers] = useState<string[]>([]);
 
-// 抓充電樁選項，依選中的電表過濾
-const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
-  try {
-    let url = '/api/guns/search?search=';
-    if (meters.length > 0) {
-      url = `/api/guns/search?meterNo=${meters.join(',')}`; // MODIFIED
+  // 抓充電樁選項，依選中的電表過濾
+  const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
+    try {
+      let url = '/api/guns/search?search=';
+      if (meters.length > 0) {
+        url = `/api/guns/search?meterNo=${meters.join(',')}`; // MODIFIED
+      }
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success) {
+        setChargerOptions(json.data || []);
+      }
+    } catch (err) {
+      console.error('抓充電樁失敗', err);
     }
-    const res = await fetch(url);
-    const json = await res.json();
-    if (json.success) {
-      setChargerOptions(json.data || []);
-    }
-  } catch (err) {
-    console.error('抓充電樁失敗', err);
+  }, []);
+  
+  
+    interface FetchParams extends Partial<DateRange> {
+    meterNo?: string[];
+    charger?: string[];
   }
-}, []);
 
-
-  interface FetchParams extends Partial<DateRange> {
-  meterNo?: string[];
-  charger?: string[];
-}
-
-  //const fetchRecords = useCallback(async (range?: Partial<DateRange>) => {
   const fetchRecords = useCallback(async (params: FetchParams = {}) => {
     setLoading(true);
     setError(null);
@@ -140,13 +139,10 @@ const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
         query .set('endDate', appliedEnd);
       }
 
-      // ✅ 處理進階篩選條件
-    if (params.meterNo && params.meterNo.length > 0) {
-      query.set('meterNo', params.meterNo.join(','));
-    }
-    if (params.charger && params.charger.length > 0) {
-      query.set('charger', params.charger.join(','));
-    }
+      // 處理進階篩選條件
+      if (params.charger && params.charger.length > 0) {
+        query.set('charger', params.charger.join(','));
+      }
 
       const response = await fetch(`/api/reports/charging?${query .toString()}`);
       const json = await response.json();
@@ -199,11 +195,6 @@ const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
   // onAdvancedFilter 處理：電表改變時自動刷新充電樁選項
   const handleAdvancedFilter = useCallback((filters: Record<string, any>) => {
     const meters: string[] = filters.meterNo || [];
-    setSelectedMeters(meters);
-    
-    const chargers: string[] = filters.charger || [];
-    setSelectedChargers(chargers);
-  
     // 更新充電樁選項
     fetchChargersByMeters(meters);
   

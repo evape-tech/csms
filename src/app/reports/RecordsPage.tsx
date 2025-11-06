@@ -109,6 +109,12 @@ export default function RecordsPage({
   };
 
   const handleAdvFilter = () => {
+    //若有充電樁欄位但未選擇，提示錯誤並中止
+    const hasChargerField = filterConfig.some(f => f.id === 'charger');
+    if (hasChargerField && (!advFilters['charger'] || advFilters['charger'].length === 0)) {
+      alert('請選擇至少一個充電樁');
+      return;
+    }
     onAdvancedFilter?.(advFilters);
     setOpenAdvFilter(false);
   };
@@ -183,7 +189,7 @@ export default function RecordsPage({
                 const handleToggleAll = () => {
                   const newValue = allSelected ? [] : field.options || [];
                   handleAdvFilterChange(field.id, newValue);              
-                  // 🔥 全選/取消全選時立即觸發充電樁更新
+                  //全選/取消全選時立即觸發充電樁更新
                   if (field.id === 'meterNo') {
                     onAdvancedFilter?.({ ...advFilters, [field.id]: newValue });
                   }
@@ -191,7 +197,7 @@ export default function RecordsPage({
               
                 const handleSelectChange = (value: string[]) => {
                   handleAdvFilterChange(field.id, value);              
-                  // 🔥 單選/多選時，如果是電表，也立即觸發
+                  //單選/多選時，如果是電表，也立即觸發
                   if (field.id === 'meterNo') {
                     onAdvancedFilter?.({ ...advFilters, [field.id]: value });
                   }
@@ -277,7 +283,15 @@ export default function RecordsPage({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAdvFilter(false)}>取消</Button>
-          <Button onClick={() => { setAdvFilters({}); setOpenAdvFilter(false); }} color="inherit">
+          <Button
+            onClick={() => {
+              setAdvFilters({});
+              setOpenAdvFilter(false);
+              //清除時立即觸發搜尋更新（重置結果）
+              onAdvancedFilter?.({});
+            }}
+            color="inherit"
+          >
             清除
           </Button>
           <Button onClick={handleAdvFilter} variant="contained">
