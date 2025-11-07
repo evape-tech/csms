@@ -1262,39 +1262,52 @@ class DatabaseService {
   async updatePaymentOrderWithCallback(orderId, callbackData, finalStatus) {
     const client = getDatabaseClient();
     
+    // 1. 查詢現有訂單
     const existingOrder = await this.getPaymentOrder(orderId);
     if (!existingOrder) {
       throw new Error(`支付訂單不存在: ${orderId}`);
     }
 
-    // 支付成功時，更新錢包餘額
+    // 2. 支付成功時，使用事務確保錢包和交易同步更新
     if (finalStatus === 'COMPLETED') {
-      const wallet = await client.user_wallets.findUnique({
-        where: { id: existingOrder.wallet_id }
-      });
+      return await client.$transaction(async (prisma) => {
+        // 3. 更新錢包餘額
+        const wallet = await prisma.user_wallets.findUnique({
+          where: { id: existingOrder.wallet_id }
+        });
 
-      if (wallet) {
-        const currentBalance = typeof wallet.balance === 'number' ? wallet.balance : wallet.balance.toNumber ? wallet.balance.toNumber() : parseFloat(wallet.balance);
-        const amount = typeof existingOrder.amount === 'number' ? existingOrder.amount : existingOrder.amount.toNumber ? existingOrder.amount.toNumber() : parseFloat(existingOrder.amount);
-        const newBalance = currentBalance + amount;
+        if (wallet) {
+          const currentBalance = typeof wallet.balance === 'number' ? wallet.balance : wallet.balance.toNumber ? wallet.balance.toNumber() : parseFloat(wallet.balance);
+          const amount = typeof existingOrder.amount === 'number' ? existingOrder.amount : existingOrder.amount.toNumber ? existingOrder.amount.toNumber() : parseFloat(existingOrder.amount);
+          const newBalance = currentBalance + amount;
 
-        await client.user_wallets.update({
-          where: { id: wallet.id },
+          await prisma.user_wallets.update({
+            where: { id: wallet.id },
+            data: {
+              balance: newBalance,
+              updatedAt: new Date()
+            }
+          });
+        }
+
+        // 4. 更新交易記錄狀態
+        return await prisma.wallet_transactions.updateMany({
+          where: { payment_reference: orderId },
           data: {
-            balance: newBalance,
+            status: finalStatus,
+            description: `TapPay 充值成功 (${callbackData.rec_trade_id})`,
             updatedAt: new Date()
           }
         });
-      }
+      });
     }
 
+    // 支付失敗時，只更新交易狀態（不需要 transaction）
     return await client.wallet_transactions.updateMany({
       where: { payment_reference: orderId },
       data: {
         status: finalStatus,
-        description: finalStatus === 'COMPLETED' 
-          ? `TapPay 充值成功 (${callbackData.rec_trade_id})`
-          : `TapPay 充值失敗 (${callbackData.rec_trade_id})`,
+        description: `TapPay 充值失敗 (${callbackData.rec_trade_id})`,
         updatedAt: new Date()
       }
     });
