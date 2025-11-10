@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
  * 
  * @route PATCH /api/users/me
  * @auth Cookie 或 Bearer Token
- * @body { firstName?: string, lastName?: string, phone?: string, dateOfBirth?: string }
+ * @body { email?: string, firstName?: string, lastName?: string, phone?: string, dateOfBirth?: string }
  * @returns { success: boolean, message: string, user: { ... } }
  */
 export async function PATCH(request: NextRequest) {
@@ -115,7 +115,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     
     // 只允許更新特定欄位
-    const allowedFields = ['firstName', 'lastName', 'phone', 'dateOfBirth'];
+    const allowedFields = ['email', 'firstName', 'lastName', 'phone', 'dateOfBirth'];
     const updateData: any = {};
     
     for (const field of allowedFields) {
@@ -125,7 +125,43 @@ export async function PATCH(request: NextRequest) {
                        field === 'lastName' ? 'last_name' :
                        field === 'dateOfBirth' ? 'date_of_birth' :
                        field;
-        updateData[dbField] = body[field];
+        
+        let value = body[field];
+        
+        // 驗證 email 格式
+        if (dbField === 'email' && value) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(value)) {
+            return NextResponse.json(
+              { error: '電子郵件格式無效' },
+              { status: 400 }
+            );
+          }
+          // 轉換為小寫
+          value = value.toLowerCase();
+        }
+        
+        // 如果是 dateOfBirth，轉換為完整的 ISO-8601 DateTime 格式
+        if (dbField === 'date_of_birth' && value) {
+          try {
+            // 如果只收到日期格式 (YYYY-MM-DD)，轉換為 DateTime (YYYY-MM-DDTHH:mm:ss.sssZ)
+            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+              // 將日期設為當天 00:00:00 UTC
+              value = new Date(value + 'T00:00:00Z').toISOString();
+            } else if (!(value instanceof Date) && typeof value === 'string') {
+              // 如果是字串但不是日期格式，嘗試解析
+              value = new Date(value).toISOString();
+            }
+          } catch (e) {
+            console.error('日期格式轉換失敗:', e);
+            return NextResponse.json(
+              { error: '出生日期格式無效，請使用 YYYY-MM-DD 格式' },
+              { status: 400 }
+            );
+          }
+        }
+        
+        updateData[dbField] = value;
       }
     }
     
