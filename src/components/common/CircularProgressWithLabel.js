@@ -10,9 +10,8 @@ import AnimatedNumber from './AnimatedNumber';
  * @param {number} quantity - 數量
  * @param {boolean} animated - 是否啟用動畫
  */
-export default function CircularProgressWithLabel({ value, label, color, quantity, animated = true }) {
-  const size = 140;
-  const strokeWidth = 12;
+export default function CircularProgressWithLabel({ value, label, color, quantity, animated = true, size = 200 }) {
+  const strokeWidth = Math.max(8, size * 0.08);
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
 
