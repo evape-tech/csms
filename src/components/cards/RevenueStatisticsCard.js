@@ -22,7 +22,7 @@ import PowerOverviewIndicatorCard from '../common/PowerOverviewIndicatorCard';
 
 
 // 從資料庫獲取帳單記錄數據
-async function fetchBillingRecords(startDate, endDate) {
+async function fetchBillingRecords(startDate, endDate, selectedGuns = null) {
   try {
     const params = new URLSearchParams({
       start_date: startDate,
@@ -37,11 +37,25 @@ async function fetchBillingRecords(startDate, endDate) {
     
     const result = await response.json();
     // 安全檢查：確保一定回傳陣列
-    if (Array.isArray(result)) return result;
-    if (Array.isArray(result.transactions)) return result.transactions;
-    if (Array.isArray(result?.data)) return result.data;
-    console.warn("⚠️ API 回傳格式非預期：", result);
-    return [];
+    let records = [];
+    if (Array.isArray(result)) records = result;
+    else if (Array.isArray(result.transactions)) records = result.transactions;
+    else if (Array.isArray(result?.data)) records = result.data;
+    else {
+      console.warn("⚠️ API 回傳格式非預期：", result);
+      return [];
+    }
+
+    // 如果指定了 selectedGuns，過濾出對應充電樁的記錄
+    if (selectedGuns && Array.isArray(selectedGuns) && selectedGuns.length > 0) {
+      records = records.filter(record => {
+        const cpid = record.cpid || '';
+        const cpsn = record.cpsn || '';
+        return selectedGuns.includes(cpid) || selectedGuns.includes(cpsn);
+      });
+    }
+
+    return records;
   } catch (error) {
     console.error("❌ Failed to fetch billing records:", error);
     return [];
@@ -78,7 +92,7 @@ function groupRevenueByDimension(billingRecords, dimension) {
     .sort((a, b) => a.period.localeCompare(b.period));
 }
 
-const RevenueStatisticsCard = () => {
+const RevenueStatisticsCard = ({ selectedGuns = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [rawData, setRawData] = useState([]);
@@ -96,7 +110,7 @@ const RevenueStatisticsCard = () => {
     setLoading(true);
     setError(null);
     try {
-      const billingRecords = await fetchBillingRecords(startDate, endDate);
+      const billingRecords = await fetchBillingRecords(startDate, endDate, selectedGuns);
       setRawData(billingRecords);
       const grouped = groupRevenueByDimension(billingRecords, dimension);
       setChartData(grouped);
@@ -109,7 +123,7 @@ const RevenueStatisticsCard = () => {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, dimension]);
+  }, [startDate, endDate, dimension, selectedGuns]);
 
   const handleStartDateChange = (date) => {
     setStartDate(date);

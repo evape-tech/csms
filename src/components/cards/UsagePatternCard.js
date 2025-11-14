@@ -5,7 +5,7 @@ import ReactECharts from 'echarts-for-react';
 import DimensionDatePicker from '../common/DimensionDatePicker';
 
 // 從資料庫獲取充電交易數據
-async function fetchChargingTransactions(startDate, endDate) {
+async function fetchChargingTransactions(startDate, endDate, selectedGuns = null) {
   try {
     const params = new URLSearchParams({
       start_date: startDate,
@@ -20,11 +20,25 @@ async function fetchChargingTransactions(startDate, endDate) {
     
     const result = await response.json();
     // 安全檢查：確保一定回傳陣列
-    if (Array.isArray(result)) return result;
-    if (Array.isArray(result.transactions)) return result.transactions;
-    if (Array.isArray(result?.data)) return result.data;
-    console.warn("⚠️ API 回傳格式非預期：", result);
-    return [];
+    let transactions = [];
+    if (Array.isArray(result)) transactions = result;
+    else if (Array.isArray(result.transactions)) transactions = result.transactions;
+    else if (Array.isArray(result?.data)) transactions = result.data;
+    else {
+      console.warn("⚠️ API 回傳格式非預期：", result);
+      return [];
+    }
+
+    // 如果指定了 selectedGuns，過濾出對應充電樁的交易
+    if (selectedGuns && Array.isArray(selectedGuns) && selectedGuns.length > 0) {
+      transactions = transactions.filter(tx => {
+        const cpid = tx.cpid || '';
+        const cpsn = tx.cpsn || '';
+        return selectedGuns.includes(cpid) || selectedGuns.includes(cpsn);
+      });
+    }
+
+    return transactions;
   } catch (error) {
     console.error("❌ Failed to fetch charging transactions:", error);
     return [];
@@ -82,7 +96,7 @@ function calculateHourlyUsage(transactions) {
   return hourlyUsage;
 }
 
-const UsagePatternCard = () => {
+const UsagePatternCard = ({ selectedGuns = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
@@ -98,7 +112,7 @@ const UsagePatternCard = () => {
     setLoading(true);
     setError(null);
     try {
-      const transactions = await fetchChargingTransactions(startDate, endDate);
+      const transactions = await fetchChargingTransactions(startDate, endDate, selectedGuns);
       const hourlyData = calculateHourlyUsage(transactions);
       setChartData(hourlyData);
     } catch (err) {
@@ -110,7 +124,7 @@ const UsagePatternCard = () => {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, selectedGuns]);
 
   const handleStartDateChange = (date) => {
     setStartDate(date);
