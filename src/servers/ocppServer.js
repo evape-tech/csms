@@ -511,7 +511,7 @@ async function startServer() {
       // 异步初始化其他服务
       initializeServices().then((mqInitialized) => {
         // 启动HTTP服务器
-        const HOST = process.env.OCPP_HOST || 'localhost';
+        const HOST = process.env.OCPP_HOST || '0.0.0.0';
         const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
         const serverInstance = server.listen(PORT, HOST, () => {
           logger.info(`OCPP服务器正在监听端口 ${PORT} (綁定到: ${HOST})`);
@@ -597,7 +597,7 @@ async function initializeServices() {
   try {
     if (!healthMonitoringService.isRunning) {
       const isDevelopment = process.env.NODE_ENV !== 'production';
-      const HOST = process.env.OCPP_HOST || 'localhost';
+      const HOST = process.env.OCPP_HOST || '0.0.0.0';
       const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
       
       healthMonitoringService.start({

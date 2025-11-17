@@ -7,7 +7,7 @@ const http = require('http');
 const { execSync } = require('child_process');
 
 // 預設配置
-const OCPP_HOST = process.env.OCPP_HOST || 'localhost';
+const OCPP_HOST = process.env.OCPP_HOST || '0.0.0.0';
 const OCPP_PORT = process.env.OCPP_PORT || 8089;
 const CHECK_TIMEOUT = 5000; // 5秒超時
 
