@@ -1012,27 +1012,34 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
         borderRadius: isLinear ? 0 : 2,
       }}>
         {/* Start / Stop */}
+      <Tooltip title={charger.status === 'Unavailable' ? '此充電樁不可用，無法操作' : '啟動充電'}>
+        <span>
         <Button
           variant="outlined"
           color="success"
           startIcon={<PlayArrowIcon />}
           onClick={() => onStartCharging && onStartCharging(charger.id)}
-          disabled={isActionLoading}
+          disabled={isActionLoading || charger.status === 'Unavailable'}
           sx={{ textTransform: 'none', borderColor: '#4caf50', color: '#2e7d32' }}
         >
           啟動
         </Button>
-
+        </span>
+      </Tooltip>
+      <Tooltip title={charger.status === 'Unavailable' ? '此充電樁不可用，無法操作' : '停止充電'}>
+        <span> 
         <Button
           variant="outlined"
           color="error"
           startIcon={<StopIcon />}
           onClick={() => onStopCharging && onStopCharging(charger.id)}
-          disabled={isActionLoading}
+          disabled={isActionLoading || charger.status === 'Unavailable'}
           sx={{ textTransform: 'none', borderColor: '#f44336', color: '#c62828' }}
         >
           停止
         </Button>
+        </span>
+      </Tooltip>
 
         {/* Edit */}
         <Button
