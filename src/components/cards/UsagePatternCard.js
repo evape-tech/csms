@@ -193,7 +193,7 @@ const UsagePatternCard = ({ selectedGuns = null }) => {
                     type: 'value',
                     name: '用電量(kWh)',
                     nameLocation: 'middle',
-                    nameGap: 30,
+                    nameGap: 25,
                   },
                   series: [
                     {

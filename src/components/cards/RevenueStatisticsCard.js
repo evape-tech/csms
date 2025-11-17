@@ -125,6 +125,13 @@ const RevenueStatisticsCard = ({ selectedGuns = null }) => {
     fetchData();
   }, [startDate, endDate, dimension, selectedGuns]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [chartData]);
+
   const handleStartDateChange = (date) => {
     setStartDate(date);
   };
@@ -156,7 +163,7 @@ const RevenueStatisticsCard = ({ selectedGuns = null }) => {
       return `${name}<br/>營收：$${value.toLocaleString()}`;
     },
   },
-  grid: { left: '2%', right: '20', top: '40', bottom: '40', containLabel: true },
+  grid: { left: '2%', right: '3%', top: '40', bottom: '40', containLabel: true },
   xAxis: {
     type: 'category',
     data: chartData.map((item) => item.period),
@@ -245,7 +252,7 @@ const RevenueStatisticsCard = ({ selectedGuns = null }) => {
 
           {/* 中層圖表區 */}
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Paper elevation={0} sx={{ width: '100%', height: '400px', p: 1.5 }}>
+            <Paper elevation={0} sx={{ width: '100%', height: '400px', p: 1.5, overflow: 'hidden' }}>
               <Typography variant="h6" gutterBottom>
                 營收趨勢
               </Typography>
@@ -254,7 +261,13 @@ const RevenueStatisticsCard = ({ selectedGuns = null }) => {
                   <CircularProgress size={40} />
                 </Box>
               ) : (
-                <ReactECharts option={revenueOption} style={{ height: '340px', width: '100%' }} />
+                <ReactECharts
+                  option={revenueOption}
+                  style={{ width: '100%', height: '340px' }}
+                  notMerge={true}
+                  lazyUpdate={true}
+                  opts={{ renderer: 'canvas' }}
+                />
               )}
             </Paper>
           </Box>
