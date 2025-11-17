@@ -23,7 +23,7 @@ export async function GET() {
       );
     }
 
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
     const startOfToday = getStartOfToday();
 
     const [

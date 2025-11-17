@@ -25,12 +25,14 @@ export async function GET(request: NextRequest, context: any) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const params = await context.params;
-    const id = BigInt(params.id);
-
-    if (isNaN(id)) {
+    let id: bigint;
+    
+    try {
+      id = BigInt(params.id);
+    } catch {
       return NextResponse.json(
         { success: false, message: '無效的維護記錄 ID' },
         { status: 400 }
@@ -92,7 +94,7 @@ export async function PUT(
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const params = await context.params;
     const id = BigInt(params.id);
@@ -235,7 +237,7 @@ export async function DELETE(
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const params = await context.params;
     const id = BigInt(params.id);

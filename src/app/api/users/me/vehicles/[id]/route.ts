@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
@@ -25,7 +25,8 @@ export async function DELETE(
       return NextResponse.json({ error: '未登入或 token 無效' }, { status: 401 });
     }
 
-    const vehicleId = parseInt(params.id, 10);
+    const { id } = await params;
+    const vehicleId = parseInt(id, 10);
     if (isNaN(vehicleId)) {
       return NextResponse.json({ error: '無效的車輛 ID' }, { status: 400 });
     }

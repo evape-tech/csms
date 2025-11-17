@@ -8,16 +8,17 @@ export const dynamic = 'force-dynamic';
 // GET - 取得單一故障報告
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
+    const { id: idParam } = await params;
     let id: bigint;
     try {
-      id = BigInt(params.id);
+      id = BigInt(idParam);
     } catch {
       return NextResponse.json(
         { success: false, message: '無效的故障報告 ID' },
@@ -75,15 +76,16 @@ export async function GET(
 // PUT - 更新故障報告
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
+    const { id: idParam } = await params;
     let id: bigint;
     try {
-      id = BigInt(params.id);
+      id = BigInt(idParam);
     } catch {
       return NextResponse.json(
         { success: false, message: '無效的故障報告 ID' },
@@ -180,15 +182,16 @@ export async function PUT(
 // DELETE - 刪除故障報告
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
+    const { id: idParam } = await params;
     let id: bigint;
     try {
-      id = BigInt(params.id);
+      id = BigInt(idParam);
     } catch {
       return NextResponse.json(
         { success: false, message: '無效的故障報告 ID' },

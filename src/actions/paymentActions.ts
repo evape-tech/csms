@@ -38,16 +38,14 @@ export async function togglePaymentMethodStatus(channelId: number) {
 }
 
 // 新增支付方式
-export async function createPaymentMethod(formData: FormData) {
+export async function createPaymentMethod(data: { name: string; code: string; status: number; config?: any }) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
 
     const client = getDatabaseClient() as any;
 
-    const name = formData.get('name') as string;
-    const code = formData.get('code') as string;
-    const status = parseInt(formData.get('status') as string) || 1;
+    const { name, code, status = 1, config = {} } = data;
 
     if (!name || !code) {
       throw new Error('名稱和代碼為必填項');
@@ -67,7 +65,7 @@ export async function createPaymentMethod(formData: FormData) {
         name,
         code,
         status,
-        config: {}
+        config
       }
     });
 
@@ -80,26 +78,31 @@ export async function createPaymentMethod(formData: FormData) {
 }
 
 // 更新支付方式
-export async function updatePaymentMethod(channelId: number, formData: FormData) {
+export async function updatePaymentMethod(channelId: number, data: { name: string; status: number; config?: any }) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
 
     const client = getDatabaseClient() as any;
 
-    const name = formData.get('name') as string;
-    const status = parseInt(formData.get('status') as string) || 1;
+    const { name, status = 1, config } = data;
 
     if (!name) {
       throw new Error('名稱為必填項');
     }
 
+    const updateData: any = {
+      name,
+      status
+    };
+
+    if (config !== undefined) {
+      updateData.config = config;
+    }
+
     const updatedChannel = await client.billing_channels.update({
       where: { id: channelId },
-      data: {
-        name,
-        status
-      }
+      data: updateData
     });
 
     revalidatePath('/payment_management');

@@ -40,7 +40,7 @@ export async function GET(
     const type = searchParams.get('type') || 'all'; // 'wallet', 'charging', 'all'
 
     const db = getDatabaseClient();
-    let allTransactions: any[] = [];
+    const allTransactions: Array<Record<string, unknown>> = [];
 
     // 獲取錢包交易記錄
     if (type === 'wallet' || type === 'all') {
@@ -61,9 +61,9 @@ export async function GET(
       `;
 
       if (Array.isArray(walletTransactionsResult)) {
-        const walletTransactions = walletTransactionsResult.map((tx: any) => ({
+        const walletTransactions = walletTransactionsResult.map((tx: Record<string, unknown>) => ({
           source_type: 'wallet',
-          type: tx.transaction_type?.toLowerCase() === 'deposit' ? 'topup' : 'deduct',
+          type: (tx.transaction_type as string)?.toLowerCase() === 'deposit' ? 'topup' : 'deduct',
           amount: Number(tx.amount),
           balance_before: Number(tx.balance_before),
           balance_after: Number(tx.balance_after),
@@ -96,11 +96,11 @@ export async function GET(
       `;
 
       if (Array.isArray(chargingTransactionsResult)) {
-        const chargingTransactions = chargingTransactionsResult.map((tx: any) => ({
+        const chargingTransactions = chargingTransactionsResult.map((tx: Record<string, unknown>) => ({
           source_type: 'charging',
           type: 'charging',
           amount: Number(tx.energy_consumed || 0),
-          note: `充電交易 - ${tx.cpid || '未知充電站'}`,
+          note: `充電交易 - ${(tx.cpid as string) || '未知充電站'}`,
           reason: `交易ID: ${tx.transaction_id}`,
           status: tx.status,
           created_at: tx.start_time,
@@ -111,7 +111,11 @@ export async function GET(
     }
 
     // 排序並分頁
-    allTransactions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    allTransactions.sort((a, b) => {
+      const timeA = new Date(a.created_at as string | number | Date).getTime();
+      const timeB = new Date(b.created_at as string | number | Date).getTime();
+      return timeB - timeA;
+    });
     const paginatedTransactions = allTransactions.slice(offset, offset + limit);
 
     return NextResponse.json({

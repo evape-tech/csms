@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
           in_progress: statusStats.IN_PROGRESS || 0,
           resolved: statusStats.RESOLVED || 0,
           closed: statusStats.CLOSED || 0,
-          critical: faultReports.filter(r => r.severity === 'CRITICAL').length
+          critical: faultReports.filter((r: any) => r.severity === 'CRITICAL').length
         }
       }
     });
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const body = await request.json();
     const {

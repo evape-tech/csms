@@ -42,7 +42,7 @@ export async function GET(
     // 嘗試先使用 transaction_id 查詢（字符串）
     try {
       transaction = await databaseService.getTransaction(id);
-    } catch (error) {
+    } catch {
       // 如果失敗，嘗試使用數字 ID 查詢
       if (!isNaN(Number(id))) {
         transaction = await databaseService.getTransactionById(Number(id));
@@ -139,7 +139,7 @@ export async function PUT(
     let existingTransaction = null;
     try {
       existingTransaction = await databaseService.getTransaction(id);
-    } catch (error) {
+    } catch {
       if (!isNaN(Number(id))) {
         existingTransaction = await databaseService.getTransactionById(Number(id));
       }
@@ -156,7 +156,7 @@ export async function PUT(
     }
 
     // 構建更新資料
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (body.end_time !== undefined) {
       updateData.end_time = body.end_time ? new Date(body.end_time) : null;
@@ -192,7 +192,7 @@ export async function PUT(
     // 如果有提供 end_time，自動計算充電時長
     if (updateData.end_time && existingTransaction.start_time) {
       const startTime = new Date(existingTransaction.start_time);
-      const endTime = new Date(updateData.end_time);
+      const endTime = new Date(updateData.end_time as string | number | Date);
       updateData.charging_duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
     }
 
@@ -284,7 +284,7 @@ export async function DELETE(
     let existingTransaction = null;
     try {
       existingTransaction = await databaseService.getTransaction(id);
-    } catch (error) {
+    } catch {
       if (!isNaN(Number(id))) {
         existingTransaction = await databaseService.getTransactionById(Number(id));
       }

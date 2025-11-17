@@ -263,9 +263,16 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
         <Box sx={{ flexGrow: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {saveError && <Alert severity="error" sx={{ mb: 2 }}>{saveError}</Alert>}
           
-          <Grid container spacing={1} sx={{ flexGrow: 1, minHeight: 0, width: '100%' }}>
+          <Box sx={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr',
+            gap: 1,
+            flexGrow: 1, 
+            minHeight: 0, 
+            width: '100%' 
+          }}>
             {/* 左側：基本信息區域 */}
-            <Grid item xs={6} sx={{ height: '100%', display: 'flex', width: '49%' }}>
+            <Box sx={{ height: '100%', display: 'flex' }}>
               <Box sx={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
@@ -367,10 +374,10 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
                   </Stack>
                 </Box>
               </Box>
-            </Grid>
+            </Box>
 
             {/* 右側：費率選擇區域 - 新增和編輯模式都顯示 */}
-            <Grid item xs={6} sx={{ height: '100%', display: 'flex', width: '49%' }}>
+            <Box sx={{ height: '100%', display: 'flex' }}>
               <Box sx={{ 
                 display: 'flex', 
                 flexDirection: 'column',
@@ -521,8 +528,8 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
                   </Box>
                 </Box>
               </Box>
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>

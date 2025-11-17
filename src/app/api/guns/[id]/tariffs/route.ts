@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/guns/[id]/tariffs - 獲取指定槍的關聯費率
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 驗證用戶身份
@@ -17,7 +17,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const gunId = parseInt(params.id);
+    const { id } = await params;
+    const gunId = parseInt(id);
     if (isNaN(gunId)) {
       return NextResponse.json({ error: 'Invalid gun ID' }, { status: 400 });
     }
@@ -37,7 +38,7 @@ export async function GET(
 // POST /api/guns/[id]/tariffs - 為指定槍添加費率關聯
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 驗證用戶身份和權限
@@ -46,7 +47,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const gunId = parseInt(params.id);
+    const { id } = await params;
+    const gunId = parseInt(id);
     if (isNaN(gunId)) {
       return NextResponse.json({ error: 'Invalid gun ID' }, { status: 400 });
     }
@@ -91,7 +93,7 @@ export async function POST(
 // PUT /api/guns/[id]/tariffs/[tariffId] - 更新槍的費率關聯
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 驗證用戶身份和權限
@@ -100,7 +102,8 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const gunId = parseInt(params.id);
+    const { id } = await params;
+    const gunId = parseInt(id);
     if (isNaN(gunId)) {
       return NextResponse.json({ error: 'Invalid gun ID' }, { status: 400 });
     }
@@ -135,7 +138,7 @@ export async function PUT(
 // DELETE /api/guns/[id]/tariffs/[tariffId] - 刪除槍的費率關聯
 export async function DELETE(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 驗證用戶身份和權限
@@ -144,7 +147,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const gunId = parseInt(params.id);
+    const { id } = await params;
+    const gunId = parseInt(id);
     if (isNaN(gunId)) {
       return NextResponse.json({ error: 'Invalid gun ID' }, { status: 400 });
     }

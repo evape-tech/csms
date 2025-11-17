@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
-    const client = getDatabaseClient();
+    const client = getDatabaseClient() as any;
 
     const body = await request.json();
     const {

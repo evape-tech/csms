@@ -29,37 +29,33 @@ export async function GET(request: NextRequest) {
     let db;
     try {
       db = getDatabaseClient();
-    } catch (error: any) {
-      if (error.message?.includes('Database not initialized')) {
-        // 返回空數據，不顯示模擬資料
-        return NextResponse.json({
-          success: true,
-          usingMockData: false,
-          data: {
-            logs: [],
-            pagination: {
-              page,
-              limit,
-              total: 0,
-              totalPages: 0
-            },
-            summary: {
-              total: 0,
-              login: 0,
-              logout: 0,
-              abnormal: 0,
-              warning: 0
-            }
+    } catch {
+      // 如果資料庫未初始化，返回空數據
+      return NextResponse.json({
+        success: true,
+        usingMockData: false,
+        data: {
+          logs: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          },
+          summary: {
+            total: 0,
+            login: 0,
+            logout: 0,
+            abnormal: 0,
+            warning: 0
           }
-        });
-      }
-      
-      throw error;
+        }
+      });
     }
 
     // 構建查詢條件
-    let whereConditions = [];
-    let queryParams = [];
+    const whereConditions = [];
+    const queryParams = [];
 
     if (actionType) {
       whereConditions.push('action_type = ?');
@@ -123,7 +119,7 @@ export async function GET(request: NextRequest) {
     const logs = await db.$queryRawUnsafe(dataQuery, ...queryParams, limit, offset);
 
     // 轉換 BigInt 為 Number 來避免序列化錯誤
-    const convertBigIntToNumber = (value: any): number => {
+    const convertBigIntToNumber = (value: unknown): number => {
       if (typeof value === 'bigint') {
         return Number(value);
       }
@@ -131,7 +127,7 @@ export async function GET(request: NextRequest) {
     };
 
     // 處理 logs 中的 BigInt 字段
-    const processedLogs = Array.isArray(logs) ? logs.map((log: any) => ({
+    const processedLogs = Array.isArray(logs) ? logs.map((log: Record<string, unknown>) => ({
       ...log,
       id: convertBigIntToNumber(log.id)
     })) : [];
@@ -148,7 +144,7 @@ export async function GET(request: NextRequest) {
     `;
     
     const summaryResult = await db.$queryRawUnsafe(summaryQuery);
-    const summaryData = Array.isArray(summaryResult) ? summaryResult[0] : {};
+    const summaryData = Array.isArray(summaryResult) ? (summaryResult[0] as Record<string, unknown>) : {};
 
     return NextResponse.json({
       success: true,
@@ -171,8 +167,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error('獲取操作日誌失敗:', error);
+  } catch {
+    console.error('獲取操作日誌失敗');
     return NextResponse.json({ 
       error: '獲取操作日誌失敗，請稍後再試' 
     }, { status: 500 });

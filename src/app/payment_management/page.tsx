@@ -184,7 +184,7 @@ const statusChipMap: Record<UiPaymentStatus, { label: string; color: 'default' |
   pending: { label: '處理中', color: 'info' }
 };
 
-interface FormData {
+interface PaymentMethodFormData {
   name: string;
   code: string;
   status: number;
@@ -222,7 +222,7 @@ export default function PaymentManagement() {
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<PaymentRecord | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<PaymentMethodFormData>({
     name: '',
     code: '',
     status: 1,
@@ -325,7 +325,7 @@ export default function PaymentManagement() {
   };
 
   // 處理新增/編輯支付方式
-  const handleSaveChannel = async (formData: FormData) => {
+  const handleSaveChannel = async (formData: PaymentMethodFormData) => {
     const isEditing = !!editingChannel;
 
     const result = isEditing
@@ -417,8 +417,14 @@ export default function PaymentManagement() {
   };
 
   // 處理表單提交
-  const handleFormSubmit = async (formData: FormData) => {
-    await handleSaveChannel(formData);
+  const handleFormSubmit = async (formData: globalThis.FormData) => {
+    const data: PaymentMethodFormData = {
+      name: formData.get('name') as string,
+      code: formData.get('code') as string,
+      status: parseInt(formData.get('status') as string) || 1,
+      config: {}
+    };
+    await handleSaveChannel(data);
   };
 
   // 處理查看詳情

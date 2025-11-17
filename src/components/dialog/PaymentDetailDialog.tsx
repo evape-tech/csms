@@ -8,12 +8,12 @@ import {
   Typography,
   Button,
   Box,
-  Grid,
   Paper,
   Chip,
   Avatar,
   useTheme,
-  alpha
+  alpha,
+  Stack
 } from '@mui/material';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -124,27 +124,31 @@ export default function PaymentDetailDialog({ open, onClose, record }: PaymentDe
         </Box>
       </DialogTitle>
       <DialogContent sx={{ p: 3 }}>
-        <Grid container spacing={3}>
+        <Stack spacing={3}>
           {/* 基本資訊 */}
-          <Grid item xs={12}>
+          <Box>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: theme.palette.text.primary }}>
               基本資訊
             </Typography>
             <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gap: 2 
+              }}>
+                <Box>
                   <Typography variant="body2" color="text.secondary">訂單編號</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
                     {record.invoiceNumber || record.transactionId}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">交易編號</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
                     {record.transactionId}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">用戶</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                     <Avatar sx={{ width: 24, height: 24, bgcolor: theme.palette.primary.main }}>
@@ -154,8 +158,8 @@ export default function PaymentDetailDialog({ open, onClose, record }: PaymentDe
                       {record.userName || record.userId || '未知用戶'}
                     </Typography>
                   </Box>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">狀態</Typography>
                   <Box sx={{ mt: 0.5 }}>
                     {(() => {
@@ -170,31 +174,35 @@ export default function PaymentDetailDialog({ open, onClose, record }: PaymentDe
                       );
                     })()}
                   </Box>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Paper>
-          </Grid>
+          </Box>
 
           {/* 金額資訊 */}
-          <Grid item xs={12}>
+          <Box>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: theme.palette.text.primary }}>
               金額資訊
             </Typography>
             <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.05) }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
+                gap: 2 
+              }}>
+                <Box>
                   <Typography variant="body2" color="text.secondary">支付金額</Typography>
                   <Typography variant="h5" sx={{ fontWeight: 700, color: theme.palette.success.main }}>
                     ${formatCurrency(record.amount)}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">用電量</Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
                     {formatNumber(record.energyConsumed)} kWh
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">支付方式</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                     {record.paymentMethod === '信用卡' && <CreditCardIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />}
@@ -205,81 +213,89 @@ export default function PaymentDetailDialog({ open, onClose, record }: PaymentDe
                       {record.paymentMethod}
                     </Typography>
                   </Box>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Paper>
-          </Grid>
+          </Box>
 
           {/* 充電資訊 */}
-          <Grid item xs={12}>
+          <Box>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: theme.palette.text.primary }}>
               充電資訊
             </Typography>
             <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.info.main, 0.05) }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gap: 2 
+              }}>
+                <Box>
                   <Typography variant="body2" color="text.secondary">充電站</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {record.cpid} - {record.cpsn}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">充電槍編號</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {record.connectorId}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">開始時間</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {record.startTime ? new Date(record.startTime).toLocaleString('zh-TW') : '—'}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">結束時間</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {record.endTime ? new Date(record.endTime).toLocaleString('zh-TW') : '—'}
                   </Typography>
-                </Grid>
-                <Grid item xs={12}>
+                </Box>
+                <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
                   <Typography variant="body2" color="text.secondary">充電時長</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {Math.max(0, Math.round(record.chargingDuration ?? 0))} 分鐘
                   </Typography>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Paper>
-          </Grid>
+          </Box>
 
           {/* 其他資訊 */}
-          <Grid item xs={12}>
+          <Box>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: theme.palette.text.primary }}>
               其他資訊
             </Typography>
             <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gap: 2 
+              }}>
+                <Box>
                   <Typography variant="body2" color="text.secondary">用戶 ID</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
                     {record.userId}
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
+                </Box>
+                <Box>
                   <Typography variant="body2" color="text.secondary">ID Tag</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500, fontFamily: 'monospace' }}>
                     {record.idTag || '—'}
                   </Typography>
-                </Grid>
-                <Grid item xs={12}>
+                </Box>
+                <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
                   <Typography variant="body2" color="text.secondary">建立時間</Typography>
                   <Typography variant="body1" sx={{ fontWeight: 500 }}>
                     {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-TW') : '—'}
                   </Typography>
-                </Grid>
-              </Grid>
+                </Box>
+              </Box>
             </Paper>
-          </Grid>
-        </Grid>
+          </Box>
+        </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 3, borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
         <Button
