@@ -1212,61 +1212,6 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
   }
 }
 
-/**
- * 发送充电配置 - EMS功率分配
- * 通过CPID查找充电桩并发送功率配置
- * 
- * 新增函数，支持新架构中的EMS功能
- * 
- * @param {string} cpid 充电桩ID
- * @param {Object} options 选项 {siteSetting, context}
- * @returns {Promise<boolean>} 是否成功
- */
-async function sendSetChargingProfile(cpid, options = {}) {
-  logger.info(`[EMS] 发送充电配置到 CPID: ${cpid}`);
-  
-  try {
-    // 从选项中获取场域设置和上下文
-    const { siteSetting, context = {} } = options;
-    
-    if (!siteSetting) {
-      logger.error(`[EMS] 未提供场域设置`);
-      return false;
-    }
-    
-    // 查询充电桩信息
-    const guns = await chargePointRepository.getAllGuns({ cpid });
-    
-    if (guns.length === 0) {
-      logger.warn(`[EMS] 找不到充电桩 CPID: ${cpid} 的信息`);
-      return false;
-    }
-    
-    const gun = guns[0];
-    const cpsn = gun.cpsn;
-    const connectorId = gun.connector;
-    
-    if (!cpsn || !connectorId) {
-      logger.warn(`[EMS] 充电桩 ${cpid} 缺少 CPSN 或 connectorId 信息`);
-      return false;
-    }
-    
-    // 使用已有的函数发送充电配置
-    logger.info(`[EMS] 为 CPID: ${cpid} (CPSN: ${cpsn}, Connector: ${connectorId}) 设置充电配置`);
-    const success = await sendChargingProfile(cpsn, connectorId, siteSetting);
-    
-    // 记录额外上下文信息
-    if (success && context.isGlobalReallocation) {
-      logger.info(`[EMS] ${cpid} 功率配置成功更新 (全站重分配ID: ${context.reallocationId || 'unknown'})`);
-    }
-    
-    return success;
-  } catch (error) {
-    logger.error(`[EMS] 发送充电配置失败: ${error.message}`, error);
-    return false;
-  }
-}
-
 module.exports = {
   handleBootNotification,
   handleStatusNotification,
@@ -1281,5 +1226,4 @@ module.exports = {
   sendRemoteStopTransaction,
   sendResetCommand,
   sendChargingProfile,
-  sendSetChargingProfile,
 };

@@ -529,7 +529,7 @@ csms-nextjs/
 │   │   │   ├── service.js    # 統一資料庫服務介面
 │   │   │   └── utils.js      # 資料庫工具函式
 │   │   ├── services/         # 業務服務層
-│   │   │   └── billingService.js # 計費服務
+│   │   │   └── billingRepository.js # 計費服務
 │   │   ├── emsAllocator.js   # EMS 核心分配演算法
 │   │   ├── logger.js         # 統一日誌管理
 │   │   ├── operationLogger.ts # 操作日誌記錄器

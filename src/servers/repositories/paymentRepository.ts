@@ -53,7 +53,7 @@ interface PendingOrder {
 // 不再需要待定訂單機制（使用同步模式）
 // const pendingOrders: Map<string, PendingOrder> = new Map();
 
-export class PaymentService {
+export class PaymentRepository {
   /**
    * 建立信用卡支付訂單（TapPay）- 同步模式
    * 

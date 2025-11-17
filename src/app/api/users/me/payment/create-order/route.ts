@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthHelper } from '@/lib/auth/authHelper';
 import DatabaseUtils from '@/lib/database/utils';
-import { PaymentService } from '@/servers/services/paymentService';
+import { PaymentRepository } from '@/servers/repositories/paymentRepository';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 35; // 允許最多 35 秒
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 });
         }
 
-        result = await PaymentService.createCreditCardOrder({
+        result = await PaymentRepository.createCreditCardOrder({
           userId: currentUser.userId,
           amount,
           description,
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
       case 'line_pay':
         // Line Pay - 返回支付 URL
-        result = await PaymentService.createLinePayOrder({
+        result = await PaymentRepository.createLinePayOrder({
           userId: currentUser.userId,
           amount,
           description,
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
       case 'easy_wallet':
           // EasyWallet (優游付) - 返回支付 URL
-          result = await PaymentService.createEasyWalletOrder({
+          result = await PaymentRepository.createEasyWalletOrder({
           userId: currentUser.userId,
           amount,
           description,

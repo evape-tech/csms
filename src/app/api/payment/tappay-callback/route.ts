@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '@/lib/database/utils';
-import { PaymentService } from '@/servers/services/paymentService';
+import { PaymentRepository } from '@/servers/repositories/paymentRepository';
+import { InvoiceRepository } from '@/servers/repositories/invoiceRepository';
+import { databaseService } from '@/lib/database/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
     const paymentStatus = callbackData.status === 0 ? 'COMPLETED' : 'FAILED';
 
     // 更新訂單狀態和錢包
-    const result = await PaymentService.updatePaymentOrderFromCallback({
+    const result = await PaymentRepository.updatePaymentOrderFromCallback({
       orderId: callbackData.order_number,
       callbackData: {
         status: callbackData.status,
@@ -84,6 +86,51 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ TapPay 回調處理成功: ${callbackData.order_number} - ${paymentStatus}`);
+
+    // 如果支付成功，開立發票並透過 TapPay 發送給用戶
+    if (paymentStatus === 'COMPLETED') {
+      try {
+        // 獲取支付訂單資訊
+        const paymentOrder = await databaseService.getPaymentOrder(callbackData.order_number);
+        
+        if (paymentOrder) {
+          // 獲取用戶資訊 (user_id 是 UUID 字串，不是數字 ID)
+          const user = await databaseService.getUserByUuid(paymentOrder.user_id);
+          
+          if (user && user.email) {
+            console.log('📄 開始開立發票...', {
+              orderId: callbackData.order_number,
+              userId: user.id,
+              email: user.email
+            });
+
+            // 呼叫 TapPay 發票 API
+            const invoiceResult = await InvoiceRepository.issueInvoice({
+              orderId: callbackData.order_number,
+              amount: callbackData.amount,
+              customerEmail: user.email,
+              customerName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || '顧客',
+              customerPhone: user.phone || '',
+              description: paymentOrder.description || '充電錢包充值',
+              userId: user.uuid, // 傳入用戶 UUID，用於保存發票
+              tradeId: callbackData.rec_trade_id // 傳入交易 ID
+            });
+
+            if (invoiceResult.success) {
+              console.log('✅ 發票已成功開立並透過 TapPay 發送至:', user.email);
+            } else {
+              console.error('⚠️ 發票開立失敗，但支付已成功:', invoiceResult.error);
+              // 發票失敗不影響支付結果，只記錄錯誤
+            }
+          } else {
+            console.warn('⚠️ 無法獲取用戶 email，跳過發票開立');
+          }
+        }
+      } catch (invoiceError) {
+        console.error('⚠️ 發票處理異常，但支付已成功:', invoiceError);
+        // 發票異常不影響支付結果，只記錄錯誤
+      }
+    }
 
     // 返回成功給 TapPay
     return NextResponse.json({

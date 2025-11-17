@@ -1,6 +1,6 @@
 /**
  * 費率計算器 (Rate Calculator)
- * 從 billingService.js 抽出的純函式，便於單元測試和重用
+ * 從 billingRepository.js 抽出的純函式，便於單元測試和重用
  * 
  * 包含各種費率類型的計算邏輯：
  * - FIXED_RATE: 固定費率
