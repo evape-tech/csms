@@ -1,6 +1,6 @@
 /**
  * 账单服务
- * billingService.js
+ * billingRepository.js
  * 
  * 这个模块专门负责账单相关功能:
  * 1. 为充电交易生成账单记录 (billing_records)
@@ -13,13 +13,13 @@
  */
 
 const { databaseService } = require('../../lib/database/service.js');
-const { tariffRepository } = require('../repositories');
+const { tariffRepository } = require('./index');
 const { calculateRateByType } = require('../../lib/rateCalculator');
 
 /**
  * 计费服务类
  */
-class BillingService {
+class BillingRepository {
   constructor() {
     this.databaseService = databaseService;
     this.tariffRepository = tariffRepository;
@@ -501,5 +501,5 @@ class BillingService {
 }
 
 // 导出单例实例
-const billingService = new BillingService();
+const billingService = new BillingRepository();
 module.exports = billingService;

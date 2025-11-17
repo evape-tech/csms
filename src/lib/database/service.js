@@ -1232,6 +1232,37 @@ class DatabaseService {
       }
     });
   }
+
+  /**
+   * 創建用戶發票記錄
+   */
+  async createUserInvoice(data) {
+    const client = getDatabaseClient();
+    return await client.user_invoices.create({
+      data: {
+        invoice_number: data.invoice_number,
+        invoice_provider: data.invoice_provider || 'TAPPAY',
+        provider_invoice_id: data.provider_invoice_id,
+        user_id: data.user_id,
+        invoice_date: data.invoice_date || new Date(),
+        invoice_time: data.invoice_time,
+        subtotal: typeof data.subtotal === 'number' ? data.subtotal : parseFloat(data.subtotal),
+        tax_rate: data.tax_rate || 0.05,
+        tax_amount: typeof data.tax_amount === 'number' ? data.tax_amount : parseFloat(data.tax_amount),
+        total_amount: typeof data.total_amount === 'number' ? data.total_amount : parseFloat(data.total_amount),
+        currency: data.currency || 'TWD',
+        status: data.status || 'ISSUED',
+        payment_status: data.payment_status || 'UNPAID',
+        payment_method: data.payment_method,
+        payment_reference: data.payment_reference,
+        sent_at: data.sent_at,
+        paid_at: data.paid_at,
+        description: data.description,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+  }
 }
 
 // 導出單例實例

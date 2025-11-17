@@ -453,7 +453,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
       
       try {
         // 導入billing服務並自動生成billing記錄
-        const billingService = require('../services/billingService.js');
+        const billingService = require('./billingRepository.js');
         
         const billing = await billingService.generateBillingForTransaction(
           transaction.transaction_id, 
@@ -674,7 +674,7 @@ async function handleOrphanTransaction(transaction) {
     console.log(`🔄 [孤兒交易Billing] 開始為孤兒交易 ${transaction.transaction_id} 生成billing記錄...`);
     
     try {
-      const billingService = require('../services/billingService.js');
+      const billingService = require('./billingRepository.js');
       console.log(`📦 [孤兒交易Billing] billingService 已載入，呼叫 generateBillingForTransaction...`);
       
       const billing = await billingService.generateBillingForTransaction(

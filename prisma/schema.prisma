@@ -100,6 +100,7 @@ model users {
   maintenance_records_maintenance_records_technician_idTousers maintenance_records[]   @relation("maintenance_records_technician_idTousers")
   operation_logs                                               operation_logs[]
   rfid_cards                                                   rfid_cards[]
+  user_invoices                                                user_invoices[]
   user_vehicles                                                user_vehicles[]
   user_wallets                                                 user_wallets?
   wallet_transactions                                          wallet_transactions[]
@@ -479,6 +480,39 @@ model vehicle_brands {
   @@index([is_active], map: "idx_is_active")
 }
 
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_invoices {
+  id                  BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  invoice_number      String                       @unique(map: "invoice_number") @db.VarChar(20)
+  invoice_provider    String                       @default("TAPPAY") @db.VarChar(50)
+  provider_invoice_id String?                      @db.VarChar(100)
+  user_id             String                       @db.VarChar(36)
+  invoice_date        DateTime                     @db.Date
+  invoice_time        DateTime?                    @db.Time(0)
+  subtotal            Decimal                      @db.Decimal(10, 2)
+  tax_rate            Decimal?                     @default(0.00) @db.Decimal(5, 2)
+  tax_amount          Decimal?                     @default(0.00) @db.Decimal(10, 2)
+  total_amount        Decimal                      @db.Decimal(10, 2)
+  currency            String                       @default("TWD") @db.VarChar(3)
+  status              user_invoices_status         @default(DRAFT)
+  payment_status      user_invoices_payment_status @default(UNPAID)
+  payment_method      String?                      @db.VarChar(50)
+  payment_reference   String?                      @db.VarChar(100)
+  sent_at             DateTime?                    @db.DateTime(0)
+  paid_at             DateTime?                    @db.DateTime(0)
+  description         String?                      @db.Text
+  error_message       String?                      @db.VarChar(255)
+  createdAt           DateTime                     @default(now()) @db.DateTime(0)
+  updatedAt           DateTime                     @default(now()) @db.DateTime(0)
+  users               users                        @relation(fields: [user_id], references: [uuid], map: "fk_user_invoices_user")
+
+  @@index([invoice_date], map: "idx_invoice_date")
+  @@index([invoice_provider], map: "idx_invoice_provider")
+  @@index([payment_status], map: "idx_payment_status")
+  @@index([status], map: "idx_status")
+  @@index([user_id], map: "idx_user_id")
+}
+
 enum guns_acdc {
   AC
   DC
@@ -642,4 +676,20 @@ enum user_vehicles_status {
   ACTIVE
   INACTIVE
   SOLD
+}
+
+enum user_invoices_status {
+  DRAFT
+  ISSUED
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+  ERROR
+}
+
+enum user_invoices_payment_status {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
 }
