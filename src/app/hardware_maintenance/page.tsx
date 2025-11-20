@@ -133,9 +133,15 @@ export default function HardwareMaintenance() {
       
       const response = await fetch(`/api/maintenance-records?${params.toString()}`);
       const data = await response.json();
+      const records: MaintenanceRecord[] = data.data.records;
       
       if (data.success) {
-        setMaintenanceRecords(data.data.records);
+        setMaintenanceRecords(
+          records.sort((a, b) =>
+            new Date(b.createdAt || '').getTime() -
+            new Date(a.createdAt || '').getTime()
+          )
+        );
         setStats(data.data.stats);
       } else {
         setError(data.message || '載入數據失敗');
@@ -253,7 +259,11 @@ export default function HardwareMaintenance() {
           display: 'flex',
           flexWrap: 'wrap',
           gap: 3,
-          '& > *': { flex: '1 1 280px', minWidth: 240 }
+          '& > *': { 
+            flex: '1 1 calc(33.333% - 24px)', // 一行三個
+            maxWidth: 'calc(33.333% - 24px)',
+            minWidth: 240,
+           }
         }}>
           <Card
             elevation={2}
@@ -736,7 +746,7 @@ export default function HardwareMaintenance() {
                           完成
                         </Button>
                       )}
-                      {record.status !== 'CANCELLED' && (
+                      {record.status !== 'COMPLETED' && record.status !== 'CANCELLED' && (
                         <Button
                           size="small"
                           variant="outlined"
