@@ -314,7 +314,7 @@ export default function FaultReport() {
           }}
         >
           <ReportProblemIcon sx={{ fontSize: '2rem' }} />
-          故障報告系統
+          故障回報管理
         </Typography>
         <Typography variant="body1" color="text.secondary">
           管理充電樁故障報告和維修調度
@@ -330,7 +330,11 @@ export default function FaultReport() {
           display: 'flex',
           flexWrap: 'wrap',
           gap: 3,
-          '& > *': { flex: '1 1 280px', minWidth: 240 }
+          '& > *': { 
+            flex: '1 1 calc(33.333% - 24px)', // 一行三個
+            maxWidth: 'calc(33.333% - 24px)',
+            minWidth: 240,
+           }
         }}>
           <Card
             elevation={2}
