@@ -1343,6 +1343,95 @@ class DatabaseService {
       }
     });
   }
+
+  /**
+   * 查詢用戶發票（支援過濾條件）
+   */
+  async getUserInvoices(filter = {}) {
+    const client = getDatabaseClient();
+    return await client.user_invoices.findMany({
+      where: filter,
+      include: {
+        users: {
+          select: {
+            uuid: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            phone: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+  }
+
+  /**
+   * 根據 ID 查詢單張發票
+   */
+  async getUserInvoiceById(id) {
+    const client = getDatabaseClient();
+    return await client.user_invoices.findUnique({
+      where: { id: BigInt(id) },
+      include: {
+        users: true
+      }
+    });
+  }
+
+  /**
+   * 更新用戶發票
+   */
+  async updateUserInvoice(id, data) {
+    const client = getDatabaseClient();
+    return await client.user_invoices.update({
+      where: { id: BigInt(id) },
+      data: {
+        ...data,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * 查詢需要重試的失敗發票
+   * @param {Object} options 查詢選項
+   * @param {number} options.retryAfterMinutes 創建後多久才重試
+   * @param {number} options.batchSize 批次大小
+   */
+  async getFailedInvoices(options = {}) {
+    const { retryAfterMinutes = 10, batchSize = 10 } = options;
+    const client = getDatabaseClient();
+    const retryThreshold = new Date(Date.now() - retryAfterMinutes * 60 * 1000);
+
+    return await client.user_invoices.findMany({
+      where: {
+        status: {
+          in: ['DRAFT', 'ERROR']
+        },
+        createdAt: {
+          lte: retryThreshold
+        }
+      },
+      include: {
+        users: {
+          select: {
+            uuid: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            phone: true
+          }
+        }
+      },
+      take: batchSize,
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+  }
 }
 
 // 導出單例實例

@@ -62,7 +62,7 @@ const { ocppController, emsController } = require('./controllers');
 const mqServer = MQ_ENABLED ? require('./mqServer') : null;
 const { ocppEventPublisher } = MQ_ENABLED ? require('./publishers') : { ocppEventPublisher: null };
 const { ocppEventConsumer, emsEventConsumer } = MQ_ENABLED ? require('./consumers') : { ocppEventConsumer: null, emsEventConsumer: null };
-const { notificationService, systemStatusService, orphanTransactionService, healthMonitoringService } = require('./services');
+const { notificationService, systemStatusService, orphanTransactionService, healthMonitoringService, invoiceRetryService } = require('./services');
 
 /**
  * 发布充电桩连接状态事件到MQ
@@ -523,7 +523,7 @@ async function startServer() {
           // 如果綁定到所有接口，顯示額外的訪問地址
           if (HOST === '0.0.0.0') {
             logger.info(`本地訪問: http://localhost:${PORT}`);
-            logger.info(`局域網訪問: http://[本機IP]:${PORT}`);
+            logger.info(`局域網訪問: http://0.0.0.0:${PORT}`);
           }
           
           logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
@@ -591,6 +591,23 @@ async function initializeServices() {
     }
   } catch (error) {
     logger.error(`⚠️ 孤兒交易監控服務啟動失败: ${error.message}`);
+  }
+
+  // 啟動發票重試監控服務
+  try {
+    if (!invoiceRetryService.isRunning) {
+      invoiceRetryService.start({
+        checkIntervalMinutes: 30,       // 每30分鐘檢查一次
+        retryAfterMinutes: 10,         // 創建後10分鐘才重試
+        maxRetryCount: 5,              // 最大重試次數
+        batchSize: 10                  // 每次批次處理10張發票
+      });
+      logger.info('📄 發票重試監控服務已啟動');
+    } else {
+      logger.debug('📄 發票重試監控服務已在運行，跳過重複啟動');
+    }
+  } catch (error) {
+    logger.error(`⚠️ 發票重試監控服務啟動失败: ${error.message}`);
   }
 
   // 啟動健康監控服務
@@ -694,6 +711,14 @@ async function gracefulShutdown(signal) {
     // logger.info('孤兒交易監控服務已停止');
   } catch (error) {
     logger.error(`停止孤兒交易監控服務時出錯: ${error.message}`);
+  }
+
+  // 停止發票重試監控服務
+  try {
+    invoiceRetryService.stop();
+    // logger.info('發票重試監控服務已停止');
+  } catch (error) {
+    logger.error(`停止發票重試監控服務時出錯: ${error.message}`);
   }
   
   // 清理WebSocket連接
