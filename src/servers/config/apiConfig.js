@@ -3,7 +3,11 @@
  * 統一管理API路徑和版本
  */
 
-require('dotenv').config();
+const path = require('path');
+
+// 根據 NODE_ENV 決定使用哪個 .env 文件
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
 
 // API配置
 const API = {

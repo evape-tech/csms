@@ -8,7 +8,6 @@ const emsService = require('./emsService');
 const notificationService = require('./notificationService');
 const systemStatusService = require('./systemStatusService');
 const { orphanTransactionService } = require('./orphanTransactionService');
-const { healthMonitoringService } = require('./healthMonitoringService');
 const { invoiceRetryService } = require('./invoiceRetryService');
 
 module.exports = {
@@ -18,6 +17,5 @@ module.exports = {
   notificationService,
   systemStatusService,
   orphanTransactionService,
-  healthMonitoringService,
   invoiceRetryService
 };

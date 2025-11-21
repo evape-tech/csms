@@ -7,38 +7,18 @@
  * - 發票會透過 TapPay 平台自動寄送郵件給用戶
  */
 
-import axios from 'axios';
-import { databaseService } from '../../lib/database/service.js';
+const axios = require('axios');
+// databaseService is ESM, so we need to import it dynamically or assume it's handled.
+// But this file is being converted to CJS.
+// We will handle databaseService injection or dynamic import.
 
-interface IssueInvoiceParams {
-  orderId: string;
-  amount: number;
-  customerEmail: string;
-  customerName: string;
-  customerPhone?: string;
-  description: string;
-  userId?: string; // 用戶 UUID，用於保存發票到資料庫
-  tradeId?: string; // TapPay 交易 ID，用於關聯支付記錄
-}
-
-interface IssueInvoiceResult {
-  success: boolean;
-  invoiceNumber?: string;
-  invoiceUrl?: string;
-  invoiceDate?: string; // YYYYMMDD
-  invoiceTime?: string; // HHmmss
-  recInvoiceId?: string; // TapPay 開立識別碼
-  providerInvoiceId?: string; // TapPay 加值中心產生的開立識別碼
-  error?: string;
-}
-
-export class InvoiceRepository {
+class InvoiceRepository {
   /**
    * 開立發票並透過 TapPay 發送給用戶
    * 
    * TapPay 發票 API 會自動將發票寄送到客戶的 email
    */
-  static async issueInvoice(params: IssueInvoiceParams): Promise<IssueInvoiceResult> {
+  static async issueInvoice(params) {
     try {
       const { orderId, amount, customerEmail, customerName, customerPhone, description, userId, tradeId } = params;
 
@@ -219,7 +199,7 @@ export class InvoiceRepository {
         error: response.data?.msg || response.data?.message || '發票開立失敗'
       };
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ TapPay 發票 API 異常:', {
         message: error.message,
         status: error.response?.status,
@@ -238,17 +218,7 @@ export class InvoiceRepository {
   /**
    * 將發票資訊保存到資料庫
    */
-  private static async saveInvoiceToDatabase(params: {
-    invoiceNumber: string;
-    recInvoiceId: string;
-    providerInvoiceId: string;
-    userId: string;
-    invoiceDateStr?: string; // YYYYMMDD
-    invoiceTimeStr?: string; // HHmmss
-    amount: number;
-    tradeId?: string;
-    description?: string;
-  }): Promise<void> {
+  static async saveInvoiceToDatabase(params) {
     const {
       invoiceNumber,
       recInvoiceId,
@@ -262,6 +232,9 @@ export class InvoiceRepository {
     } = params;
 
     try {
+      // Dynamic import for ESM database service
+      const { databaseService } = await import('../../lib/database/service.js');
+
       // 轉換日期格式：YYYYMMDD -> YYYY-MM-DD
       const invoiceDate = invoiceDateStr
         ? new Date(
@@ -316,3 +289,5 @@ export class InvoiceRepository {
     }
   }
 }
+
+module.exports = { InvoiceRepository };

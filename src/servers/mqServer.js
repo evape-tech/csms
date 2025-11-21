@@ -1,5 +1,10 @@
 const amqp = require('amqplib');
-require('dotenv').config();
+const path = require('path');
+
+// 根據 NODE_ENV 決定使用哪個 .env 文件
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
+
 const { MQ_ENABLED, MQ_CONFIG, getMqUrl } = require('./config/mqConfig');
 
 let connection = null;

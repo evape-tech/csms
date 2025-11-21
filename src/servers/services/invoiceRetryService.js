@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * 發票重試監控服務
  * 負責監控和重新發送失敗的發票開立請求
@@ -8,9 +9,18 @@
  * - 創建時間超過設定的時間閾值
  */
 
-import { logger } from '../utils/index.js';
-import { databaseService } from '../../lib/database/service.js';
-import { InvoiceRepository } from '../repositories/invoiceRepository.ts';
+const { logger } = require('../utils/index.js');
+const { InvoiceRepository } = require('../repositories/invoiceRepository.js');
+
+// Dynamic import helper for ESM modules
+let dbServiceInstance;
+async function getDatabaseService() {
+  if (!dbServiceInstance) {
+    const mod = await import('../../lib/database/service.js');
+    dbServiceInstance = mod.databaseService;
+  }
+  return dbServiceInstance;
+}
 
 class InvoiceRetryService {
   constructor() {
@@ -105,8 +115,9 @@ class InvoiceRetryService {
    */
   async findFailedInvoices() {
     try {
+      const dbService = await getDatabaseService();
       // 直接使用 databaseService 的方法查詢失敗發票
-      const failedInvoices = await databaseService.getFailedInvoices({
+      const failedInvoices = await dbService.getFailedInvoices({
         retryAfterMinutes: this.config.retryAfterMinutes,
         batchSize: this.config.batchSize
       });
@@ -162,13 +173,14 @@ class InvoiceRetryService {
    * @returns {Promise<Object>} 重試結果
    */
   async retryInvoice(invoice) {
+    const dbService = await getDatabaseService();
     try {
       // 檢查用戶資訊是否完整
       if (!invoice.users || !invoice.users.email) {
         logger.error(`[發票重試監控] 發票 ${invoice.invoice_number} 缺少用戶資訊`);
         
         // 使用 databaseService 更新發票狀態
-        await databaseService.updateUserInvoice(invoice.id, {
+        await dbService.updateUserInvoice(invoice.id, {
           status: 'ERROR',
           error_message: '缺少用戶 Email 資訊'
         });
@@ -194,7 +206,7 @@ class InvoiceRetryService {
       if (issueResult.success) {
         // 使用 databaseService 更新發票狀態為已發送
         // SENT: 已發送，TapPay 會自動發送發票到用戶 Email
-        await databaseService.updateUserInvoice(invoice.id, {
+        await dbService.updateUserInvoice(invoice.id, {
           status: 'SENT',
           provider_invoice_id: issueResult.recInvoiceId || invoice.provider_invoice_id,
           sent_at: new Date(),
@@ -209,7 +221,7 @@ class InvoiceRetryService {
 
       } else {
         // 使用 databaseService 更新發票狀態為錯誤
-        await databaseService.updateUserInvoice(invoice.id, {
+        await dbService.updateUserInvoice(invoice.id, {
           status: 'ERROR',
           error_message: issueResult.error || '發票開立失敗'
         });
@@ -227,7 +239,7 @@ class InvoiceRetryService {
 
       // 使用 databaseService 更新發票錯誤訊息
       try {
-        await databaseService.updateUserInvoice(invoice.id, {
+        await dbService.updateUserInvoice(invoice.id, {
           status: 'ERROR',
           error_message: error.message || '系統異常'
         });
@@ -319,7 +331,7 @@ class InvoiceRetryService {
 // 創建單例實例
 const invoiceRetryService = new InvoiceRetryService();
 
-export {
+module.exports = {
   InvoiceRetryService,
   invoiceRetryService
 };

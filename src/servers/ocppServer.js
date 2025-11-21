@@ -3,7 +3,18 @@
  * 实现OCPP协议通信的WebSocket服务器
  */
 
-require('dotenv').config();
+const path = require('path');
+
+// 根據 NODE_ENV 決定使用哪個 .env 文件
+// - production (Docker) → .env.production
+// - development/其他 (本地) → .env
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+const envPath = path.resolve(process.cwd(), envFile);
+
+console.log(`🔧 [OCPP] 環境: ${process.env.NODE_ENV || 'development'}`);
+console.log(`📄 [OCPP] 載入配置: ${envFile}`);
+
+require('dotenv').config({ path: envPath });
 
 const express = require('express');
 const http = require('http');
@@ -62,7 +73,7 @@ const { ocppController, emsController } = require('./controllers');
 const mqServer = MQ_ENABLED ? require('./mqServer') : null;
 const { ocppEventPublisher } = MQ_ENABLED ? require('./publishers') : { ocppEventPublisher: null };
 const { ocppEventConsumer, emsEventConsumer } = MQ_ENABLED ? require('./consumers') : { ocppEventConsumer: null, emsEventConsumer: null };
-const { notificationService, systemStatusService, orphanTransactionService, healthMonitoringService, invoiceRetryService } = require('./services');
+const { notificationService, systemStatusService, orphanTransactionService, invoiceRetryService } = require('./services');
 
 /**
  * 发布充电桩连接状态事件到MQ
@@ -609,34 +620,6 @@ async function initializeServices() {
   } catch (error) {
     logger.error(`⚠️ 發票重試監控服務啟動失败: ${error.message}`);
   }
-
-  // 啟動健康監控服務
-  try {
-    if (!healthMonitoringService.isRunning) {
-      const isDevelopment = process.env.NODE_ENV !== 'production';
-      const HOST = process.env.OCPP_HOST || '0.0.0.0';
-      const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
-      
-      healthMonitoringService.start({
-        checkIntervalSeconds: isDevelopment ? 5 : 60,  // 開發環境5秒，生產環境60秒
-        enableAutoRestart: isDevelopment,               // 只在開發環境啟用自動重啟
-        maxConsecutiveFailures: -1,                     // -1 表示無限制重試，不放棄
-        healthEndpoint: `http://${HOST}:${PORT}/ocpp/api/health`, // 健康檢查端點
-        onRestartRequired: () => {
-          // 當需要重啟時的回調函數
-          logger.warn('🔄 健康監控服務檢測到需要重啟服務器');
-          if (isDevelopment) {
-            handleCriticalError('healthCheckFailed', new Error('連續健康檢查失敗'));
-          }
-        }
-      });
-      logger.info('💓 健康監控服務已啟動');
-    } else {
-      logger.debug('💓 健康監控服務已在運行，跳過重複啟動');
-    }
-  } catch (error) {
-    logger.error(`⚠️ 健康監控服務啟動失败: ${error.message}`);
-  }
   
   return mqInitialized;
 }
@@ -696,14 +679,6 @@ function handleCriticalError(type, error) {
  */
 async function gracefulShutdown(signal) {
   logger.info(`接收到信号 ${signal}，准备关闭服务器...`);
-  
-  // 停止健康監控服務
-  try {
-    healthMonitoringService.stop();
-    // logger.info('💓 健康監控服務已停止');
-  } catch (error) {
-    logger.error(`停止健康監控服務時出錯: ${error.message}`);
-  }
 
   // 停止孤兒交易監控服務
   try {

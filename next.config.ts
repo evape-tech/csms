@@ -6,6 +6,9 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 });
 
 const nextConfig: NextConfig = {
+  // 啟用 Standalone 模式以支援 Docker 部署
+  output: "standalone",
+
   // Server 外部包 (從 experimental 移到頂層)
   serverExternalPackages: ['prisma', '@prisma/client', 'mysql2'],
   

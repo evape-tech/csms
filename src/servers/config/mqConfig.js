@@ -3,7 +3,11 @@
  * 包含所有与消息队列相关的配置项
  */
 
-require('dotenv').config();
+const path = require('path');
+
+// 根據 NODE_ENV 決定使用哪個 .env 文件
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
 
 // 是否启用MQ功能
 const MQ_ENABLED = process.env.ENABLE_MQ !== 'false';

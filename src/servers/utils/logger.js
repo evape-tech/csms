@@ -18,6 +18,7 @@ function getLogLevel() {
 }
 
 // 获取调用堆栈信息
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getCallerInfo() {
   const error = new Error();
   const stack = error.stack.split('\n');
