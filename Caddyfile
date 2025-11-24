@@ -7,78 +7,40 @@
 }
 
 # ============================================
-# 開發環境 - 使用 localhost
+# 本地開發 + Cloudflare Tunnel 統一配置
 # ============================================
-localhost {
+
+# HTTP 配置 (端口 80)
+:80 {
     # Next.js Web 服務
-    reverse_proxy web:3000
+    reverse_proxy web:3000 {
+        # 傳遞真實客戶端 IP 和協議信息 (Cloudflare Tunnel 需要)
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
     
-    # 啟用訪問日誌
+    # 訪問日誌
     log {
-        output file /var/log/caddy/access.log
+        output file /var/log/caddy/http-access.log
     }
 }
 
-# ============================================
-# 生產環境 - 使用域名 (取消註解並修改域名)
-# ============================================
+# HTTPS 配置 (端口 443) - localhost 自簽名證書
+localhost:443 {
+    # 使用 Caddy 內建的本地 CA (自簽名證書)
+    tls internal
+    
+    # Next.js Web 服務
+    reverse_proxy web:3000 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+    }
+    
+    # 訪問日誌
+    log {
+        output file /var/log/caddy/https-access.log
+    }
+}
 
-# 方案 1: 使用子域名 (推薦)
-# 主網站
-# example.com {
-#     # 自動 HTTPS (Let's Encrypt)
-#     reverse_proxy web:3000
-#     
-#     # 啟用壓縮
-#     encode gzip
-#     
-#     # 訪問日誌
-#     log {
-#         output file /var/log/caddy/web-access.log
-#     }
-# }
-
-# OCPP WebSocket 子域名 - wss://ocpp.example.com
-# ocpp.example.com {
-#     # 自動 HTTPS,支援 WebSocket Secure (WSS)
-#     reverse_proxy ocpp:8089
-#     
-#     log {
-#         output file /var/log/caddy/ocpp-access.log
-#     }
-# }
-
-# ============================================
-# 方案 2: 使用路徑 (如果不想用子域名)
-# ============================================
-# example.com {
-#     # 主站
-#     reverse_proxy web:3000
-#     
-#     # OCPP 路徑 - wss://example.com/ocpp
-#     handle_path /ocpp/* {
-#         reverse_proxy ocpp:8089
-#     }
-#     
-#     encode gzip
-#     
-#     log {
-#         output file /var/log/caddy/access.log
-#     }
-# }
-
-# API 子路徑示例
-# example.com {
-#     # 主站
-#     reverse_proxy web:3000
-#     
-#     # API 路由到不同的後端
-#     handle /api/* {
-#         reverse_proxy api:8000
-#     }
-#     
-#     # OCPP WebSocket 路由
-#     handle /ocpp/* {
-#         reverse_proxy ocpp:8089
-#     }
-# }

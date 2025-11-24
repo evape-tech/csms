@@ -19,7 +19,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma Client
 RUN npm run db:generate
 
 # Next.js collects completely anonymous telemetry data about general usage.
