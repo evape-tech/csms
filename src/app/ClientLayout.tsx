@@ -124,7 +124,7 @@ const DrawerComponent = React.memo(function DrawerComponent({
       {children}
     </Drawer>
   );
-}, (prev, next) => prev.drawerOpen === next.drawerOpen);
+}); // Removed custom comparator - React will now compare children by reference
 
 export default function ClientLayout({
   children,
@@ -207,6 +207,12 @@ export default function ClientLayout({
     }
   }, []);
 
+  // Compute selected site name with proper fallback
+  const selectedSiteName = React.useMemo(() => {
+    if (!selectedSite) return '載入中...';
+    return selectedSite.name || selectedSite.station_code || '未命名站點';
+  }, [selectedSite]);
+
   // Memoized main content sx to avoid recreation
   const mainSx = React.useMemo(() => ({
     flexGrow: 1,
@@ -221,9 +227,10 @@ export default function ClientLayout({
     <Sidebar
       drawerOpen={drawerOpen}
       selectedSite={selectedSite}
+      selectedSiteName={selectedSiteName}
       onOpenSiteDialog={handleOpenSiteDialog}
     />
-  ), [drawerOpen, selectedSite, handleOpenSiteDialog]);
+  ), [drawerOpen, selectedSite, selectedSiteName, handleOpenSiteDialog]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -232,7 +239,7 @@ export default function ClientLayout({
         
         <AppBarComponent
           onDrawerToggle={handleDrawerToggle}
-          selectedSiteName={selectedSite?.name || '載入中...'}
+          selectedSiteName={selectedSiteName}
           darkMode={darkMode}
           onThemeToggle={handleThemeToggle}
           onLogout={handleLogout}
