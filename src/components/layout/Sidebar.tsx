@@ -141,11 +141,13 @@ const VersionSelector = React.memo(function VersionSelector() {
 // Site selector component with memo
 const SiteSelector = React.memo(function SiteSelector({ 
   drawerOpen, 
-  selectedSite, 
+  selectedSite,
+  selectedSiteName,
   onOpenSiteDialog 
 }: { 
   drawerOpen: boolean; 
-  selectedSite: any; 
+  selectedSite: any;
+  selectedSiteName: string;
   onOpenSiteDialog: () => void; 
 }) {
   return (
@@ -163,7 +165,7 @@ const SiteSelector = React.memo(function SiteSelector({
           {drawerOpen && (
             <>
               <ListItemText 
-                primary={selectedSite?.name || '載入中...'} 
+                primary={selectedSiteName} 
                 primaryTypographyProps={primaryTypographySx} 
               />
               <KeyboardArrowRightIcon />
@@ -176,10 +178,10 @@ const SiteSelector = React.memo(function SiteSelector({
 }, (prev, next) => 
   prev.drawerOpen === next.drawerOpen && 
   prev.selectedSite?.id === next.selectedSite?.id &&
-  prev.selectedSite?.name === next.selectedSite?.name
+  prev.selectedSiteName === next.selectedSiteName
 );
 
-function Sidebar({ drawerOpen, selectedSite, onOpenSiteDialog } : {drawerOpen:boolean; selectedSite:any; onOpenSiteDialog: ()=>void}) {
+function Sidebar({ drawerOpen, selectedSite, selectedSiteName, onOpenSiteDialog } : {drawerOpen:boolean; selectedSite:any; selectedSiteName:string; onOpenSiteDialog: ()=>void}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Toolbar />
@@ -187,9 +189,13 @@ function Sidebar({ drawerOpen, selectedSite, onOpenSiteDialog } : {drawerOpen:bo
       <List sx={listGrowSx}>
         <DashboardItem drawerOpen={drawerOpen} />
         <Divider sx={dividerSx} />
-        {groupedMenuItems.map((group) => (
+        {groupedMenuItems.map((group, index) => (
           <React.Fragment key={group.group}>
-            <ListSubheader>{group.group}</ListSubheader>
+            {drawerOpen ? (
+              <ListSubheader>{group.group}</ListSubheader>
+            ) : (
+              index > 0 && <Box sx={{ height: '8px' }} />
+            )}
             {group.items.map((item:any) => (
               <NavItem key={item.label} item={item} drawerOpen={drawerOpen} />
             ))}
@@ -204,10 +210,15 @@ function Sidebar({ drawerOpen, selectedSite, onOpenSiteDialog } : {drawerOpen:bo
       <SiteSelector 
         drawerOpen={drawerOpen}
         selectedSite={selectedSite}
+        selectedSiteName={selectedSiteName}
         onOpenSiteDialog={onOpenSiteDialog}
       />
     </div>
   );
 }
 
-export default React.memo(Sidebar, (prev, next) => prev.drawerOpen === next.drawerOpen && prev.selectedSite?.id === next.selectedSite?.id);
+export default React.memo(Sidebar, (prev, next) => 
+  prev.drawerOpen === next.drawerOpen && 
+  prev.selectedSite?.id === next.selectedSite?.id && 
+  prev.selectedSiteName === next.selectedSiteName
+);
