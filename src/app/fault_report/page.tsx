@@ -34,6 +34,8 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
+import EngineeringIcon from '@mui/icons-material/Engineering';
+import { CreateFaultReportDialog } from '@/components/dialog';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -72,6 +74,15 @@ interface FaultReport {
   resolved_at?: string | Date | null;
   users_fault_reports_user_idTousers?: FaultReportUser | null;
   users_fault_reports_assigned_toTousers?: FaultReportUser | null;
+}
+
+interface FaultReportPrefillData {
+  cpid?: string | null;
+  cpsn?: string | null;
+  connector_id?: number | null;
+  fault_type?: string | null;
+  severity?: string | null;
+  description?: string | null;
 }
 
 interface SummaryStats {
@@ -196,6 +207,12 @@ export default function FaultReport() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [faultReportPrefill, setFaultReportPrefill] = useState<FaultReportPrefillData | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchFaultReports = useCallback(async () => {
     setLoading(true);
@@ -233,6 +250,44 @@ export default function FaultReport() {
     fetchFaultReports();
   }, [fetchFaultReports]);
 
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    const loadUser = async () => {
+      try {
+        const res = await fetch('/api/users/me', { signal: controller.signal });
+        if (!res.ok) throw new Error('unauthorized');
+        const data = await res.json();
+        if (!active) return;
+        const role = data?.user?.role;
+        setIsAdmin(role === 'admin' || role === 'super_admin');
+        setCurrentUserId(data?.user?.id ?? data?.user?.userId ?? null);
+      } catch {
+        if (!active) return;
+        setIsAdmin(false);
+        setCurrentUserId(null);
+      } finally {
+        if (active) {
+          setCheckingAdmin(false);
+        }
+      }
+    };
+
+    loadUser();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
   const handleSearch = () => {
     fetchFaultReports();
   };
@@ -265,6 +320,29 @@ export default function FaultReport() {
       setUpdatingId(null);
     }
   };
+
+  const handleOpenCreateDialog = (report?: FaultReport) => {
+    if (!isAdmin) return;
+    setFaultReportPrefill(report ? {
+      cpid: report.cpid ?? null,
+      cpsn: report.cpsn ?? null,
+      connector_id: report.connector_id ?? null,
+      fault_type: report.fault_type ?? undefined,
+      severity: report.severity ?? undefined,
+      description: report.description ?? ''
+    } : null);
+    setCreateDialogOpen(true);
+  };
+
+  const handleCloseCreateDialog = () => {
+    setCreateDialogOpen(false);
+    setFaultReportPrefill(null);
+  };
+
+  const handleCreateSuccess = useCallback(() => {
+    setSuccessMessage('故障回報建立成功');
+    fetchFaultReports();
+  }, [fetchFaultReports]);
 
   const filteredRows = useMemo(() => {
     return faultReports.filter((row) => {
@@ -660,12 +738,35 @@ export default function FaultReport() {
               }}
             />
           </Box>
+          {isAdmin && !checkingAdmin && (
+            <Button
+              variant="contained"
+              size="medium"
+              startIcon={<EngineeringIcon />}
+              disabled={loading}
+              onClick={() => handleOpenCreateDialog()}
+              sx={{
+                textTransform: 'none',
+                borderRadius: 2,
+                fontWeight: 600
+              }}
+            >
+              建立工單
+            </Button>
+          )}
         </Box>
 
         {error && (
           <Box sx={{ p: 3 }}>
             <Alert severity="error" onClose={() => setError(null)}>
               {error}
+            </Alert>
+          </Box>
+        )}
+        {successMessage && (
+          <Box sx={{ px: 3 }}>
+            <Alert severity="success" onClose={() => setSuccessMessage(null)}>
+              {successMessage}
             </Alert>
           </Box>
         )}
@@ -737,7 +838,24 @@ export default function FaultReport() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {isAdmin && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="primary"
+                          sx={{
+                            minWidth: 'auto',
+                            px: 2,
+                            textTransform: 'none',
+                            borderRadius: 2
+                          }}
+                          disabled={loading || checkingAdmin}
+                          onClick={() => handleOpenCreateDialog(row)}
+                        >
+                          工單
+                        </Button>
+                      )}
                       <Button
                         size="small"
                         variant="outlined"
@@ -819,6 +937,16 @@ export default function FaultReport() {
           </Box>
         )}
       </Paper>
+      <CreateFaultReportDialog
+        open={createDialogOpen}
+        onClose={handleCloseCreateDialog}
+        reporterId={currentUserId || undefined}
+        initialData={faultReportPrefill ?? undefined}
+        onSuccess={() => {
+          handleCloseCreateDialog();
+          handleCreateSuccess();
+        }}
+      />
     </Container>
   );
 }

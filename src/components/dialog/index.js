@@ -11,3 +11,4 @@ export { default as SiteDialog } from './SiteDialog';
 export { default as TariffDialog } from './TariffDialog';
 export { default as UserDialog } from './UserDialog';
 export { default as CreateMaintenanceDialog } from './CreateMaintenanceDialog';
+export { default as CreateFaultReportDialog } from './CreateFaultReportDialog';
