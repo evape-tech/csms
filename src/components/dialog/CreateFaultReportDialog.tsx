@@ -163,6 +163,19 @@ export default function CreateFaultReportDialog({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (cpid) {
+      const matching = cpOptions.filter(item => item.cpid === cpid);
+      if (matching.length === 1 && matching[0].cpsn) {
+        setCpsn(matching[0].cpsn);
+      } else {
+        setCpsn('');
+      }
+    } else {
+      setCpsn('');
+    }
+  }, [cpid, cpOptions]);
+
   const cpidOptions = useMemo(() => {
     return Array.from(new Set(cpOptions.map((item) => item.cpid).filter(Boolean))).sort(
       (a, b) => (a || '').localeCompare(b || '')
@@ -186,11 +199,11 @@ export default function CreateFaultReportDialog({
       return;
     }
     if (!cpid) {
-    setError('請輸入 CPID');
-    return;
-  }
-  if (!cpsn) {
-    setError('請輸入 CPSN');
+      setError('請輸入 CPID');
+      return;
+    }
+    if (!cpsn) {
+      setError('請輸入 CPSN');
       return;
     }
     if (!faultType) {
@@ -205,7 +218,7 @@ export default function CreateFaultReportDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const body: Record<string, any> = {
+      const payload = {
         cpid,
         cpsn,
         connector_id: connectorId ? Number(connectorId) : null,
@@ -215,22 +228,36 @@ export default function CreateFaultReportDialog({
         user_id: reporterId,
         assigned_to: assignedTo || null
       };
-
+  
       const res = await fetch('/api/fault-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(payload)
       });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data?.message || data?.error || '建立故障回報失敗');
+  
+      let json: any = null;
+      try {
+        json = await res.json();
+        console.log("📌 Backend JSON:", json);
+      } catch (e) {
+        console.error("❌ Response not JSON:", e);
       }
-
+  
+      if (!res.ok) {
+        console.error("🔥 Backend Error:", json);
+        throw new Error(json?.message || json?.error || "後端錯誤");
+      }
+  
+      if (!json.success) {
+        console.error("🔥 Backend Error(success=false):", json);
+        throw new Error(json.message || "後端返回失敗");
+      }
+  
       onSuccess?.();
+  
     } catch (err: any) {
-      setError(err?.message || '建立故障回報失敗');
-      console.error('Create fault report error:', err);
+      console.error("💥 Create fault report FULL ERROR:", err);
+      setError(err.message || "建立故障回報失敗");
     } finally {
       setSubmitting(false);
     }
@@ -260,18 +287,11 @@ export default function CreateFaultReportDialog({
           <TextField
             label="CPSN"
             value={cpsn}
-            onChange={(e) => setCpsn(e.target.value)}
             size="small"
             fullWidth
-            disabled={loadingOptions}
-            helperText="必填，可輸入或從建議列表選取"
-            inputProps={{ list: 'cpsn-options' }}
+            disabled
+            helperText="由 CPID 自動帶入"
           />
-          <Box component="datalist" id="cpsn-options">
-            {cpsnOptions.map((value) => (
-              <option key={value || ''} value={value || ''} />
-            ))}
-          </Box>
 
           <TextField
             label="連接器編號"
@@ -312,15 +332,6 @@ export default function CreateFaultReportDialog({
               </MenuItem>
             ))}
           </TextField>
-
-          <TextField
-            label="指派維護人員 ID"
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-            size="small"
-            fullWidth
-            placeholder="可選填"
-          />
 
           <TextField
             label="故障描述"
@@ -378,4 +389,3 @@ export default function CreateFaultReportDialog({
     </Dialog>
   );
 }
-

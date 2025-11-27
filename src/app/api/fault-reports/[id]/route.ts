@@ -2,138 +2,122 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '../../../../lib/database/adapter.js';
 import DatabaseUtils from '../../../../lib/database/utils.js';
 
-// 強制動態渲染，避免靜態快取
+// BigInt 序列化工具
+function serializeBigInt(obj: any) {
+  return JSON.parse(
+    JSON.stringify(obj, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )
+  );
+}
+
 export const dynamic = 'force-dynamic';
 
-// GET - 取得單一故障報告
+/* ===========================
+   GET 取得單一故障報告
+=========================== */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const { id: idParam } = await params;
+    const idParam = params.id;
     let id: bigint;
+
     try {
       id = BigInt(idParam);
     } catch {
       return NextResponse.json(
-        { success: false, message: '無效的故障報告 ID' },
+        { success: false, message: "無效的故障報告 ID" },
         { status: 400 }
       );
     }
 
-    const faultReport = await client.fault_reports.findUnique({
+    const report = await client.fault_reports.findUnique({
       where: { id },
       include: {
         users_fault_reports_user_idTousers: {
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-            email: true
-          }
+          select: { id: true, first_name: true, last_name: true, email: true }
         },
         users_fault_reports_assigned_toTousers: {
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-            email: true
-          }
+          select: { id: true, first_name: true, last_name: true, email: true }
         }
       }
     });
 
-    if (!faultReport) {
+    if (!report) {
       return NextResponse.json(
-        { success: false, message: '故障報告不存在' },
+        { success: false, message: "故障報告不存在" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: faultReport
-    });
-
-  } catch (error) {
-    console.error('Get fault report error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        message: '取得故障報告失敗', 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      },
+      serializeBigInt({
+        success: true,
+        data: report
+      })
+    );
+
+  } catch (err) {
+    console.error("GET fault report error:", err);
+    return NextResponse.json(
+      { success: false, message: "取得故障報告失敗" },
       { status: 500 }
     );
   }
 }
 
-// PUT - 更新故障報告
+/* ===========================
+   PUT 更新故障報告
+=========================== */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const { id: idParam } = await params;
+    const idParam = params.id;
     let id: bigint;
+
     try {
       id = BigInt(idParam);
     } catch {
       return NextResponse.json(
-        { success: false, message: '無效的故障報告 ID' },
+        { success: false, message: "無效的故障報告 ID" },
         { status: 400 }
       );
     }
 
     const body = await request.json();
-    const {
-      status,
-      assigned_to,
-      resolution,
-      severity
-    } = body;
+    const { status, assigned_to, resolution, severity } = body;
 
-    // 檢查故障報告是否存在
-    const existingReport = await client.fault_reports.findUnique({
+    const existing = await client.fault_reports.findUnique({
       where: { id }
     });
 
-    if (!existingReport) {
+    if (!existing) {
       return NextResponse.json(
-        { success: false, message: '故障報告不存在' },
+        { success: false, message: "故障報告不存在" },
         { status: 404 }
       );
     }
 
-    // 準備更新資料
     const updateData: any = {};
-    
-    if (status !== undefined) {
-      updateData.status = status;
-    }
-    
-    if (assigned_to !== undefined) {
-      updateData.assigned_to = assigned_to ? String(assigned_to) : null;
-    }
-    
-    if (resolution !== undefined) {
-      updateData.resolution = resolution;
-    }
-    
-    if (severity !== undefined) {
-      updateData.severity = severity;
-    }
 
-    // 如果狀態改為已解決，設定解決時間
-    if (status === 'RESOLVED' && !existingReport.resolved_at) {
+    if (status !== undefined) updateData.status = status;
+    if (assigned_to !== undefined)
+      updateData.assigned_to = assigned_to ? String(assigned_to) : null;
+    if (resolution !== undefined) updateData.resolution = resolution;
+    if (severity !== undefined) updateData.severity = severity;
+
+    // 狀態改為 RESOLVED → 設定已解決時間
+    if (status === "RESOLVED" && !existing.resolved_at) {
       updateData.resolved_at = new Date();
     }
 
@@ -142,92 +126,81 @@ export async function PUT(
       data: updateData,
       include: {
         users_fault_reports_user_idTousers: {
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-            email: true
-          }
+          select: { id: true, first_name: true, last_name: true, email: true }
         },
         users_fault_reports_assigned_toTousers: {
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-            email: true
-          }
+          select: { id: true, first_name: true, last_name: true, email: true }
         }
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: updatedReport,
-      message: '故障報告更新成功'
-    });
-
-  } catch (error) {
-    console.error('Update fault report error:', error);
+    // ⭐ 重要：回傳要 serializeBigInt，否則會 500 然後前端顯示「更新失敗」
     return NextResponse.json(
-      { 
-        success: false, 
-        message: '更新故障報告失敗', 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      },
+      serializeBigInt({
+        success: true,
+        data: updatedReport,
+        message: "故障報告更新成功"
+      }),
+      { status: 200 }
+    );
+
+  } catch (err) {
+    console.error("Update fault report error:", err);
+    return NextResponse.json(
+      { success: false, message: "更新故障報告失敗" },
       { status: 500 }
     );
   }
 }
 
-// DELETE - 刪除故障報告
+/* ===========================
+   DELETE 刪除故障報告
+=========================== */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const { id: idParam } = await params;
+    const idParam = params.id;
     let id: bigint;
+
     try {
       id = BigInt(idParam);
     } catch {
       return NextResponse.json(
-        { success: false, message: '無效的故障報告 ID' },
+        { success: false, message: "無效的故障報告 ID" },
         { status: 400 }
       );
     }
 
-    // 檢查故障報告是否存在
-    const existingReport = await client.fault_reports.findUnique({
+    const exists = await client.fault_reports.findUnique({
       where: { id }
     });
 
-    if (!existingReport) {
+    if (!exists) {
       return NextResponse.json(
-        { success: false, message: '故障報告不存在' },
+        { success: false, message: "故障報告不存在" },
         { status: 404 }
       );
     }
 
-    await client.fault_reports.delete({
-      where: { id }
-    });
+    await client.fault_reports.delete({ where: { id } });
 
-    return NextResponse.json({
-      success: true,
-      message: '故障報告刪除成功'
-    });
-
-  } catch (error) {
-    console.error('Delete fault report error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        message: '刪除故障報告失敗', 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      },
+      serializeBigInt({
+        success: true,
+        message: "故障報告刪除成功"
+      }),
+      { status: 200 }
+    );
+
+  } catch (err) {
+    console.error("Delete fault report error:", err);
+    return NextResponse.json(
+      { success: false, message: "刪除故障報告失敗" },
       { status: 500 }
     );
   }

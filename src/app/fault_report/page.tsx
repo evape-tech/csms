@@ -36,6 +36,9 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import { CreateFaultReportDialog } from '@/components/dialog';
+import {
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+} from '@mui/material';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -213,6 +216,20 @@ export default function FaultReport() {
   const [faultReportPrefill, setFaultReportPrefill] = useState<FaultReportPrefillData | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserUuid, setCurrentUserUuid] = useState<string>('');
+
+  // 通用確認視窗
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: (() => void) | null;
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    onConfirm: null
+  });
 
   const fetchFaultReports = useCallback(async () => {
     setLoading(true);
@@ -252,27 +269,28 @@ export default function FaultReport() {
 
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
+    const controller = new AbortController();    
 
     const loadUser = async () => {
       try {
-        const res = await fetch('/api/users/me', { signal: controller.signal });
-        if (!res.ok) throw new Error('unauthorized');
-        const data = await res.json();
-        if (!active) return;
-        const role = data?.user?.role;
-        setIsAdmin(role === 'admin' || role === 'super_admin');
-        setCurrentUserId(data?.user?.id ?? data?.user?.userId ?? null);
-      } catch {
-        if (!active) return;
-        setIsAdmin(false);
-        setCurrentUserId(null);
-      } finally {
-        if (active) {
-          setCheckingAdmin(false);
+      const res = await fetch('/api/users/me', { signal: controller.signal });
+      if (!res.ok) throw new Error('unauthorized');
+      const data = await res.json();
+      if (!active) return;
+
+      const role = data?.user?.role;
+      const uuid = data?.user?.uuid || data?.user?.id; // 優先拿 uuid
+
+      setIsAdmin(role === 'admin' || role === 'super_admin');
+      setCurrentUserUuid(uuid || ''); // 一定要是字串，不能是 null
+        } catch {
+          if (!active) return;
+          setIsAdmin(false);
+          setCurrentUserUuid('');
+        } finally {
+          if (active) setCheckingAdmin(false);
         }
-      }
-    };
+      };
 
     loadUser();
 
@@ -293,33 +311,44 @@ export default function FaultReport() {
   };
 
   const updateFaultReportStatus = async (id: number, nextStatus: FaultReportStatus) => {
-    setUpdatingId(id);
-    setError(null);
+  setConfirmDialog({
+    open: true,
+    title: nextStatus === 'RESOLVED' ? '確認完成？' : '確認關閉？',
+    message:
+      nextStatus === 'RESOLVED'
+        ? '你確定要將此故障回報標記為已完成嗎？'
+        : '你確定要關閉此故障報告嗎？',
+    onConfirm: async () => {
+      setConfirmDialog((prev) => ({ ...prev, open: false }));
+      setUpdatingId(id);
 
-    try {
-      const response = await fetch(`/api/fault-reports/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: nextStatus })
-      });
+      try {
+        const response = await fetch(`/api/fault-reports/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: nextStatus })
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data?.message ?? '更新故障報告狀態失敗');
+        if (!response.ok || !data.success) {
+          throw new Error(data?.message ?? '更新故障報告狀態失敗');
+        }
+
+        await fetchFaultReports();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
+        setError(message);
+        console.error('Update fault report status error:', err);
+      } finally {
+        setUpdatingId(null);
       }
-
-      await fetchFaultReports();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
-      setError(message);
-      console.error('Update fault report status error:', err);
-    } finally {
-      setUpdatingId(null);
     }
-  };
+  });
+};
+
 
   const handleOpenCreateDialog = (report?: FaultReport) => {
     if (!isAdmin) return;
@@ -751,7 +780,7 @@ export default function FaultReport() {
                 fontWeight: 600
               }}
             >
-              建立工單
+              建立故障回報單
             </Button>
           )}
         </Box>
@@ -940,13 +969,41 @@ export default function FaultReport() {
       <CreateFaultReportDialog
         open={createDialogOpen}
         onClose={handleCloseCreateDialog}
-        reporterId={currentUserId || undefined}
+        //reporterId={currentUserId || undefined}
+        reporterId="qfxzB1ieahqFlqfEPvvZ"
         initialData={faultReportPrefill ?? undefined}
         onSuccess={() => {
           handleCloseCreateDialog();
           handleCreateSuccess();
         }}
       />
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
+      >
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{confirmDialog.message}</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setConfirmDialog((prev) => ({ ...prev, open: false }))
+            }
+          >
+            取消
+          </Button>  
+          <Button
+            onClick={() => {
+              confirmDialog.onConfirm && confirmDialog.onConfirm();
+            }}
+            variant="contained"
+            color="primary"
+          >
+            確認
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

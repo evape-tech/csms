@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '../../../lib/database/adapter.js';
 import DatabaseUtils from '../../../lib/database/utils.js';
 
+function serializeBigInt(obj: any) {
+  return JSON.parse(
+    JSON.stringify(obj, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )
+  );
+}
+
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
 
@@ -101,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: {
+      data: serializeBigInt({
         reports: faultReports,
         pagination: {
           page,
@@ -117,7 +125,7 @@ export async function GET(request: NextRequest) {
           closed: statusStats.CLOSED || 0,
           critical: faultReports.filter((r: any) => r.severity === 'CRITICAL').length
         }
-      }
+      })
     });
 
   } catch (error) {
@@ -215,7 +223,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: faultReport,
+      data: serializeBigInt(faultReport),
       message: '故障報告建立成功'
     });
 
