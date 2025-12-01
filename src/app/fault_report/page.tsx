@@ -311,6 +311,39 @@ export default function FaultReport() {
   };
 
   const updateFaultReportStatus = async (id: number, nextStatus: FaultReportStatus) => {
+
+  // 👉 調度不跳出確認視窗，直接執行更新
+  if (nextStatus === 'IN_PROGRESS') {
+    setUpdatingId(id);
+
+    try {
+      const response = await fetch(`/api/fault-reports/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message ?? '更新故障報告狀態失敗');
+      }
+
+      await fetchFaultReports();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
+      setError(message);
+      console.error('Update fault report status error:', err);
+    } finally {
+      setUpdatingId(null);
+    }
+
+    return; // ⬅ 記得跳出，不走下面 confirmDialog
+  }
+
+  // 👉 完成 / 關閉：原本的通用確認視窗
   setConfirmDialog({
     open: true,
     title: nextStatus === 'RESOLVED' ? '確認完成？' : '確認關閉？',
@@ -345,9 +378,10 @@ export default function FaultReport() {
       } finally {
         setUpdatingId(null);
       }
-    }
+    },
   });
 };
+
 
 
   const handleOpenCreateDialog = (report?: FaultReport) => {
@@ -894,7 +928,7 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
-                        disabled={loading || updatingId === row.id || row.status === 'IN_PROGRESS'}
+                        disabled={loading || updatingId === row.id || row.status === 'IN_PROGRESS'|| row.status === 'RESOLVED'|| row.status === 'CLOSED'}
                         onClick={() => updateFaultReportStatus(row.id, 'IN_PROGRESS')}
                       >
                         調度
@@ -909,7 +943,7 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
-                        disabled={loading || updatingId === row.id || row.status === 'RESOLVED'}
+                        disabled={loading || updatingId === row.id || row.status === 'RESOLVED'|| row.status === 'CLOSED'}
                         onClick={() => updateFaultReportStatus(row.id, 'RESOLVED')}
                       >
                         <AssignmentTurnedInIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
@@ -925,7 +959,7 @@ export default function FaultReport() {
                           textTransform: 'none',
                           borderRadius: 2
                         }}
-                        disabled={loading || updatingId === row.id || row.status === 'CLOSED'}
+                        disabled={loading || updatingId === row.id || row.status === 'CLOSED'|| row.status === 'RESOLVED'}
                         onClick={() => updateFaultReportStatus(row.id, 'CLOSED')}
                       >
                         <CloseIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
