@@ -18,13 +18,13 @@ export const dynamic = 'force-dynamic';
 =========================== */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const idParam = params.id;
+    const { id: idParam } = await params;
     let id: bigint;
 
     try {
@@ -76,13 +76,13 @@ export async function GET(
 =========================== */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const idParam = params.id;
+    const { id: idParam } = await params;
     let id: bigint;
 
     try {
@@ -158,13 +158,13 @@ export async function PUT(
 =========================== */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const idParam = params.id;
+    const { id: idParam } = await params;
     let id: bigint;
 
     try {
