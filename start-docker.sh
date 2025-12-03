@@ -11,7 +11,7 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 echo "Building and starting containers..."
-docker-compose up -d --build
+docker compose up -d --build
 
 if [ $? -ne 0 ]; then
     echo "Failed to start containers."
@@ -37,4 +37,4 @@ echo ""
 echo "Showing logs... (Press Ctrl+C to exit logs, containers will keep running)"
 echo ""
 
-docker-compose logs -f
+docker compose logs -f
