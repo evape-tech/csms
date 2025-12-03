@@ -22,7 +22,15 @@ import {
   useTheme,
   alpha,
   CircularProgress,
-  Alert
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  DialogContent,
+  DialogTitle,
+  DialogActions,
+  DialogContentText,
+  Dialog
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
@@ -36,9 +44,6 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import { CreateFaultReportDialog } from '@/components/dialog';
-import {
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
-} from '@mui/material';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -59,6 +64,7 @@ type FaultReportStatus =
 
 interface FaultReportUser {
   id?: string | number;
+  uuid?: string;
   first_name?: string | null;
   last_name?: string | null;
   email?: string | null;
@@ -106,6 +112,13 @@ const defaultSummary: SummaryStats = {
   critical: 0
 };
 
+type AssignDialogState = {
+  open: boolean;
+  reportId: number | null;
+  assignedTo: string;
+  assignedUserInfo: FaultReportUser | null;
+};
+
 const statusLabelMap: Record<string, string> = {
   REPORTED: '待處理',
   UNDER_REVIEW: '審核中',
@@ -122,6 +135,21 @@ const statusColorMap: Record<string, 'warning' | 'info' | 'success' | 'default'>
   IN_PROGRESS: 'info',
   RESOLVED: 'success',
   CLOSED: 'default'
+};
+
+const normalizeIdentifier = (value?: string | number | null) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const dedupeUsersById = (users: FaultReportUser[] = []) => {
+  const uniqueMap = new Map<string, FaultReportUser>();
+  users.forEach((user) => {
+    const optionValue = normalizeIdentifier(user.uuid ?? user.id);
+    if (!optionValue || uniqueMap.has(optionValue)) return;
+    uniqueMap.set(optionValue, { ...user, uuid: optionValue });
+  });
+  return Array.from(uniqueMap.values());
 };
 
 const formatDateTime = (value?: string | Date | null) => {
@@ -150,15 +178,25 @@ const getReportIdentifier = (report: FaultReport) => `FR-${report.id ?? ''}`;
 
 const normalizeFaultReports = (reports: unknown[]): FaultReport[] => {
   if (!Array.isArray(reports)) return [];
-  return reports.map((item) => {
-    const report = item as FaultReport;
-    return {
-      ...report,
-      id: typeof report.id === 'number' ? report.id : Number(report.id ?? 0),
-      reported_at: report.reported_at ? new Date(report.reported_at) : null,
-      resolved_at: report.resolved_at ? new Date(report.resolved_at) : null
-    };
-  });
+  return reports.map((item: any) => ({
+    ...item,
+    id: Number(item.id ?? 0),
+    reported_at: item.reported_at ? new Date(item.reported_at) : null,
+    resolved_at: item.resolved_at ? new Date(item.resolved_at) : null,
+    // 關鍵：保留 uuid，否則永遠找不到
+    users_fault_reports_assigned_toTousers: item.users_fault_reports_assigned_toTousers
+      ? {
+          ...item.users_fault_reports_assigned_toTousers,
+          uuid: normalizeIdentifier(item.users_fault_reports_assigned_toTousers.uuid || item.users_fault_reports_assigned_toTousers.id)
+        }
+      : null,
+    users_fault_reports_user_idTousers: item.users_fault_reports_user_idTousers
+      ? {
+          ...item.users_fault_reports_user_idTousers,
+          uuid: normalizeIdentifier(item.users_fault_reports_user_idTousers.uuid || item.users_fault_reports_user_idTousers.id)
+        }
+      : null,
+  }));
 };
 
 const deriveSummary = (reports: FaultReport[], rawStats?: Record<string, number>): SummaryStats => {
@@ -201,6 +239,13 @@ const deriveSummary = (reports: FaultReport[], rawStats?: Record<string, number>
   }, { ...defaultSummary, total: 0 });
 };
 
+const initialAssignDialogState: AssignDialogState = {
+  open: false,
+  reportId: null,
+  assignedTo: '',
+  assignedUserInfo: null
+};
+
 export default function FaultReport() {
   const theme = useTheme();
   const [status, setStatus] = useState('');
@@ -217,6 +262,13 @@ export default function FaultReport() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserUuid, setCurrentUserUuid] = useState<string>('');
+  const [managers, setManagers] = useState<FaultReportUser[]>([]);
+  const [detailDialog, setDetailDialog] = useState({
+    open: false,
+    loading: false,
+    report: null as FaultReport | null
+  });
+  const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
 
   // 通用確認視窗
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -230,6 +282,35 @@ export default function FaultReport() {
     message: '',
     onConfirm: null
   });
+
+  const resetAssignDialog = () => setAssignDialog(initialAssignDialogState);
+
+  const fetchFaultDetail = async (id: number) => {
+  setDetailDialog({ open: true, loading: true, report: null });
+
+  try {
+    const res = await fetch(`/api/fault-reports/${id}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "取得詳細資料失敗");
+    }
+
+    setDetailDialog({
+      open: true,
+      loading: false,
+      report: data.data
+    });
+
+  } catch (err: any) {
+    console.error("Load detail error:", err);
+    setDetailDialog({
+      open: true,
+      loading: false,
+      report: null
+    });
+  }
+};
 
   const fetchFaultReports = useCallback(async () => {
     setLoading(true);
@@ -266,6 +347,35 @@ export default function FaultReport() {
   useEffect(() => {
     fetchFaultReports();
   }, [fetchFaultReports]);
+
+  useEffect(() => {
+  const loadManagers = async () => {
+    try {
+      const res = await fetch('/api/users?role=admin');
+      const result = await res.json();
+
+      if (result.success && Array.isArray(result.data)) {
+        const formatted = result.data.map((user: any) => {
+          const stableUuid = normalizeIdentifier(user?.uuid ?? user?.id);
+          return {
+            id: stableUuid,
+            uuid: stableUuid,
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            email: user.email || ''
+          };
+        });
+        setManagers(formatted);
+      } else {
+        setManagers([]);
+      }
+    } catch (err) {
+      console.error('載入管理員失敗');
+      setManagers([]);
+    }
+  };
+  loadManagers();
+}, []);
 
   useEffect(() => {
     let active = true;
@@ -306,55 +416,76 @@ export default function FaultReport() {
     return () => clearTimeout(timer);
   }, [successMessage]);
 
+  const normalizedManagers = useMemo(() => {
+    return dedupeUsersById(managers);
+  }, [managers]);
+
+  const resolvedManagerOptions = useMemo(() => {
+    const currentValue = normalizeIdentifier(assignDialog.assignedTo);
+    if (!currentValue) return normalizedManagers;
+
+    const hasMatch = normalizedManagers.some((user) => {
+      const optionValue = normalizeIdentifier(user.uuid ?? user.id);
+      return optionValue === currentValue;
+    });
+
+    if (hasMatch) return normalizedManagers;
+
+    if (!assignDialog.assignedUserInfo) return normalizedManagers;
+
+    const fallbackUser = {
+      ...assignDialog.assignedUserInfo,
+      uuid: currentValue || assignDialog.assignedUserInfo.uuid
+    };
+
+    return dedupeUsersById([
+      ...normalizedManagers,
+      fallbackUser
+    ]);
+  }, [normalizedManagers, assignDialog.assignedTo, assignDialog.assignedUserInfo]);
+
   const handleSearch = () => {
     fetchFaultReports();
   };
 
-  const updateFaultReportStatus = async (id: number, nextStatus: FaultReportStatus) => {
-
-  // 👉 調度不跳出確認視窗，直接執行更新
-  if (nextStatus === 'IN_PROGRESS') {
-    setUpdatingId(id);
-
+  const handleAssignConfirm = async () => {
+    const targetAssignee = normalizeIdentifier(assignDialog.assignedTo);
+    if (!assignDialog.reportId || !targetAssignee) return;
+  
+    const reportId = assignDialog.reportId;
+  
+    setUpdatingId(reportId);
+  
     try {
-      const response = await fetch(`/api/fault-reports/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: nextStatus })
+      const res = await fetch(`/api/fault-reports/${reportId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "IN_PROGRESS",
+          assigned_to: targetAssignee
+        }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data?.message ?? '更新故障報告狀態失敗');
-      }
-
+  
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "更新失敗");
+  
+      resetAssignDialog();
       await fetchFaultReports();
+  
     } catch (err) {
-      const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
-      setError(message);
-      console.error('Update fault report status error:', err);
+      console.error(err);
+      setError("調度失敗，請稍後再試");
     } finally {
       setUpdatingId(null);
     }
+  };
 
-    return; // ⬅ 記得跳出，不走下面 confirmDialog
-  }
 
-  // 👉 完成 / 關閉：原本的通用確認視窗
-  setConfirmDialog({
-    open: true,
-    title: nextStatus === 'RESOLVED' ? '確認完成？' : '確認關閉？',
-    message:
-      nextStatus === 'RESOLVED'
-        ? '你確定要將此故障回報標記為已完成嗎？'
-        : '你確定要關閉此故障報告嗎？',
-    onConfirm: async () => {
-      setConfirmDialog((prev) => ({ ...prev, open: false }));
+  const updateFaultReportStatus = async (id: number, nextStatus: FaultReportStatus) => {
+    // 調度不跳出確認視窗，直接執行更新
+    if (nextStatus === 'IN_PROGRESS') {
       setUpdatingId(id);
-
+  
       try {
         const response = await fetch(`/api/fault-reports/${id}`, {
           method: 'PUT',
@@ -363,13 +494,13 @@ export default function FaultReport() {
           },
           body: JSON.stringify({ status: nextStatus })
         });
-
+  
         const data = await response.json();
-
+  
         if (!response.ok || !data.success) {
           throw new Error(data?.message ?? '更新故障報告狀態失敗');
         }
-
+  
         await fetchFaultReports();
       } catch (err) {
         const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
@@ -378,9 +509,48 @@ export default function FaultReport() {
       } finally {
         setUpdatingId(null);
       }
-    },
-  });
-};
+  
+      return; // ⬅ 記得跳出，不走下面 confirmDialog
+    }
+  
+    // 完成 / 關閉：原本的通用確認視窗
+    setConfirmDialog({
+      open: true,
+      title: nextStatus === 'RESOLVED' ? '確認完成？' : '確認關閉？',
+      message:
+        nextStatus === 'RESOLVED'
+          ? '你確定要將此故障回報標記為已完成嗎？'
+          : '你確定要關閉此故障報告嗎？',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+        setUpdatingId(id);
+  
+        try {
+          const response = await fetch(`/api/fault-reports/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: nextStatus })
+          });
+  
+          const data = await response.json();
+  
+          if (!response.ok || !data.success) {
+            throw new Error(data?.message ?? '更新故障報告狀態失敗');
+          }
+  
+          await fetchFaultReports();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
+          setError(message);
+          console.error('Update fault report status error:', err);
+        } finally {
+          setUpdatingId(null);
+        }
+      },
+    });
+  };
 
 
 
@@ -914,7 +1084,7 @@ export default function FaultReport() {
                             borderRadius: 2
                           }}
                           disabled={loading || checkingAdmin}
-                          onClick={() => handleOpenCreateDialog(row)}
+                          onClick={() => fetchFaultDetail(row.id)}
                         >
                           工單
                         </Button>
@@ -929,7 +1099,18 @@ export default function FaultReport() {
                           borderRadius: 2
                         }}
                         disabled={loading || updatingId === row.id || row.status === 'IN_PROGRESS'|| row.status === 'RESOLVED'|| row.status === 'CLOSED'}
-                        onClick={() => updateFaultReportStatus(row.id, 'IN_PROGRESS')}
+                        onClick={() => {
+                          // 超強防呆：無論後端回傳什麼，都一定能找出 uuid 或 id
+                          const assignedUser = row.users_fault_reports_assigned_toTousers;
+                          const assignedUuid = normalizeIdentifier(assignedUser?.uuid || assignedUser?.id);  // 如果只有 id，就轉成字串
+                          
+                          setAssignDialog({
+                            open: true,
+                            reportId: row.id,
+                            assignedTo: assignedUuid,   
+                            assignedUserInfo: row.users_fault_reports_assigned_toTousers ?? null
+                          });
+                        }}
                       >
                         調度
                       </Button>
@@ -1035,6 +1216,137 @@ export default function FaultReport() {
             color="primary"
           >
             確認
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={detailDialog.open}
+        onClose={() => setDetailDialog({ open: false, loading: false, report: null })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>故障詳細資訊</DialogTitle>      
+        <DialogContent dividers>
+          {detailDialog.loading && (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <CircularProgress />
+            </Box>
+          )}
+      
+          {!detailDialog.loading && detailDialog.report && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography><strong>編號：</strong>FR-{detailDialog.report.id}</Typography>
+              <Typography><strong>樁號：</strong>{detailDialog.report.cpid}</Typography>
+              <Typography><strong>回報時間：</strong>{formatDateTime(detailDialog.report.reported_at)}</Typography>
+              <Typography><strong>狀態：</strong>{getStatusLabel(detailDialog.report.status)}</Typography>
+              <Typography><strong>回報者：</strong>{getReporterName(detailDialog.report)}</Typography>
+              <Typography><strong>描述：</strong></Typography>
+              <Typography sx={{ whiteSpace: 'pre-wrap' }}>
+                {detailDialog.report.description || "無描述"}
+              </Typography>
+              <Typography>
+                <strong>指派給：</strong>
+                {detailDialog.report.users_fault_reports_assigned_toTousers
+                  ? `${detailDialog.report.users_fault_reports_assigned_toTousers.first_name ?? ''}${
+                      detailDialog.report.users_fault_reports_assigned_toTousers.last_name ?? ''
+                    }`.trim() ||
+                    detailDialog.report.users_fault_reports_assigned_toTousers.email ||
+                    '未提供'
+                  : '尚未指派'}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>      
+        <DialogActions>
+          <Button onClick={() => setDetailDialog({ open: false, loading: false, report: null })}>
+            關閉
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={assignDialog.open}
+        onClose={resetAssignDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>選擇指派人員</DialogTitle>
+      
+        <DialogContent dividers>    
+          <FormControl fullWidth>
+            <InputLabel id="assign-to-label">指派給</InputLabel>
+            
+            <Select
+              labelId="assign-to-label"
+              label="指派給"
+              value={assignDialog.assignedTo || ''}
+              onChange={(e) => setAssignDialog(prev => ({ 
+                ...prev, 
+                assignedTo: e.target.value as string 
+              }))}
+              // 關鍵：這才是真正支援 renderValue 的地方！
+              renderValue={(selected) => {
+                if (!selected) return <em style={{ opacity: 0.6 }}>未指派</em>;
+      
+                // 1. 先找目前可指派的管理員名單
+                const manager = resolvedManagerOptions.find(m => 
+                  normalizeIdentifier(m.uuid ?? m.id) === selected
+                );
+      
+                if (manager) {
+                  const name = `${manager.first_name || ''}${manager.last_name || ''}`.trim();
+                  const displayName = name || manager.email || '未知使用者';
+                  return <strong>{displayName}（{manager.email}）</strong>;
+                }
+      
+                // 2. 再用原始回報單帶來的資料（被移除等情況）
+                const fallback = assignDialog.assignedUserInfo;
+                if (fallback) {
+                  const name = `${fallback.first_name || ''}${fallback.last_name || ''}`.trim();
+                  const displayName = name || fallback.email || '未知使用者';
+                  return (
+                    <span style={{ opacity: 0.7 }}>
+                      {displayName}（{fallback.email || '無信箱'}）
+                    </span>
+                  );
+                }
+      
+                return selected;
+              }}
+            >
+              {/* 正常的可指派選項 */}
+              {(resolvedManagerOptions || []).map((u) => {
+                const optionValue = normalizeIdentifier(u.uuid ?? u.id);
+                if (!optionValue) return null;
+                return (
+                  <MenuItem key={optionValue} value={optionValue}>
+                    {u.first_name}{u.last_name}（{u.email}）
+                  </MenuItem>
+                );
+              })}
+      
+              {/* 空狀態 */}
+              {resolvedManagerOptions.length === 0 && (
+                <MenuItem disabled value="">
+                  <em>無可指派的管理員</em>
+                </MenuItem>
+              )}
+            </Select>
+          </FormControl>
+        </DialogContent>
+      
+        <DialogActions>
+          <Button
+            onClick={resetAssignDialog}
+          >
+            取消
+          </Button>
+      
+          <Button
+            disabled={!assignDialog.assignedTo}
+            variant="contained"
+            onClick={handleAssignConfirm}
+          >
+            確認調度
           </Button>
         </DialogActions>
       </Dialog>

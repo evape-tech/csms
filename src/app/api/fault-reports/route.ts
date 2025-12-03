@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
           users_fault_reports_user_idTousers: {
             select: {
               id: true,
+              uuid: true,
               first_name: true,
               last_name: true,
               email: true
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
           users_fault_reports_assigned_toTousers: {
             select: {
               id: true,
+              uuid: true,
               first_name: true,
               last_name: true,
               email: true

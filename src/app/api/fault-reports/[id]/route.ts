@@ -40,10 +40,10 @@ export async function GET(
       where: { id },
       include: {
         users_fault_reports_user_idTousers: {
-          select: { id: true, first_name: true, last_name: true, email: true }
+          select: { id: true, uuid: true, first_name: true, last_name: true, email: true }
         },
         users_fault_reports_assigned_toTousers: {
-          select: { id: true, first_name: true, last_name: true, email: true }
+          select: { id: true, uuid: true, first_name: true, last_name: true, email: true }
         }
       }
     });
@@ -126,10 +126,10 @@ export async function PUT(
       data: updateData,
       include: {
         users_fault_reports_user_idTousers: {
-          select: { id: true, first_name: true, last_name: true, email: true }
+          select: { id: true, uuid: true, first_name: true, last_name: true, email: true }
         },
         users_fault_reports_assigned_toTousers: {
-          select: { id: true, first_name: true, last_name: true, email: true }
+          select: { id: true, uuid: true, first_name: true, last_name: true, email: true }
         }
       }
     });
