@@ -156,7 +156,7 @@ const normalizeFaultReports = (reports: unknown[]): FaultReport[] => {
     id: Number(item.id ?? 0),
     reported_at: item.reported_at ? new Date(item.reported_at) : null,
     resolved_at: item.resolved_at ? new Date(item.resolved_at) : null,
-    // 關鍵：保留 uuid，否則永遠找不到
+    // 保留 uuid
     users_fault_reports_assigned_toTousers: item.users_fault_reports_assigned_toTousers
       ? {
           ...item.users_fault_reports_assigned_toTousers,
@@ -365,7 +365,7 @@ export default function FaultReport() {
       const uuid = data?.user?.uuid || data?.user?.id; // 優先拿 uuid
 
       setIsAdmin(role === 'admin' || role === 'super_admin');
-      setCurrentUserUuid(uuid || ''); // 一定要是字串，不能是 null
+      setCurrentUserUuid(uuid || ''); 
         } catch {
           if (!active) return;
           setIsAdmin(false);
@@ -483,7 +483,7 @@ export default function FaultReport() {
         setUpdatingId(null);
       }
   
-      return; // ⬅ 記得跳出，不走下面 confirmDialog
+      return; 
     }
   
     // 完成 / 關閉：原本的通用確認視窗
@@ -1073,7 +1073,7 @@ export default function FaultReport() {
                         }}
                         disabled={loading || updatingId === row.id || row.status === 'IN_PROGRESS'|| row.status === 'RESOLVED'|| row.status === 'CLOSED'}
                         onClick={() => {
-                          // 超強防呆：無論後端回傳什麼，都一定能找出 uuid 或 id
+                          // 防呆：無論後端回傳什麼，找出 uuid 或 id
                           const assignedUser = row.users_fault_reports_assigned_toTousers;
                           const assignedUuid = normalizeIdentifier(assignedUser?.uuid || assignedUser?.id);  // 如果只有 id，就轉成字串
                           
@@ -1157,8 +1157,7 @@ export default function FaultReport() {
       <CreateFaultReportDialog
         open={createDialogOpen}
         onClose={handleCloseCreateDialog}
-        //reporterId={currentUserId || undefined}
-        reporterId="qfxzB1ieahqFlqfEPvvZ"
+        reporterId={currentUserUuid || undefined}
         initialData={faultReportPrefill ?? undefined}
         onSuccess={() => {
           handleCloseCreateDialog();
