@@ -12,3 +12,5 @@ export { default as TariffDialog } from './TariffDialog';
 export { default as UserDialog } from './UserDialog';
 export { default as CreateMaintenanceDialog } from './CreateMaintenanceDialog';
 export { default as CreateFaultReportDialog } from './CreateFaultReportDialog';
+export { default as FaultReportDetailDialog } from './FaultReportDetailDialog';
+export { default as FaultAssignDialog } from './FaultAssignDialog';

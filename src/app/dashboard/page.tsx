@@ -111,7 +111,7 @@ export default async function Dashboard() {
     // 最後一次驗證確保所有數據都被序列化為純 JavaScript 對象
     gunsData = JSON.parse(JSON.stringify(gunsData));
     stations = JSON.parse(JSON.stringify(stations));
-    faultReports = JSON.parse(JSON.stringify(faultReports));
+    //faultReports = JSON.parse(JSON.stringify(faultReports));
   } catch (err) {
     console.error('Failed to load data from DB:', err);
     gunsData = [];

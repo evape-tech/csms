@@ -1,36 +1,9 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Typography,
-  Paper,
-  Box,
-  Card,
-  CardContent,
-  Button,
-  TextField,
-  MenuItem,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Container,
-  Chip,
-  Avatar,
-  InputAdornment,
-  useTheme,
-  alpha,
-  CircularProgress,
-  Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  DialogContentText,
-  Dialog
+  Typography,  Paper,  Box,  Card,  CardContent,  Button,  TextField,  MenuItem,  Table,  TableBody,
+  TableCell,  TableContainer,  TableHead,  TableRow,  Container,  Chip,  Avatar,  InputAdornment,  useTheme,
+  alpha,  CircularProgress,  Alert
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
@@ -43,7 +16,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
-import { CreateFaultReportDialog } from '@/components/dialog';
+import { CreateFaultReportDialog, FaultReportDetailDialog, FaultAssignDialog } from '@/components/dialog';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -62,7 +35,7 @@ type FaultReportStatus =
   | 'RESOLVED'
   | 'CLOSED';
 
-interface FaultReportUser {
+export interface FaultReportUser {
   id?: string | number;
   uuid?: string;
   first_name?: string | null;
@@ -70,7 +43,7 @@ interface FaultReportUser {
   email?: string | null;
 }
 
-interface FaultReport {
+export interface FaultReport {
   id: number;
   cpid?: string | null;
   cpsn?: string | null;
@@ -1192,164 +1165,26 @@ export default function FaultReport() {
           handleCreateSuccess();
         }}
       />
-      <Dialog
-        open={confirmDialog.open}
-        onClose={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
-      >
-        <DialogTitle>{confirmDialog.title}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{confirmDialog.message}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() =>
-              setConfirmDialog((prev) => ({ ...prev, open: false }))
-            }
-          >
-            取消
-          </Button>  
-          <Button
-            onClick={() => {
-              confirmDialog.onConfirm && confirmDialog.onConfirm();
-            }}
-            variant="contained"
-            color="primary"
-          >
-            確認
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
+      <FaultReportDetailDialog
         open={detailDialog.open}
+        loading={detailDialog.loading}
+        report={detailDialog.report}
         onClose={() => setDetailDialog({ open: false, loading: false, report: null })}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>故障詳細資訊</DialogTitle>      
-        <DialogContent dividers>
-          {detailDialog.loading && (
-            <Box sx={{ py: 4, textAlign: 'center' }}>
-              <CircularProgress />
-            </Box>
-          )}
-      
-          {!detailDialog.loading && detailDialog.report && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography><strong>編號：</strong>FR-{detailDialog.report.id}</Typography>
-              <Typography><strong>樁號：</strong>{detailDialog.report.cpid}</Typography>
-              <Typography><strong>回報時間：</strong>{formatDateTime(detailDialog.report.reported_at)}</Typography>
-              <Typography><strong>狀態：</strong>{getStatusLabel(detailDialog.report.status)}</Typography>
-              <Typography><strong>回報者：</strong>{getReporterName(detailDialog.report)}</Typography>
-              <Typography><strong>描述：</strong></Typography>
-              <Typography sx={{ whiteSpace: 'pre-wrap' }}>
-                {detailDialog.report.description || "無描述"}
-              </Typography>
-              <Typography>
-                <strong>指派給：</strong>
-                {detailDialog.report.users_fault_reports_assigned_toTousers
-                  ? `${detailDialog.report.users_fault_reports_assigned_toTousers.first_name ?? ''}${
-                      detailDialog.report.users_fault_reports_assigned_toTousers.last_name ?? ''
-                    }`.trim() ||
-                    detailDialog.report.users_fault_reports_assigned_toTousers.email ||
-                    '未提供'
-                  : '尚未指派'}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>      
-        <DialogActions>
-          <Button onClick={() => setDetailDialog({ open: false, loading: false, report: null })}>
-            關閉
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
+        formatDateTime={formatDateTime}
+        getStatusLabel={getStatusLabel}
+        getReporterName={getReporterName}
+      />
+      <FaultAssignDialog
         open={assignDialog.open}
+        assignedTo={assignDialog.assignedTo}
+        assignedUserInfo={assignDialog.assignedUserInfo}
+        managerOptions={resolvedManagerOptions}
+        onChangeAssignedTo={(value) =>
+          setAssignDialog((prev) => ({ ...prev, assignedTo: value }))
+        }
+        onConfirm={handleAssignConfirm}
         onClose={resetAssignDialog}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>選擇指派人員</DialogTitle>
-      
-        <DialogContent dividers>    
-          <FormControl fullWidth>
-            <InputLabel id="assign-to-label">指派給</InputLabel>
-            
-            <Select
-              labelId="assign-to-label"
-              label="指派給"
-              value={assignDialog.assignedTo || ''}
-              onChange={(e) => setAssignDialog(prev => ({ 
-                ...prev, 
-                assignedTo: e.target.value as string 
-              }))}
-              // 關鍵：這才是真正支援 renderValue 的地方！
-              renderValue={(selected) => {
-                if (!selected) return <em style={{ opacity: 0.6 }}>未指派</em>;
-      
-                // 1. 先找目前可指派的管理員名單
-                const manager = resolvedManagerOptions.find(m => 
-                  normalizeIdentifier(m.uuid ?? m.id) === selected
-                );
-      
-                if (manager) {
-                  const name = `${manager.first_name || ''}${manager.last_name || ''}`.trim();
-                  const displayName = name || manager.email || '未知使用者';
-                  return <strong>{displayName}（{manager.email}）</strong>;
-                }
-      
-                // 2. 再用原始回報單帶來的資料（被移除等情況）
-                const fallback = assignDialog.assignedUserInfo;
-                if (fallback) {
-                  const name = `${fallback.first_name || ''}${fallback.last_name || ''}`.trim();
-                  const displayName = name || fallback.email || '未知使用者';
-                  return (
-                    <span style={{ opacity: 0.7 }}>
-                      {displayName}（{fallback.email || '無信箱'}）
-                    </span>
-                  );
-                }
-      
-                return selected;
-              }}
-            >
-              {/* 正常的可指派選項 */}
-              {(resolvedManagerOptions || []).map((u) => {
-                const optionValue = normalizeIdentifier(u.uuid ?? u.id);
-                if (!optionValue) return null;
-                return (
-                  <MenuItem key={optionValue} value={optionValue}>
-                    {u.first_name}{u.last_name}（{u.email}）
-                  </MenuItem>
-                );
-              })}
-      
-              {/* 空狀態 */}
-              {resolvedManagerOptions.length === 0 && (
-                <MenuItem disabled value="">
-                  <em>無可指派的管理員</em>
-                </MenuItem>
-              )}
-            </Select>
-          </FormControl>
-        </DialogContent>
-      
-        <DialogActions>
-          <Button
-            onClick={resetAssignDialog}
-          >
-            取消
-          </Button>
-      
-          <Button
-            disabled={!assignDialog.assignedTo}
-            variant="contained"
-            onClick={handleAssignConfirm}
-          >
-            確認調度
-          </Button>
-        </DialogActions>
-      </Dialog>
+      />
     </Container>
   );
 }
