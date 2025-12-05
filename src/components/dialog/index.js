@@ -14,3 +14,4 @@ export { default as CreateMaintenanceDialog } from './CreateMaintenanceDialog';
 export { default as CreateFaultReportDialog } from './CreateFaultReportDialog';
 export { default as FaultReportDetailDialog } from './FaultReportDetailDialog';
 export { default as FaultAssignDialog } from './FaultAssignDialog';
+export { default as ResolutionDialog } from './ResolutionDialog';

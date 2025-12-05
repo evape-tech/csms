@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Typography,  Paper,  Box,  Card,  CardContent,  Button,  TextField,  MenuItem,  Table,  TableBody,
   TableCell,  TableContainer,  TableHead,  TableRow,  Container,  Chip,  Avatar,  InputAdornment,  useTheme,
-  alpha,  CircularProgress,  Alert
+  alpha,  CircularProgress,  Alert, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
@@ -16,7 +16,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
-import { CreateFaultReportDialog, FaultReportDetailDialog, FaultAssignDialog } from '@/components/dialog';
+import { CreateFaultReportDialog, FaultReportDetailDialog, FaultAssignDialog, ResolutionDialog } from '@/components/dialog';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -54,6 +54,7 @@ export interface FaultReport {
   status?: FaultReportStatus | string | null;
   reported_at?: string | Date | null;
   resolved_at?: string | Date | null;
+  resolution?: string | null;
   users_fault_reports_user_idTousers?: FaultReportUser | null;
   users_fault_reports_assigned_toTousers?: FaultReportUser | null;
 }
@@ -156,6 +157,7 @@ const normalizeFaultReports = (reports: unknown[]): FaultReport[] => {
     id: Number(item.id ?? 0),
     reported_at: item.reported_at ? new Date(item.reported_at) : null,
     resolved_at: item.resolved_at ? new Date(item.resolved_at) : null,
+    resolution: item.resolution ?? null,
     // 保留 uuid
     users_fault_reports_assigned_toTousers: item.users_fault_reports_assigned_toTousers
       ? {
@@ -242,6 +244,12 @@ export default function FaultReport() {
     report: null as FaultReport | null
   });
   const [assignDialog, setAssignDialog] = useState<AssignDialogState>(initialAssignDialogState);
+  
+  const [resolutionDialog, setResolutionDialog] = useState<{
+    open: boolean;
+    reportId: number | null;
+    resolution: string;
+  }>({ open: false, reportId: null, resolution: '' });
 
   // 通用確認視窗
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -256,6 +264,9 @@ export default function FaultReport() {
     onConfirm: null
   });
 
+  // 確認視窗內的 loading 狀態（避免重複點擊）
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  
   const resetAssignDialog = () => setAssignDialog(initialAssignDialogState);
 
   const fetchFaultDetail = async (id: number) => {
@@ -486,14 +497,18 @@ export default function FaultReport() {
       return; 
     }
   
-    // 完成 / 關閉：原本的通用確認視窗
+    // 完成（RESOLVED）：開啟輸入解決方案的對話框
+    if (nextStatus === 'RESOLVED') {
+      blurActiveElement();
+      setResolutionDialog({ open: true, reportId: id, resolution: '' });
+      return;
+    }
+
+    // 關閉（CLOSED）：保留原先的確認視窗行為
     setConfirmDialog({
       open: true,
-      title: nextStatus === 'RESOLVED' ? '確認完成？' : '確認關閉？',
-      message:
-        nextStatus === 'RESOLVED'
-          ? '你確定要將此故障回報標記為已完成嗎？'
-          : '你確定要關閉此故障報告嗎？',
+      title: '確認關閉？',
+      message: '你確定要關閉此故障報告嗎？',
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, open: false }));
         setUpdatingId(id);
@@ -572,6 +587,14 @@ export default function FaultReport() {
   const getStatusColor = (value?: string | null) => {
     if (!value) return 'default';
     return statusColorMap[value] ?? 'default';
+  };
+
+  const blurActiveElement = () => {
+    try {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && typeof el.blur === 'function') el.blur();
+    } catch (e) {// 忽略：防止 SSR 或環境錯誤
+    }
   };
 
   return (
@@ -1179,11 +1202,94 @@ export default function FaultReport() {
         assignedUserInfo={assignDialog.assignedUserInfo}
         managerOptions={resolvedManagerOptions}
         onChangeAssignedTo={(value) =>
-          setAssignDialog((prev) => ({ ...prev, assignedTo: value }))
-        }
+           setAssignDialog((prev) => ({ ...prev, assignedTo: value }))
+         }
         onConfirm={handleAssignConfirm}
         onClose={resetAssignDialog}
       />
+      <ResolutionDialog
+        open={resolutionDialog.open}
+        reportId={resolutionDialog.reportId}
+        initialValue={resolutionDialog.resolution}
+        onClose={() => setResolutionDialog({ open: false, reportId: null, resolution: '' })}
+        onConfirm={async (resolutionText: string) => {
+          const id = resolutionDialog.reportId;
+          if (!id) return;
+          setUpdatingId(id);
+          try {
+            const res = await fetch(`/api/fault-reports/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'RESOLVED', resolution: resolutionText })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data?.message ?? '更新故障報告失敗');
+            }
+            setResolutionDialog({ open: false, reportId: null, resolution: '' });
+            setSuccessMessage('故障回報已標記為已完成');
+            await fetchFaultReports();
+          } catch (err: any) {
+            const message = err instanceof Error ? err.message : '更新失敗';
+            setError(message);
+            console.error('Resolve error:', err);
+          } finally {
+            setUpdatingId(null);
+          }
+        }}
+      />
+      {/* 通用確認對話框（用於「關閉」等需要二次確認的操作） */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => {
+          if (!confirmLoading) setConfirmDialog((prev) => ({ ...prev, open: false }));
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{confirmDialog.title}</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            {confirmDialog.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
+            size="small"
+            disabled={confirmLoading}
+          >
+            取消
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={async () => {
+              if (!confirmDialog.onConfirm) {
+                setConfirmDialog((prev) => ({ ...prev, open: false }));
+                return;
+              }
+              setConfirmLoading(true);
+              try {
+                // 有些 onConfirm 是 async 函式（我們強制以 any 呼叫並 await）
+                await (confirmDialog.onConfirm as any)();
+              } catch (err) {
+                console.error('confirmDialog onConfirm error:', err);
+                setError((err instanceof Error) ? err.message : '操作失敗');
+              } finally {
+                setConfirmLoading(false);
+                // 確保視窗關閉（onConfirm 裡面也可能關閉一次，這裡保險處理）
+                setConfirmDialog((prev) => ({ ...prev, open: false }));
+              }
+            }}
+            disabled={confirmLoading}
+            startIcon={confirmLoading ? <CircularProgress size={16} /> : undefined}
+          >
+            確認
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

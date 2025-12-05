@@ -54,10 +54,16 @@ export default function FaultReportDetailDialog({
             <Typography><strong>回報時間：</strong>{formatDateTime(report.reported_at)}</Typography>
             <Typography><strong>狀態：</strong>{getStatusLabel(report.status)}</Typography>
             <Typography><strong>回報者：</strong>{getReporterName(report)}</Typography>
+
             <Typography><strong>描述：</strong></Typography>
             <Typography sx={{ whiteSpace: 'pre-wrap' }}>
               {report.description || "無描述"}
             </Typography>
+            <Typography><strong>解決方法：</strong></Typography>
+            <Typography sx={{ whiteSpace: 'pre-wrap', color: report.resolution ? 'inherit' : 'text.secondary' }}>
+              {report.resolution ?? '尚未提供'}
+            </Typography>
+
             <Typography>
               <strong>指派給：</strong>
               {report.users_fault_reports_assigned_toTousers
@@ -79,5 +85,3 @@ export default function FaultReportDetailDialog({
     </Dialog>
   );
 }
-
-
