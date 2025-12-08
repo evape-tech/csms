@@ -41,26 +41,26 @@ export async function POST(req: Request) {
       // This is only a temporary fallback for development. Do NOT use in production.
       const redirectUrl = nextUrl.startsWith('http') ? nextUrl : new URL(nextUrl, req.url).toString();
       const res = NextResponse.redirect(redirectUrl);
-      // set cookie for 5 days
+      // set cookie for 30 days
       res.cookies.set('session', idToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: false, // 內網 HTTP 訪問需要設為 false
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 5,
+        maxAge: 30 * 24 * 60 * 60, // 30 days (in seconds)
       });
       return res;
     }
 
     // Create a secure session cookie using Firebase Admin
-    const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days in milliseconds
+    const expiresIn = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
     const sessionCookie = await admin.auth().createSessionCookie(idToken, { expiresIn });
 
     const redirectUrl = nextUrl.startsWith('http') ? nextUrl : new URL(nextUrl, req.url).toString();
     const response = NextResponse.redirect(redirectUrl);
     response.cookies.set('session', sessionCookie, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // 內網 HTTP 訪問需要設為 false
       sameSite: 'lax',
       path: '/',
       maxAge: expiresIn / 1000,

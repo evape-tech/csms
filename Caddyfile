@@ -18,6 +18,7 @@
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto {scheme}
+        header_up Host {host}
     }
     
     # 訪問日誌
@@ -36,6 +37,7 @@ localhost:443 {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-For {remote_host}
         header_up X-Forwarded-Proto https
+        header_up Host {host}
     }
     
     # 訪問日誌
