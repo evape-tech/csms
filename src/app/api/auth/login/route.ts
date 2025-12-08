@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create JWT token (7 days expiration)
+    // Create JWT token (30 days expiration)
     const token = jwt.sign(
       { 
         userId: user.uuid, // 使用 UUID 而不是數字 ID，因為外鍵約束需要 UUID
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         lastName: user.last_name || user.lastName || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' } // 延長到 7 天
+      { expiresIn: '30d' } // 30 天
     );
 
     // Create response with session cookie and token
@@ -132,11 +132,14 @@ export async function POST(request: NextRequest) {
     });
 
     // Set HTTP-only cookie (用於管理後台)
+    // 注意：內網 HTTP 訪問時需要 secure: false
+    // 如果只通過 HTTPS 訪問，可以改為 secure: true
     response.cookies.set('session', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // 內網 HTTP 訪問需要設為 false
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 // 30 days (in seconds)
     });
 
     // 記錄登入成功日誌

@@ -76,7 +76,7 @@ export async function loginAction(formData) {
       };
     }
 
-    // 建立 JWT token (7 days expiration)
+    // 建立 JWT token (30 days expiration)
     const token = jwt.sign(
       { 
         userId: user.uuid, // 使用 UUID 而不是數字 ID，保持與 API route 一致
@@ -86,16 +86,17 @@ export async function loginAction(formData) {
         lastName: user.last_name || user.lastName || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' } // 延長到 7 天
+      { expiresIn: '30d' } // 30 天
     );
 
-    // 設定 HTTP-only cookie (7 days)
+    // 設定 HTTP-only cookie (30 days)
     const cookieStore = await cookies();
     cookieStore.set('session', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // 內網 HTTP 訪問需要設為 false
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 // 30 days (in seconds)
     });
 
     console.log(`✅ [loginAction] Login successful for user: ${user.email}`);
