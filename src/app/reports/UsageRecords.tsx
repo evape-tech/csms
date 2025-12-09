@@ -67,6 +67,8 @@ export default function UsageRecords() {
   const defaultRange = useMemo(() => getDefaultRange(30), []);
   const [appliedRange, setAppliedRange] = useState<DateRange>(defaultRange);
   const rangeRef = useRef<DateRange>(defaultRange);
+  // 保留最後一次進階篩選條件，匯出時會帶上
+  const filtersRef = useRef<Record<string, any>>({});
   // 動態選項  
   const [meterOptions, setMeterOptions] = useState<string[]>([]);
   const [chargerOptions, setChargerOptions] = useState<string[]>([]);
@@ -115,6 +117,9 @@ export default function UsageRecords() {
       // 處理進階篩選條件
       if (params.charger && params.charger.length > 0) {
         query.set('charger', params.charger.join(','));
+      }
+      if (params.meterNo && params.meterNo.length > 0) {
+        query.set('meterNo', params.meterNo.join(','));
       }
 
       const response = await fetch(`/api/reports/usage?${query.toString()}`);
@@ -171,6 +176,9 @@ export default function UsageRecords() {
       // 更新充電樁選項
       fetchChargersByMeters(meters);
     
+      // 保存最後一次進階篩選，用於匯出
+      filtersRef.current = filters || {};
+
       // 呼叫 fetchRecords
       fetchRecords({ ...rangeRef.current, ...filters });
     }, [fetchRecords, fetchChargersByMeters]);
@@ -194,6 +202,14 @@ export default function UsageRecords() {
       const params = new URLSearchParams();
       if (start) params.set('startDate', start);
       if (end) params.set('endDate', end);
+      // 帶上最後的進階篩選
+      const lastFilters = filtersRef.current || {};
+      if (lastFilters.meterNo && lastFilters.meterNo.length > 0) {
+        params.set('meterNo', lastFilters.meterNo.join(','));
+      }
+      if (lastFilters.charger && lastFilters.charger.length > 0) {
+        params.set('charger', lastFilters.charger.join(','));
+      }
       params.set('format', 'xlsx');
 
       console.info('開始導出使用記錄', {

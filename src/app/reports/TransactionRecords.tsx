@@ -90,6 +90,8 @@ export default function TransactionRecords() {
   const defaultRange = useMemo(() => getDefaultRange(30), []);
   const [appliedRange, setAppliedRange] = useState<DateRange>(defaultRange);
   const rangeRef = useRef<DateRange>(defaultRange);
+  // 保存最後一次進階篩選（用於匯出）
+  const filtersRef = useRef<Record<string, any>>({});
 
   const fetchRecords = useCallback(async (paramsInput?: Partial<DateRange> & Record<string, any>) => {
     setLoading(true);
@@ -164,6 +166,11 @@ export default function TransactionRecords() {
       const params = new URLSearchParams();
       if (start) params.set('startDate', start);
       if (end) params.set('endDate', end);
+      // 帶上最後一次進階篩選
+      const lastFilters = filtersRef.current || {};
+      if (lastFilters.type) params.set('type', String(lastFilters.type));
+      if (lastFilters.minAmount) params.set('minAmount', String(lastFilters.minAmount));
+      if (lastFilters.minBalance) params.set('minBalance', String(lastFilters.minBalance));
       params.set('format', 'xlsx');
 
       // Debug log to verify export trigger and URL
@@ -199,6 +206,7 @@ export default function TransactionRecords() {
     }
   }, [records]); 
 
+  // 在 RecordsPage 的 onAdvancedFilter 裡記錄 filters
   return (
     <RecordsPage
       title="交易記錄列表"
@@ -216,8 +224,9 @@ export default function TransactionRecords() {
       filterable={true}
       filterConfig={filterConfig}
       onAdvancedFilter={(filters) => {
-      // 合併日期 + 進階篩選，呼叫 fetchRecords
-      fetchRecords({ ...rangeRef.current, ...filters });
+        // 保存最後一次進階篩選，用於匯出，並呼叫 fetchRecords
+        filtersRef.current = filters || {};
+        fetchRecords({ ...rangeRef.current, ...filters });
       }}
     />
   );

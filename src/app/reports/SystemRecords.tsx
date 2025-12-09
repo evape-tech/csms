@@ -226,8 +226,10 @@ export default function SystemRecords() {
       filterable={true}
       filterConfig={filterConfig}
       onAdvancedFilter={(filters) => {
-      // 合併日期 + 進階篩選，呼叫 fetchRecords
-      fetchRecords({ ...rangeRef.current, ...filters });
+        // 保存最後一次進階篩選，用於匯出，並呼叫 fetchRecords
+        filtersRef.current = filters || {};
+        // 合併日期 + 進階篩選，呼叫 fetchRecords
+        fetchRecords({ ...rangeRef.current, ...filters });
       }}
     />
   );
