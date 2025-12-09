@@ -10,6 +10,13 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+echo "Stopping existing containers..."
+docker compose down
+
+echo "Cleaning up dangling images (volumes will be preserved)..."
+docker image prune -f
+echo "Dangling images cleaned."
+
 echo "Building and starting containers..."
 docker compose up -d --build
 

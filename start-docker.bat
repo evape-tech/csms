@@ -11,6 +11,15 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+echo Stopping existing containers...
+docker-compose down
+
+echo Cleaning up dangling images (volumes will be preserved)...
+for /f "tokens=*" %%i in ('docker images -f "dangling=true" -q 2^>nul') do (
+    docker rmi %%i 2>nul
+)
+echo Dangling images cleaned.
+
 echo Building and starting containers...
 docker-compose up -d --build
 
