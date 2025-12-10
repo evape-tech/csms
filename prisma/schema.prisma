@@ -297,7 +297,8 @@ model wallet_transactions {
   payment_method          String?                              @db.VarChar(50)
   payment_reference       String?                              @db.VarChar(100)
   description             String?                              @db.VarChar(255)
-  status                  wallet_transactions_status           @default(COMPLETED)
+  rec_trade_id            String?                              @db.VarChar(100)
+  status                  wallet_transactions_status           @default(PENDING)
   createdAt               DateTime                             @default(now()) @db.DateTime(0)
   updatedAt               DateTime                             @default(now()) @db.DateTime(0)
   billing_records         billing_records?                     @relation(fields: [billing_record_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_billing")
@@ -549,13 +550,6 @@ enum user_wallets_status {
   CLOSED
 }
 
-enum wallet_transactions_status {
-  PENDING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
 enum charging_transactions_status {
   ACTIVE
   COMPLETED
@@ -692,4 +686,13 @@ enum user_invoices_payment_status {
   UNPAID
   PARTIALLY_PAID
   PAID
+}
+
+enum wallet_transactions_status {
+  PENDING
+  UNPAID
+  PAID
+  COMPLETED
+  FAILED
+  CANCELLED
 }

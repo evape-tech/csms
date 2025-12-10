@@ -13,6 +13,8 @@
 import axios from 'axios';
 import { nanoid } from 'nanoid';
 import { databaseService } from '../../lib/database/service.js';
+import { InvoiceRepository } from '@/servers/repositories/invoiceRepository';
+import { logger } from '@/servers/utils';
 
 interface CreateOrderParams {
   userId: string;
@@ -126,15 +128,15 @@ export class PaymentRepository {
 
       // 檢查是否需要 3D Secure 驗證
       if (tapPayResult.payment_url) {
-        // 有 payment_url，表示需要 3D 驗證，訂單狀態設為 PENDING
-        await databaseService.updatePaymentOrderStatus(orderId, 'PENDING');
+        // 有 payment_url，表示需要 3D 驗證，訂單狀態設為 UNPAID
+        await databaseService.updatePaymentOrderStatus(orderId, 'UNPAID');
         console.log('🔐 需要 3D Secure 驗證:', { orderId, payment_url: tapPayResult.payment_url });
         
         return {
           success: true,
           orderId,
           externalOrderId: tapPayResult.externalOrderId,
-          status: 'PENDING',
+          status: 'UNPAID',
           amount,
           payment_url: tapPayResult.payment_url,
           message: '請前往 3D Secure 驗證頁面'
@@ -142,15 +144,71 @@ export class PaymentRepository {
       }
 
       // 沒有 payment_url，表示直接扣款成功
-      await databaseService.updatePaymentOrderWithCallback(
+      const updateResult = await PaymentRepository.updatePaymentOrderFromCallback({
         orderId,
-        {
+        callbackData: {
           status: 0,
           rec_trade_id: tapPayResult.externalOrderId,
           order_number: orderId
         },
-        'COMPLETED'
-      );
+        status: 'PAID' // 已付款待開立發票
+      });
+
+      if (!updateResult.success) {
+        logger.error('❌ 更新訂單狀態失敗（同步充值）', { orderId, error: updateResult.error });
+        return {
+          success: false,
+          orderId,
+          status: 'FAILED',
+          amount,
+          message: '更新訂單狀態失敗',
+          error: updateResult.error
+        };
+      }
+
+      // 如果支付成功，開立發票並透過 TapPay 發送給用戶
+      try {
+        // 獲取支付訂單資訊
+        const paymentOrder = await databaseService.getPaymentOrder(orderId);
+        
+        if (paymentOrder) {
+          // 獲取用戶資訊 (user_id 是 UUID 字串，不是數字 ID)
+          const user = await databaseService.getUserByUuid(paymentOrder.user_id);
+          
+          if (user && user.email) {
+            logger.info('📄 [發票] 開始開立發票（同步充值）', {
+              orderId: orderId,
+              userId: user.id,
+              email: user.email
+            });
+
+            // 呼叫 TapPay 發票 API
+            const invoiceResult = await InvoiceRepository.issueInvoice({
+              orderId: orderId,
+              amount: amount,
+              customerEmail: user.email,
+              customerName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || '顧客',
+              customerPhone: user.phone || '',
+              description: paymentOrder.description || '充電錢包充值',
+              userId: user.uuid, // 傳入用戶 UUID，用於保存發票
+              tradeId: tapPayResult.externalOrderId // 傳入交易 ID
+            });
+
+            if (invoiceResult.success) {
+              await databaseService.updatePaymentOrderStatus(orderId, 'COMPLETED');
+              logger.info(`✅ [發票] 發票已成功開立並透過 TapPay 發送至: ${user.email}`);
+            } else {
+              logger.error(`❌ [發票] 發票開立失敗，但支付已成功: ${invoiceResult.error}`);
+              // 發票失敗不影響支付結果，只記錄錯誤
+            }
+          } else {
+            logger.warn('⚠️  [發票] 無法獲取用戶 email，跳過發票開立（同步充值）');
+          }
+        }
+      } catch (invoiceError) {
+        logger.error(`⚠️  [發票] 發票處理異常，但支付已成功: ${invoiceError instanceof Error ? invoiceError.message : String(invoiceError)}`);
+        // 發票異常不影響支付結果，只記錄錯誤
+      }
 
       console.log('✅ 充值成功:', { orderId, externalOrderId: tapPayResult.externalOrderId });
 
@@ -158,9 +216,9 @@ export class PaymentRepository {
         success: true,
         orderId,
         externalOrderId: tapPayResult.externalOrderId,
-        status: 'COMPLETED',
+        status: 'SUCCESS',
         amount,
-        message: '充值成功'
+        message: '成功'
       };
 
     } catch (error) {
@@ -238,7 +296,7 @@ export class PaymentRepository {
       return {
         success: true,
         orderId,
-        status: 'PENDING',
+        status: 'UNPAID',
         amount,
         payment_url: linePayResult.payment_url,
         message: '請前往 Line Pay 支付頁面'
@@ -319,7 +377,7 @@ export class PaymentRepository {
       return {
         success: true,
         orderId,
-        status: 'PENDING',
+        status: 'UNPAID',
         amount,
         payment_url: easyWalletResult.payment_url,
         message: '請前往 EasyWallet 支付頁面'
@@ -373,14 +431,14 @@ export class PaymentRepository {
     try {
       const { orderId, callbackData, status } = params;
 
+      console.log('✅ 訂單已從回調更新:', { orderId, status });
+
       // 更新訂單狀態和錢包
       await databaseService.updatePaymentOrderWithCallback(
         orderId,
         callbackData,
         status
       );
-
-      console.log('✅ 訂單已從回調更新:', { orderId, status });
 
       return {
         success: true
@@ -440,6 +498,8 @@ export class PaymentRepository {
         three_domain_secure: true,
         remember: false,
       };
+
+      console.log("📡 呼叫 TapPay API 載荷:", JSON.stringify(payload, null, 2));
 
       console.log('📡 呼叫 TapPay (LinePay) API as gateway (TapPay-only):', { url: tappayApiUrl, orderId, amount });
 
@@ -524,6 +584,8 @@ export class PaymentRepository {
         remember: false,
       };
 
+      console.log("📡 呼叫 TapPay API 載荷:", JSON.stringify(payload, null, 2));
+
       console.log('📡 呼叫 TapPay (EasyWallet) API as gateway:', { url: tappayApiUrl, orderId, amount });
 
       const response = await axios.post(tappayApiUrl as string, payload, {
@@ -592,6 +654,8 @@ export class PaymentRepository {
         three_domain_secure: true,
         remember: false,
       };
+
+      console.log("📡 呼叫 TapPay API 載荷:", JSON.stringify(payload, null, 2));
 
       console.log('📡 呼叫 TapPay API:', { url: apiUrl, orderId, amount });
 

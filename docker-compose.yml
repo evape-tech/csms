@@ -1,44 +1,12 @@
 services:
-  caddy:
-    image: caddy:latest
-    container_name: csms-caddy
-    restart: always
-    ports:
-      - "80:80"      # HTTP
-      - "443:443"    # HTTPS
-      - "2019:2019"  # Caddy Admin API
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - web
-      - ocpp
-    networks:
-      - csms-network
-
-  caddy-ui:
-    image: qmcgaw/caddy-ui:latest
-    container_name: csms-caddy-ui
-    restart: always
-    ports:
-      - "8888:8000"  # Caddy UI
-    environment:
-      - CADDY_API_ENDPOINT=http://caddy:2019
-      - ROOT_URL=/
-    depends_on:
-      - caddy
-    networks:
-      - csms-network
-
   web:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: csms-web
     restart: always
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     environment:
       - NODE_ENV=production
     env_file:
@@ -73,7 +41,3 @@ services:
 networks:
   csms-network:
     driver: bridge
-
-volumes:
-  caddy_data:
-  caddy_config:

@@ -41,17 +41,16 @@ export async function POST(request: NextRequest) {
 
     const callbackData = await request.json();
     
-    // Print the full callback JSON for easier debugging (pretty-printed)
-    try {
-      console.log('📥 收到 TapPay 回調 (full):\n' + JSON.stringify(callbackData, null, 2));
-    } catch (e) {
-      // Fallback in case JSON.stringify fails
-      console.log('📥 收到 TapPay 回調:', callbackData);
-    }
+    // 生產環境日誌記錄
+    console.log('📥 [TapPay 回調] 收到 callback');
+    console.log(`   訂單: ${callbackData.order_number}`);
+    console.log(`   狀態: ${callbackData.status === 0 ? 'COMPLETED' : 'UNPAID'}`);
+    console.log(`   金額: ${callbackData.amount}`);
+    console.log(`   完整資料: ${JSON.stringify(callbackData)}`);
 
     // 驗證必要參數
     if (!callbackData.order_number) {
-      console.error('❌ TapPay 回調缺少訂單編號');
+      console.error('❌ [TapPay 回調] 缺少訂單編號');
       return NextResponse.json({
         success: false,
         error: '缺少訂單編號'
@@ -59,7 +58,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 判斷支付狀態
-    const paymentStatus = callbackData.status === 0 ? 'COMPLETED' : 'FAILED';
+    const paymentStatus = callbackData.status === 0 ? 'PAID' : 'UNPAID';
+    console.log(`🔄 [TapPay 回調] 開始處理 - 訂單: ${callbackData.order_number}, 狀態: ${paymentStatus}`);
 
     // 更新訂單狀態和錢包
     const result = await PaymentRepository.updatePaymentOrderFromCallback({
@@ -78,17 +78,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      console.error('❌ 處理 TapPay 回調失敗:', result.error);
+      console.error(`❌ [TapPay 回調] 處理失敗 - 訂單: ${callbackData.order_number}, 錯誤: ${result.error}`);
       return NextResponse.json({
         success: false,
         error: result.error
       }, { status: 500 });
     }
 
-    console.log(`✅ TapPay 回調處理成功: ${callbackData.order_number} - ${paymentStatus}`);
+    console.log(`✅ [TapPay 回調] 訂單狀態已更新 - 訂單: ${callbackData.order_number}, 新狀態: ${paymentStatus}`);
 
     // 如果支付成功，開立發票並透過 TapPay 發送給用戶
-    if (paymentStatus === 'COMPLETED') {
+    if (paymentStatus === 'PAID') {
       try {
         // 獲取支付訂單資訊
         const paymentOrder = await databaseService.getPaymentOrder(callbackData.order_number);
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           const user = await databaseService.getUserByUuid(paymentOrder.user_id);
           
           if (user && user.email) {
-            console.log('📄 開始開立發票...', {
+            console.log('📄 [發票] 開始開立發票', {
               orderId: callbackData.order_number,
               userId: user.id,
               email: user.email
@@ -117,17 +117,18 @@ export async function POST(request: NextRequest) {
             });
 
             if (invoiceResult.success) {
-              console.log('✅ 發票已成功開立並透過 TapPay 發送至:', user.email);
+              await databaseService.updatePaymentOrderStatus(callbackData.order_number, 'COMPLETED');
+              console.log(`✅ [發票] 發票已成功開立並透過 TapPay 發送至: ${user.email}`);
             } else {
-              console.error('⚠️ 發票開立失敗，但支付已成功:', invoiceResult.error);
+              console.error(`❌ [發票] 發票開立失敗，但支付已成功: ${invoiceResult.error}`);
               // 發票失敗不影響支付結果，只記錄錯誤
             }
           } else {
-            console.warn('⚠️ 無法獲取用戶 email，跳過發票開立');
+            console.warn('⚠️  [發票] 無法獲取用戶 email，跳過發票開立');
           }
         }
       } catch (invoiceError) {
-        console.error('⚠️ 發票處理異常，但支付已成功:', invoiceError);
+        console.error(`⚠️  [發票] 發票處理異常，但支付已成功: ${invoiceError instanceof Error ? invoiceError.message : String(invoiceError)}`);
         // 發票異常不影響支付結果，只記錄錯誤
       }
     }
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ TapPay 回調處理異常:', error);
+    console.error(`❌ [TapPay 回調] 處理異常: ${error instanceof Error ? error.message : String(error)}`);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'TapPay 回調處理失敗'

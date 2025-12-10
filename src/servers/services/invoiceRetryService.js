@@ -1,14 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-/**
- * 發票重試監控服務
- * 負責監控和重新發送失敗的發票開立請求
- * 
- * 監控條件：
- * - status 為 DRAFT（草稿，未開立）
- * - status 為 ERROR（開立失敗）
- * - 創建時間超過設定的時間閾值
- */
-
 const { logger } = require('../utils/index.js');
 const { InvoiceRepository } = require('../repositories/invoiceRepository.js');
 
@@ -27,7 +16,7 @@ class InvoiceRetryService {
     this.isRunning = false;
     this.intervalId = null;
     this.config = {
-      checkIntervalMinutes: 30,      // 檢查間隔：1分鐘
+      checkIntervalMinutes: 180,      // 檢查間隔：3小時 (3 * 60)
       retryAfterMinutes: 10,         // 創建後多久才重試：10分鐘
       maxRetryCount: 5,              // 最大重試次數
       batchSize: 10                  // 每次批次處理數量
@@ -116,15 +105,58 @@ class InvoiceRetryService {
   async findFailedInvoices() {
     try {
       const dbService = await getDatabaseService();
-      // 直接使用 databaseService 的方法查詢失敗發票
+      
+      // 1. 查詢現有的失敗發票（原有邏輯）
       const failedInvoices = await dbService.getFailedInvoices({
         retryAfterMinutes: this.config.retryAfterMinutes,
         batchSize: this.config.batchSize
       });
 
-      logger.info(`[發票重試監控] 查詢到 ${failedInvoices.length} 張需要重試的發票`);
+      // 2. 新增：查詢 wallet_transactions 中 PAID 但無發票的交易
+      const paidTransactionsWithoutInvoices = await dbService.getPaidTransactionsWithoutInvoices({
+        retryAfterMinutes: this.config.retryAfterMinutes,
+        batchSize: this.config.batchSize
+      });
+
+      // 3. 為這些交易創建發票記錄（如果需要）
+      const newInvoices = [];
+      for (const transaction of paidTransactionsWithoutInvoices) {
+        try {
+          // 直接使用新增的 rec_trade_id 字段
+          const recTradeId = transaction.rec_trade_id;
+
+          if (!recTradeId) {
+            logger.warn(`[發票重試監控] 交易 ${transaction.payment_reference} 缺少 rec_trade_id，跳過`);
+            continue;
+          }
+
+          // 創建新的 user_invoices 記錄（狀態設為 DRAFT）
+          const invoiceData = {
+            user_id: transaction.user_id,
+            invoice_number: `AUTO_${transaction.id}_${Date.now()}`, // 生成唯一發票編號
+            total_amount: transaction.amount,
+            description: transaction.description || '充電錢包充值',
+            payment_reference: recTradeId, // 直接使用 rec_trade_id
+            status: 'DRAFT', // 初始狀態
+            payment_status: 'PAID', // 因為交易已成功
+            invoice_date: new Date(),
+            subtotal: transaction.amount,
+            currency: 'TWD'
+          };
+          const createdInvoice = await dbService.createUserInvoice(invoiceData);
+          newInvoices.push(createdInvoice);
+          logger.info(`[發票重試監控] 為交易 ${transaction.payment_reference} 創建新發票記錄，rec_trade_id: ${recTradeId}`);
+        } catch (error) {
+          logger.error(`[發票重試監控] 為交易 ${transaction.payment_reference} 創建發票失敗`, error);
+        }
+      }
+
+      // 4. 合併現有失敗發票和新創建的發票
+      const allInvoicesToRetry = [...failedInvoices, ...newInvoices];
+
+      logger.info(`[發票重試監控] 查詢到 ${allInvoicesToRetry.length} 張需要重試的發票 (原有: ${failedInvoices.length}, 新增: ${newInvoices.length})`);
       
-      return failedInvoices;
+      return allInvoicesToRetry;
 
     } catch (error) {
       logger.error('[發票重試監控] 查詢失敗發票時發生錯誤', error);
