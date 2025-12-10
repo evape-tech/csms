@@ -13,7 +13,6 @@
  */
 
 const { databaseService } = require('../../lib/database/service.js');
-const { tariffRepository } = require('./index');
 const { calculateRateByType } = require('../../lib/rateCalculator');
 
 /**
@@ -22,7 +21,18 @@ const { calculateRateByType } = require('../../lib/rateCalculator');
 class BillingRepository {
   constructor() {
     this.databaseService = databaseService;
-    this.tariffRepository = tariffRepository;
+    this._tariffRepository = null;
+  }
+
+  /**
+   * 延遲載入 tariffRepository，避免循環依賴問題
+   */
+  get tariffRepository() {
+    if (!this._tariffRepository) {
+      const { tariffRepository } = require('./index');
+      this._tariffRepository = tariffRepository;
+    }
+    return this._tariffRepository;
   }
 
   /**

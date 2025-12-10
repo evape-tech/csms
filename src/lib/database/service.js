@@ -1208,7 +1208,7 @@ class DatabaseService {
         payment_method: data.paymentMethod,
         payment_reference: data.orderId, // 第三方金流訂單號
         description: data.description,
-        status: 'PENDING',
+        status: 'UNPAID',
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -1269,7 +1269,7 @@ class DatabaseService {
     }
 
     // 2. 支付成功時，使用事務確保錢包和交易同步更新
-    if (finalStatus === 'COMPLETED') {
+    if (finalStatus === 'PAID') {
       return await client.$transaction(async (prisma) => {
         // 3. 更新錢包餘額
         const wallet = await prisma.user_wallets.findUnique({
@@ -1296,6 +1296,7 @@ class DatabaseService {
           data: {
             status: finalStatus,
             description: `TapPay 充值成功 (${callbackData.rec_trade_id})`,
+            rec_trade_id: callbackData.rec_trade_id, // 新增：存儲 rec_trade_id
             updatedAt: new Date()
           }
         });
@@ -1308,6 +1309,7 @@ class DatabaseService {
       data: {
         status: finalStatus,
         description: `TapPay 充值失敗 (${callbackData.rec_trade_id})`,
+        rec_trade_id: callbackData.rec_trade_id, // 新增：存儲 rec_trade_id
         updatedAt: new Date()
       }
     });
@@ -1413,6 +1415,55 @@ class DatabaseService {
         },
         createdAt: {
           lte: retryThreshold
+        }
+      },
+      include: {
+        users: {
+          select: {
+            uuid: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            phone: true
+          }
+        }
+      },
+      take: batchSize,
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+  }
+
+  /**
+   * 獲取付款成功但沒有對應發票的交易
+   * 注意：狀態為 PAID 表示付款成功但未開立發票，COMPLETED 表示已開立發票
+   * @param {Object} options 查詢選項
+   * @param {number} options.retryAfterMinutes 創建後多久才重試
+   * @param {number} options.batchSize 批次大小
+   */
+  async getPaidTransactionsWithoutInvoices(options = {}) {
+    const { retryAfterMinutes = 10, batchSize = 10 } = options;
+    const client = getDatabaseClient();
+    const retryThreshold = new Date(Date.now() - retryAfterMinutes * 60 * 1000);
+
+    // 先獲取所有現有的 payment_reference
+    const existingPaymentRefs = await client.user_invoices.findMany({
+      select: { payment_reference: true },
+      where: { payment_reference: { not: null } }
+    });
+    const existingRefs = existingPaymentRefs.map(r => r.payment_reference);
+
+    // 查詢 wallet_transactions 中狀態為 PAID，且 createdAt 超過 retryAfterMinutes，且 rec_trade_id 不存在於 user_invoices.payment_reference 中
+    return await client.wallet_transactions.findMany({
+      where: {
+        status: 'PAID', // 只查詢 PAID 狀態，因為 COMPLETED 表示已開立發票
+        createdAt: {
+          lte: retryThreshold
+        },
+        rec_trade_id: {
+          not: null,
+          notIn: existingRefs
         }
       },
       include: {

@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
   // 編譯優化
   compiler: {
     // 移除 console.log (生產環境)
-    removeConsole: process.env.NODE_ENV === 'production',
+    // removeConsole: process.env.NODE_ENV === 'production',
   },
   
   // 圖片優化

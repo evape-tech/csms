@@ -6,6 +6,7 @@ import {
   ErrorMonitorCard,
   CPListCard
 } from '@/components/cards';
+import { EnvironmentConfigCard } from '@/components/EnvironmentConfigCard';
 // 使用統一的 database service
 import DatabaseUtils from '../../lib/database/utils.js';
 import { databaseService } from '../../lib/database/service.js';
@@ -119,8 +120,17 @@ export default async function Dashboard() {
     faultReports = [];
   }
 
+  const environment = process.env.NODE_ENV || 'development';
+  const frontendUrl = process.env.TAPPAY_FRONTEND_REDIRECT_URL || process.env.NEXT_PUBLIC_TAPPAY_FRONTEND_REDIRECT_URL || '未設定';
+  const backendUrl = process.env.TAPPAY_BACKEND_NOTIFY_URL || process.env.NEXT_PUBLIC_TAPPAY_BACKEND_NOTIFY_URL || '未設定';
+
   return (
     <Box sx={{ p: 2, pb: 8 }}> {/* 添加底部邊距為固定定位的 DisclaimerFooter 留出空間 */}
+      {/* 環境配置診斷卡 */}
+      <Box sx={{ mb: 2 }}>
+        <EnvironmentConfigCard environment={environment} frontendUrl={frontendUrl} backendUrl={backendUrl} />
+      </Box>
+      
       {/* 充電樁狀態區塊 */}
       <Box sx={{ mb: 2 }}>
         <ChargingStatusCard stations={stations} guns={gunsData} />

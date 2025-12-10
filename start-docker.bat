@@ -20,8 +20,9 @@ for /f "tokens=*" %%i in ('docker images -f "dangling=true" -q 2^>nul') do (
 )
 echo Dangling images cleaned.
 
-echo Building and starting containers...
-docker-compose up -d --build
+echo Building and starting containers with --no-cache...
+docker-compose build --no-cache
+docker-compose up -d
 
 if %errorlevel% neq 0 (
     echo Failed to start containers.
@@ -33,15 +34,10 @@ echo.
 echo ==========================================
 echo       Services are running!
 echo ==========================================
-echo Web App (via Caddy): http://localhost
-echo Web App (direct):    http://localhost:3000 (internal only)
-echo OCPP Server:         ws://localhost:8089
-echo Caddy Admin API:     http://localhost:2019
-echo Caddy Web UI:        http://localhost:8888
+echo Web App:         http://localhost:3000
+echo OCPP Server:     ws://localhost:8089
 echo.
 echo Services:
-echo - csms-caddy     (Reverse Proxy)
-echo - csms-caddy-ui  (Caddy Web UI)
 echo - csms-web       (Next.js Application)
 echo - csms-ocpp      (OCPP WebSocket Server)
 echo.

@@ -60,6 +60,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
+# Copy production environment file
+COPY --chown=nextjs:nodejs .env.production ./.env.production
+
 USER nextjs
 
 EXPOSE 3000
