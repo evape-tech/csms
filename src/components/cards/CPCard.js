@@ -792,6 +792,21 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
    const theme = useTheme();
    const isLinear = layout === 'linear';
    const [editDialogOpen, setEditDialogOpen] = useState(false);
+   // 即時功率（模擬假資料）
+   const [currentPower, setCurrentPower] = useState(null);
+   useEffect(() => {
+     // 以 charger.max_kw 或 22kW 為上限模擬
+     const maxKw = Number(charger.max_kw || charger.maxPower || 22) || 22;
+     const tick = () => {
+       // 若狀態為 Charging 模擬較高功率，否則偏低或 0
+       const base = charger.status === 'Charging' ? 0.6 : 0.05;
+       const value = Number((Math.random() * (maxKw * (1 - base)) + maxKw * base).toFixed(2));
+       setCurrentPower(value);
+     };
+     tick();
+     const id = setInterval(tick, 2000);
+     return () => clearInterval(id);
+   }, [charger.status, charger.max_kw, charger.maxPower]);
    
    // 單一充電樁編輯Dialog
    const handleEditClick = () => {
@@ -892,14 +907,16 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
             </Typography>
           </Box>
 
-          {/* Show 連接器ID */}
+          {/* 即時充電功率 */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
-            <Typography variant="body2" color="text.secondary">連接器ID</Typography>
-            <Typography variant="body2" fontWeight="bold" color="info.main" sx={{ fontSize: '1rem', ml: 1 }}>
-              {charger.connector ?? '—'}
-            </Typography>
+            <Typography variant="body2" color="text.secondary">即時功率(kW)</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <BoltIcon fontSize="small" color="action" />
+              <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1rem' }}>
+                {currentPower !== null ? `${currentPower} kW` : '—'}
+              </Typography>
+            </Box>
           </Box>
-          
 
         </Box>
 
