@@ -7,8 +7,7 @@ echo ==========================================
 docker info >nul 2>&1
 if %errorlevel% neq 0 (
     echo Docker is not running. Please start Docker Desktop first.
-    pause
-    exit /b 1
+    goto :end
 )
 
 echo Stopping existing containers...
@@ -26,8 +25,7 @@ docker-compose up -d
 
 if %errorlevel% neq 0 (
     echo Failed to start containers.
-    pause
-    exit /b 1
+    goto :end
 )
 
 echo.
@@ -41,7 +39,12 @@ echo Services:
 echo - csms-web       (Next.js Application)
 echo - csms-ocpp      (OCPP WebSocket Server)
 echo.
-echo Showing logs... (Press Ctrl+C to exit logs, containers will keep running)
+echo "Showing logs... (Press Ctrl+C to exit logs, containers will keep running)"
 echo.
 
 docker-compose logs -f
+
+:end
+echo.
+echo Script completed. Press any key to exit...
+pause >nul

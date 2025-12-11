@@ -7,7 +7,9 @@ echo "=========================================="
 # Check if docker is running
 if ! docker info > /dev/null 2>&1; then
     echo "Docker is not running. Please start Docker first."
-    exit 1
+    echo "Press Enter to continue..."
+    read
+    exit 0
 fi
 
 echo "Stopping existing containers..."
@@ -23,7 +25,9 @@ docker compose up -d
 
 if [ $? -ne 0 ]; then
     echo "Failed to start containers."
-    exit 1
+    echo "Press Enter to continue..."
+    read
+    exit 0
 fi
 
 echo ""
@@ -41,3 +45,7 @@ echo "Showing logs... (Press Ctrl+C to exit logs, containers will keep running)"
 echo ""
 
 docker compose logs -f
+
+echo ""
+echo "Script completed. Press Enter to exit..."
+read
