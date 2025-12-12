@@ -1,16 +1,16 @@
 services:
   web:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: csms-web
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    container_name: csms-web-prod
     restart: always
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
     env_file:
-      - .env.production
+      - ../.env.production
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: node server.js
@@ -19,11 +19,10 @@ services:
 
   ocpp:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: csms-ocpp
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    container_name: csms-ocpp-prod
     restart: always
-    # 保留 8089 用於開發/測試,生產環境可通過 Caddy 443 訪問
     ports:
       - "8089:8089"
     expose:
@@ -31,7 +30,7 @@ services:
     environment:
       - NODE_ENV=production
     env_file:
-      - .env.production
+      - ../.env.production
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: npm run start:ocpp:prod

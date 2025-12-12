@@ -1,0 +1,25 @@
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: csms-dev
+    restart: always
+    ports:
+      - "3001:3001"
+      - "8088:8088"
+    expose:
+      - "8088"
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - ../.env.development
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: npm run dev:all
+    networks:
+      - csms-network
+
+networks:
+  csms-network:
+    external: true
