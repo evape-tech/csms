@@ -23,11 +23,10 @@ services:
       dockerfile: Dockerfile
     container_name: csms-ocpp
     restart: always
-    # 保留 8089 用於開發/測試,生產環境可通過 Caddy 443 訪問
     ports:
-      - "8089:8089"
+      - "9000:9000"
     expose:
-      - "8089"
+      - "9000"
     environment:
       - NODE_ENV=production
     env_file:
