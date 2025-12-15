@@ -121,3 +121,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Internal Server Error', message: errorMessage }, { status: 500 });
   }
 }
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+  try {
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+
+    const resolvedParams = params instanceof Promise ? await params : params;
+    const gunId = resolvedParams?.id;
+    if (!gunId) return NextResponse.json({ error: 'Missing gun id' }, { status: 400 });
+
+    const numericId = Number(gunId);
+    const id = isNaN(numericId) ? gunId : numericId;
+
+    let gun: any = null;
+
+    // 優先使用 databaseService 明確的讀取方法（若有）
+    if (databaseService && typeof (databaseService as any).getGun === 'function') {
+      gun = await (databaseService as any).getGun(id);
+    } else if (databaseService && typeof (databaseService as any).findGun === 'function') {
+      gun = await (databaseService as any).findGun(id);
+    } else if (databaseService && typeof (databaseService as any).get === 'function') {
+      gun = await (databaseService as any).get(id);
+    } else if (databaseService && typeof (databaseService as any).listGuns === 'function') {
+      const list = await (databaseService as any).listGuns();
+      gun = Array.isArray(list) ? list.find((g: any) => String(g.id) === String(id)) ?? null : null;
+    } else {
+      // 無可用方法時回傳 501，提示需實作 server 端讀取
+      return NextResponse.json({ error: 'Server does not expose a GET method for guns' }, { status: 501 });
+    }
+
+    if (!gun) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    // 確保回傳包含 guns_metervalue1（前端會讀取此欄位）
+    const payload = {
+      ...gun,
+      guns_metervalue1: gun.guns_metervalue1 ?? gun.metervalue1 ?? null
+    };
+
+    return NextResponse.json(payload);
+  } catch (err: unknown) {
+    console.error('GET /api/guns/[id] error:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: 'Internal Server Error', message }, { status: 500 });
+  }
+}

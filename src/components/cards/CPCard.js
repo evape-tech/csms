@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useRef } from 'react';
 import Grid from '@mui/material/Grid';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -792,21 +792,68 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
    const theme = useTheme();
    const isLinear = layout === 'linear';
    const [editDialogOpen, setEditDialogOpen] = useState(false);
-   // 即時功率（模擬假資料）
+   // 即時功率：只有在狀態為 Charging 時才每 5 秒撈取 guns_metervalue1
    const [currentPower, setCurrentPower] = useState(null);
+   const failedFetchRef = useRef(false);
    useEffect(() => {
-     // 以 charger.max_kw 或 22kW 為上限模擬
-     const maxKw = Number(charger.max_kw || charger.maxPower || 22) || 22;
-     const tick = () => {
-       // 若狀態為 Charging 模擬較高功率，否則偏低或 0
-       const base = charger.status === 'Charging' ? 0.6 : 0.05;
-       const value = Number((Math.random() * (maxKw * (1 - base)) + maxKw * base).toFixed(2));
-       setCurrentPower(value);
+     let mounted = true;
+     let lastStatus = charger.status;
+
+     const parseValue = (v) => {
+       if (v === null || v === undefined) return null;
+       const n = Number(v);
+       return Number.isFinite(n) ? n : null;
      };
-     tick();
-     const id = setInterval(tick, 2000);
-     return () => clearInterval(id);
-   }, [charger.status, charger.max_kw, charger.maxPower]);
+
+     const fetchMeterValue = async () => {
+       // 若伺服端先前不支援 GET，跳過
+       if (failedFetchRef.current) return;
+
+       // 僅在 Charging 時撈取最新值
+       if (charger.status !== 'Charging') {
+         const fallback = charger.guns_metervalue1 ?? charger.metervalue1 ?? null;
+         const num = parseValue(fallback);
+         if (mounted) setCurrentPower(num ?? fallback ?? null);
+         return;
+       }
+
+       try {
+         const res = await fetch(`/api/guns/${charger.id}`);
+         if (res.ok) {
+           const data = await res.json();
+           const val = data?.guns_metervalue1 ?? data?.metervalue1 ?? data?.current_power ?? charger.guns_metervalue1;
+           const num = parseValue(val);
+           if (mounted) setCurrentPower(num ?? val ?? null);
+           return;
+         }
+         // 若 server 回 405/501，停止後續輪詢以免噪音
+         if (res.status === 405 || res.status === 501) {
+           failedFetchRef.current = true;
+           console.warn(`[CPCard] /api/guns/${charger.id} returned ${res.status} — stopping polling for this gun`);
+           return;
+         }
+       } catch (e) {
+         // 忽略網路錯誤，使用 fallback
+       }
+
+       const fallback = charger.guns_metervalue1 ?? charger.metervalue1 ?? null;
+       const num = parseValue(fallback);
+       if (mounted) setCurrentPower(num ?? fallback ?? null);
+     };
+
+     // 立即執行一次，再每 5 秒檢查（但 fetch 只在 Charging 時發生）
+     fetchMeterValue();
+     const intervalId = setInterval(() => {
+       // 若 status 改變也會在 next tick 生效
+       if (lastStatus !== charger.status) lastStatus = charger.status;
+       fetchMeterValue();
+     }, 5000);
+
+     return () => {
+       mounted = false;
+       clearInterval(intervalId);
+     };
+   }, [charger.id, charger.guns_metervalue1, charger.status]);
    
    // 單一充電樁編輯Dialog
    const handleEditClick = () => {
@@ -909,11 +956,19 @@ function CPCardItem({ charger, onStartCharging, onStopCharging, onRestart, onSet
 
           {/* 即時充電功率 */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, width: '100%', justifyContent: isLinear ? 'flex-start' : 'space-between' }}>
-            <Typography variant="body2" color="text.secondary">即時功率(kW)</Typography>
+            <Typography variant="body2" color="text.secondary">即時功率</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <BoltIcon fontSize="small" color="action" />
               <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1rem' }}>
-                {currentPower !== null ? `${currentPower} kW` : '—'}
+                {(() => {
+                  if (currentPower === null || currentPower === undefined) return '—';
+                  const n = Number(currentPower);
+                  if (Number.isFinite(n)) {
+                    // 若值看起來是瓦特（>=1000） 
+                    return n >= 1000 ? `${(n / 1000).toFixed(2)} kW` : `${n} kW`;
+                  }
+                  return String(currentPower);
+                })()}
               </Typography>
             </Box>
           </Box>
