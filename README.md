@@ -23,7 +23,7 @@
     - 🔄 **孤兒交易處理**: 自動處理異常中斷的交易並生成對應計費
     - 🛡️ **防重複機制**: 確保每筆交易只計費一次
     - 📊 **多費率支援**: 固定費率、分時費率、累進費率等多種計費模式
--   **多資料庫支援**: 支援 MSSQL 和 MySQL，使用 Prisma ORM 進行統一管理和自動生成客戶端。
+-   **資料庫支援**: 目前專案僅支援 MySQL，使用 Prisma ORM 進行管理與自動生成客戶端。
 -   **完整的用戶管理**: 管理員與一般用戶分離、RFID 卡片管理、錢包系統、操作日誌追蹤。
 -   **RESTful API**: 完整的 API 服務，涵蓋充電樁管理、使用者認證、支付處理、故障報告、計費管理等模組。
 -   **實時監控**: WebSocket 連接監控、系統狀態追蹤和效能分析。
@@ -35,7 +35,7 @@
 
 -   **Node.js** (v18+ 推薦)
 -   **npm** 或 **Yarn** 包管理器
--   **資料庫**: MySQL 8.0+ 或 MSSQL Server 2019+
+-   **資料庫**: MySQL 8.0+
 -   **RabbitMQ** (可選，用於事件驅動架構，目前為初步接入階段)
 -   **Git** 版本控制
 
@@ -86,9 +86,8 @@ NEXT_PUBLIC_API_URL=http://localhost:7500/api
 
 # 資料庫設定 (根據你的資料庫類型選擇)
 DATABASE_URL="mysql://user:password@localhost:3306/csms_db"
-# 或 MSSQL
-DATABASE_URL_MSSQL="sqlserver://localhost:1433;database=csms_db;user=user;password=password;encrypt=true;trustServerCertificate=true"
-DB_PROVIDER="mysql" # 或 "mssql"
+# 如果使用 MySQL
+DB_PROVIDER="mysql"
 
 # OCPP 伺服器設定
 OCPP_SERVER_PORT=8089
@@ -115,21 +114,14 @@ FIREBASE_AUTH_DOMAIN="..."
 
 ### 3. 資料庫設定與遷移
 
-專案支援 MySQL 和 MSSQL 雙資料庫架構，根據你的 `DB_PROVIDER` 設定進行相應的資料庫操作：
+專案使用 MySQL，根據你的 `DB_PROVIDER` 設定進行相應的資料庫操作：
 
 ```bash
-# 生成 Prisma 客戶端 (兩個資料庫都會生成)
+# 生成 Prisma 客戶端
 npm run db:generate
 
-# MySQL 資料庫遷移
-npm run db:migrate:mysql
-
-# MSSQL 資料庫遷移  
-npm run db:migrate:mssql
-
-# 或使用 push 模式進行開發
-npm run db:push:mysql    # MySQL
-npm run db:push:mssql    # MSSQL
+# 使用 push 模式進行開發
+npm run db:push:mysql
 
 # 初始化資料庫和基礎資料
 npm run db:init
@@ -280,9 +272,9 @@ npm test tests/emsIntegration.test.js
          │    │                      │            │
          ↓    ↓                      ↓            ↓
     ┌─────────────┐            ┌─────────┐  ┌──────────┐
-    │  Database   │            │   EMS   │  │ RabbitMQ │
-    │  (MySQL/    │            │ Engine  │  │ Message  │
-    │   MSSQL)    │            │         │  │  Queue   │
+   │  Database   │            │   EMS   │  │ RabbitMQ │
+   │  (MySQL)    │            │ Engine  │  │ Message  │
+   │             │            │         │  │  Queue   │
     └─────────────┘            └─────────┘  └──────────┘
           ↑                          ↑            ↑
           │                          │            │
@@ -606,7 +598,6 @@ csms-nextjs/
 │   ├── ems-test-report-*.md  # 詳細測試報告
 │   └── performance-*.json    # 效能分析數據
 ├── prisma/                   # Prisma 資料庫模式定義
-│   ├── schema.mssql.prisma   # MSSQL 模式
 │   └── schema.prisma         # MySQL 模式
 ├── prisma-clients/           # Prisma 生成的客戶端 (自動生成)
 ├── public/                   # 靜態資源 (圖片, SVG)
@@ -738,7 +729,7 @@ csms-nextjs/
 - **OCPP 1.6 協議**: 完整實現 WebSocket 通訊和所有核心消息類型
 - **EMS 三種觸發機制**: 手動、定時、事件驅動全部實現並經測試驗證
 - **智能功率分配**: 支援靜態/動態模式，電表級精細化管理
-- **多資料庫支援**: MySQL/MSSQL 雙資料庫架構，Prisma ORM 統一管理
+- **資料庫支援**: MySQL，Prisma ORM 統一管理
 - **完整測試體系**: 86.7% 測試覆蓋率，涵蓋單元測試、整合測試、一致性測試
 - **前端管理系統**: Next.js 15 響應式介面，涵蓋充電站監控、用戶管理、報表分析等模組
 - **用戶管理系統**: 
