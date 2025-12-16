@@ -95,11 +95,10 @@ export async function POST(request: NextRequest) {
 
     console.log('🚀 開始建立支付訂單:', { userId: currentUser.userId, amount, paymentMethod });
 
-
     const paymentProvider = process.env.PAYMENT_PROVIDER || 'tappay';
     let result;
     switch (paymentMethod) {
-      case 'credit_card':
+      case 'tappay_credit':
         if (!metadata?.prime) {
           return NextResponse.json({
             success: false,
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
           metadata
         });
         break;
-      case 'line_pay':
+      case 'tappay_linepay':
         result = await PaymentRepository.createLinePayOrder({
             userId: currentUser.userId,
             amount,
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest) {
             metadata
           });
         break;
-      case 'linepay_direct':
+      case 'direct_linepay':
         result = await PaymentRepository.createDirectLinePayOrder({
           userId: currentUser.userId,
           amount,
@@ -132,7 +131,7 @@ export async function POST(request: NextRequest) {
           metadata
         });
         break;
-      case 'easy_wallet':
+      case 'tappay_easywallet':
         result = await PaymentRepository.createEasyWalletOrder({
           userId: currentUser.userId,
           amount,

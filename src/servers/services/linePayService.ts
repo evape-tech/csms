@@ -308,10 +308,14 @@ export class LinePayService {
       const bodyString = JSON.stringify(requestBody);
       const headers = this.getAuthHeaders(uri, bodyString);
 
-      logger.info('📡 [LINE Pay] 發送 Request API', {
+      
+      logger.info('📡 [LINE Pay] 發送 Request API (full request)', {
         orderId: params.orderId,
         amount: params.amount,
         uri,
+        requestBody,
+        bodyString,
+        headers,
       });
 
       const response = await this.httpClient.post<LinePayRequestResponse>(uri, requestBody, { headers });
