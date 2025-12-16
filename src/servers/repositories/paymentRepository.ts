@@ -8,6 +8,10 @@
  * 
  * 數據庫操作委託給 DatabaseService
  * 支持同步模式：前端發起支付 → 後端等待 TapPay 回調 → 一次性返回最終結果
+ * 
+ * 支付平台：
+ * - TapPay：信用卡、TapPay 整合的 LINE Pay、EasyWallet（會開立發票）
+ * - LINE Pay 直連：直接呼叫 LINE Pay API（不透過 TapPay，不開立發票）
  */
 
 import axios from 'axios';
@@ -15,6 +19,7 @@ import { nanoid } from 'nanoid';
 import { databaseService } from '../../lib/database/service.js';
 import { InvoiceRepository } from '@/servers/repositories/invoiceRepository';
 import { logger } from '@/servers/utils';
+import { linePayService } from '@/servers/services/linePayService';
 
 interface CreateOrderParams {
   userId: string;
@@ -307,6 +312,198 @@ export class PaymentRepository {
       return {
         success: false,
         error: error instanceof Error ? error.message : '建立 Line Pay 訂單失敗'
+      };
+    }
+  }
+
+  /**
+   * 建立 LINE Pay 直連支付訂單（不透過 TapPay）
+   * 
+   * ⚠️ 重要：此流程不開立發票
+   * 
+   * 流程：
+   * 1. 建立訂單記錄
+   * 2. 直接呼叫 LINE Pay Request API
+   * 3. 返回支付 URL 給前端
+   * 4. 用戶完成支付後，LINE Pay 回調到 /api/payment/linepay-confirm
+   * 5. 確認支付後更新訂單狀態（不開立發票）
+   */
+  static async createDirectLinePayOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
+    try {
+      const { userId, amount, description, metadata = {}, transactionId } = params;
+
+      if (!amount || amount <= 0) {
+        return {
+          success: false,
+          error: '金額無效'
+        };
+      }
+
+      // 檢查 LINE Pay 服務是否已配置
+      if (!linePayService.isConfigured()) {
+        return {
+          success: false,
+          error: 'LINE Pay 直連服務未配置，請檢查環境變數'
+        };
+      }
+
+      // 生成內部訂單ID
+      const orderId = this.generateOrderId();
+
+      // 1. 建立訂單記錄（使用 linepay_direct 作為支付方式）
+      await databaseService.createPaymentOrder({
+        orderId,
+        userId,
+        amount,
+        description,
+        transactionId,
+        metadata,
+        paymentMethod: 'linepay_direct', // 區分 TapPay 整合的 line_pay
+        idTag: metadata.idTag,
+        cpid: metadata.cpid,
+        cpsn: metadata.cpsn,
+        connectorId: metadata.connectorId
+      });
+
+      console.log('✅ LINE Pay 直連訂單已建立:', { orderId });
+
+      // 2. 呼叫 LINE Pay Request API
+      const linePayResult = await linePayService.createSimplePayment(
+        orderId,
+        amount,
+        description || '充電錢包充值'
+      );
+
+      if (!linePayResult.success || !linePayResult.data) {
+        await databaseService.updatePaymentOrderStatus(orderId, 'FAILED');
+        console.error('❌ LINE Pay 直連 API 呼叫失敗:', linePayResult.error);
+        return {
+          success: false,
+          orderId,
+          status: 'FAILED',
+          amount,
+          message: 'LINE Pay 支付初始化失敗',
+          error: linePayResult.error
+        };
+      }
+
+      // 3. 將 LINE Pay transactionId 存入訂單（用於後續確認）
+      await databaseService.updatePaymentOrderReference(
+        orderId,
+        linePayResult.data.transactionId,
+        'UNPAID'
+      );
+
+      console.log('✅ LINE Pay 直連支付 URL 已生成:', {
+        orderId,
+        transactionId: linePayResult.data.transactionId,
+        payment_url: linePayResult.data.paymentUrl
+      });
+
+      return {
+        success: true,
+        orderId,
+        externalOrderId: linePayResult.data.transactionId,
+        status: 'UNPAID',
+        amount,
+        payment_url: linePayResult.data.paymentUrl,
+        message: '請前往 LINE Pay 支付頁面'
+      };
+
+    } catch (error) {
+      console.error('❌ 建立 LINE Pay 直連訂單失敗:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '建立 LINE Pay 直連訂單失敗'
+      };
+    }
+  }
+
+  /**
+   * 確認 LINE Pay 直連支付（供回調 API 使用）
+   * 
+   * ⚠️ 重要：此流程不開立發票
+   * 
+   * @param orderId 內部訂單 ID
+   * @param transactionId LINE Pay 交易 ID
+   * @param amount 金額
+   */
+  static async confirmDirectLinePayOrder(
+    orderId: string,
+    transactionId: string,
+    amount: number
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // 1. 呼叫 LINE Pay Confirm API
+      const confirmResult = await linePayService.confirmPayment({
+        transactionId,
+        amount,
+        currency: 'TWD'
+      });
+
+      if (!confirmResult.success) {
+        await databaseService.updatePaymentOrderStatus(orderId, 'FAILED');
+        console.error('❌ LINE Pay 確認失敗:', confirmResult.error);
+        return {
+          success: false,
+          error: confirmResult.error
+        };
+      }
+
+      // 2. 更新訂單狀態為 PAID（注意：不開立發票，直接標記為 COMPLETED）
+      const updateResult = await PaymentRepository.updatePaymentOrderFromCallback({
+        orderId,
+        callbackData: {
+          status: 0,
+          rec_trade_id: transactionId,
+          order_number: orderId
+        },
+        status: 'COMPLETED' // 直接標記為完成，不需要後續發票處理
+      });
+
+      if (!updateResult.success) {
+        console.error('❌ 更新訂單狀態失敗:', updateResult.error);
+        return {
+          success: false,
+          error: updateResult.error
+        };
+      }
+
+      console.log('✅ LINE Pay 直連支付確認成功（不開立發票）:', {
+        orderId,
+        transactionId
+      });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('❌ 確認 LINE Pay 直連訂單失敗:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '確認 LINE Pay 支付失敗'
+      };
+    }
+  }
+
+  /**
+   * 取消 LINE Pay 直連訂單
+   * 
+   * @param orderId 內部訂單 ID
+   */
+  static async cancelDirectLinePayOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // 更新訂單狀態為 CANCELLED
+      await databaseService.updatePaymentOrderStatus(orderId, 'CANCELLED');
+      
+      console.log('✅ LINE Pay 直連訂單已取消:', { orderId });
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('❌ 取消 LINE Pay 直連訂單失敗:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '取消訂單失敗'
       };
     }
   }

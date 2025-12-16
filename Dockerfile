@@ -65,10 +65,10 @@ COPY --chown=nextjs:nodejs .env.production ./.env.production
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 7500
 EXPOSE 8089
 
-ENV PORT 3000
+ENV PORT 7500
 ENV HOSTNAME "0.0.0.0"
 
 CMD ["node", "server.js"]

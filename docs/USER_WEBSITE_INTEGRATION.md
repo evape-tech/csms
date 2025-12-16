@@ -5,7 +5,7 @@
 ## 📋 整合概述
 
 CSMS 系統支援兩種前端應用：
-1. **管理後台** (http://localhost:3000) - 使用 Cookie 認證
+1. **管理後台** (http://localhost:7500) - 使用 Cookie 認證
 2. **使用者網站** (您的外部網站) - 使用 Bearer Token 認證
 
 兩者使用**同一套 API**，通過 `role` 欄位區分權限。
@@ -36,7 +36,7 @@ CSMS 系統支援兩種前端應用：
 
 **請求範例**:
 ```javascript
-const response = await fetch('http://localhost:3000/api/auth/thirdparty', {
+const response = await fetch('http://localhost:7500/api/auth/thirdparty', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ const data = await response.json();
 #### Google 登入範例
 
 ```javascript
-const response = await fetch('http://localhost:3000/api/auth/thirdparty', {
+const response = await fetch('http://localhost:7500/api/auth/thirdparty', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -109,7 +109,7 @@ const data = await response.json();
 
 **請求範例**:
 ```javascript
-const response = await fetch('http://localhost:3000/api/auth/login', {
+const response = await fetch('http://localhost:7500/api/auth/login', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -159,7 +159,7 @@ if (data.success) {
 ```javascript
 const token = localStorage.getItem('authToken');
 
-const response = await fetch('http://localhost:3000/api/user/profile', {
+const response = await fetch('http://localhost:7500/api/user/profile', {
   method: 'GET',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -179,7 +179,7 @@ const data = await response.json();
 ```javascript
 const token = localStorage.getItem('authToken');
 
-await fetch('http://localhost:3000/api/auth/logout', {
+await fetch('http://localhost:7500/api/auth/logout', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`
@@ -248,7 +248,7 @@ localStorage.removeItem('user');
 ```javascript
 // lib/apiClient.js
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7500';
 
 class ApiClient {
   constructor() {
@@ -698,25 +698,25 @@ if (allowedOrigins.includes(origin || '')) {
 
 ```bash
 # 1A. 使用者手機登入
-curl -X POST http://localhost:3000/api/auth/thirdparty \
+curl -X POST http://localhost:7500/api/auth/thirdparty \
   -H "Content-Type: application/json" \
   -d '{"provider":"phone","phone":"0912345678"}' \
   | jq -r '.token'
 
 # 1A-2. 使用者 Google 登入
-curl -X POST http://localhost:3000/api/auth/thirdparty \
+curl -X POST http://localhost:7500/api/auth/thirdparty \
   -H "Content-Type: application/json" \
   -d '{"provider":"google","email":"user@gmail.com","firstName":"John","lastName":"Doe"}' \
   | jq -r '.token'
 
 # 1A-3. 使用者 Facebook 登入
-curl -X POST http://localhost:3000/api/auth/thirdparty \
+curl -X POST http://localhost:7500/api/auth/thirdparty \
   -H "Content-Type: application/json" \
   -d '{"provider":"facebook","email":"user@fb.com"}' \
   | jq -r '.token'
 
 # 1B. 管理者登入（Email + 密碼）
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:7500/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"password123"}' \
   | jq -r '.token'
@@ -725,17 +725,17 @@ curl -X POST http://localhost:3000/api/auth/login \
 TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 # 2. 使用 token 訪問 API
-curl http://localhost:3000/api/user/profile \
+curl http://localhost:7500/api/user/profile \
   -H "Authorization: Bearer $TOKEN"
 
 # 3. 更新個人資料
-curl -X PATCH http://localhost:3000/api/user/profile \
+curl -X PATCH http://localhost:7500/api/user/profile \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"firstName":"John","lastName":"Doe","phone":"0912345678"}'
 
 # 4. 登出
-curl -X POST http://localhost:3000/api/auth/logout \
+curl -X POST http://localhost:7500/api/auth/logout \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -754,7 +754,7 @@ curl -X POST http://localhost:3000/api/auth/logout \
 
 使用者網站整合前的檢查：
 
-- [ ] 後端 API 已啟動（http://localhost:3000）
+- [ ] 後端 API 已啟動（http://localhost:7500）
 - [ ] CORS 已配置（允許您的網站來源）
 - [ ] **使用者登入**：測試 POST /api/auth/thirdparty（手機/Google/Facebook）
 - [ ] **管理者登入**：測試 POST /api/auth/login（Email + 密碼，僅限 admin）

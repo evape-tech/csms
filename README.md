@@ -82,7 +82,7 @@ npm install
 
 ```env
 # Next.js 環境變數
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
+NEXT_PUBLIC_API_URL=http://localhost:7500/api
 
 # 資料庫設定 (根據你的資料庫類型選擇)
 DATABASE_URL="mysql://user:password@localhost:3306/csms_db"
@@ -147,7 +147,7 @@ npm run dev
 npm run dev:fast
 ```
 
-這將在 [http://localhost:3000](http://localhost:3000) 啟動前端應用和 Next.js API 路由。
+這將在 [http://localhost:7500](http://localhost:7500) 啟動前端應用和 Next.js API 路由。
 
 #### ⚡ 啟動 OCPP 伺服器 (後端微服務)
 
@@ -195,7 +195,7 @@ rabbitmq-server
 
 本專案提供完整的 RESTful API 服務，包含：
 
-#### 🌐 Next.js API (http://localhost:3000)
+#### 🌐 Next.js API (http://localhost:7500)
 - **認證與用戶管理**: 登入、會話、用戶CRUD、RFID卡片管理
 - **錢包與支付**: 儲值、扣款、交易記錄、計費管理  
 - **充電站管理**: 站點設定、設備監控、功率分析
@@ -273,7 +273,7 @@ npm test tests/emsIntegration.test.js
 │   Next.js 15    │          │   OCPP Server   │  
 │   Frontend +    │          │   WebSocket +   │
 │   API Routes    │          │   REST API      │
-│   (Port 3000)   │          │   (Port 8089)   │
+│   (Port 7500)   │          │   (Port 8089)   │
 └────────┬────────┘          └────────┬────────┘
          │                            │
          │    ┌──────────────────────┼────────────┐
@@ -360,7 +360,7 @@ npm test tests/emsIntegration.test.js
 5. **前端無法載入**
    - 確認 Next.js 開發伺服器正在運行：`npm run dev`
    - 檢查瀏覽器控制台是否有錯誤訊息
-   - 驗證 API 端點是否可訪問：`curl http://localhost:3000/api`
+      - 驗證 API 端點是否可訪問：`curl http://localhost:7500/api`
    - 確認環境變數 `NEXT_PUBLIC_API_URL` 設定正確
 
 6. **資料庫相關問題**
@@ -418,7 +418,7 @@ Docker 部署包含以下服務:
 |------|---------|------|------|
 | **Caddy** | csms-caddy | 80, 443, 2019 | 反向代理 + 自動 HTTPS |
 | **Caddy UI** | csms-caddy-ui | 8888 | Caddy 管理界面 |
-| **Next.js Web** | csms-web | 3000 (內部) | Web 應用 |
+| **Next.js Web** | csms-web | 7500 (內部) | Web 應用 |
 | **OCPP Server** | csms-ocpp | 8089 | OCPP WebSocket 服務 |
 
 #### 訪問地址
@@ -485,14 +485,14 @@ docker-compose restart web
 本專案使用 Caddy 作為反向代理,提供以下功能:
 
 **開發環境**:
-- HTTP 訪問: `http://localhost` → Next.js Web (端口 3000)
+- HTTP 訪問: `http://localhost` → Next.js Web (端口 7500)
 - OCPP 直連: `ws://localhost:8089` → OCPP Server
 
 **生產環境** (需域名):
 ```caddyfile
 # 修改 Caddyfile 取消以下註解
 yourdomain.com {
-    reverse_proxy web:3000
+   reverse_proxy web:7500
     encode gzip
 }
 
