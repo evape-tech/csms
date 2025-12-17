@@ -49,12 +49,6 @@ export async function GET(request: NextRequest) {
       return redirectToResult('error', '訂單不存在');
     }
 
-    // 確保是 LINE Pay 直連訂單
-    if (paymentOrder.payment_method !== 'linepay_direct') {
-      console.error('❌ [LINE Pay 直連確認] 訂單支付方式不符:', paymentOrder.payment_method);
-      return redirectToResult('error', '訂單支付方式不符');
-    }
-
     // 確保訂單狀態是待支付
     if (paymentOrder.status !== 'UNPAID') {
       console.warn('⚠️ [LINE Pay 直連確認] 訂單狀態非 UNPAID:', paymentOrder.status);

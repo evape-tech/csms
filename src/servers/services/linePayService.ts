@@ -193,6 +193,22 @@ export class LinePayService {
   }
 
   /**
+   * 處理回應中的大整數（避免 JS 精度問題）
+   * 將 16 位以上連續數字（可能為 transactionId）轉為字串再解析 JSON
+   */
+  private handleBigInteger(text: string): any {
+    try {
+      const largeNumberRegex = /:\s*(\d{16,})\b/g;
+      const processedText = text.replace(largeNumberRegex, ': "$1"');
+      return JSON.parse(processedText);
+    } catch (e) {
+      // 若解析失敗，回傳原始嘗試由 axios 解析的物件或 throw
+      logger.error('❌ [LINE Pay] 處理 big integer 解析失敗', { error: e instanceof Error ? e.message : String(e), text: text.slice(0, 200) });
+      throw e;
+    }
+  }
+
+  /**
    * 載入 LINE Pay 配置
    */
   private loadConfig(): LinePayConfig {
@@ -318,30 +334,35 @@ export class LinePayService {
         headers,
       });
 
-      const response = await this.httpClient.post<LinePayRequestResponse>(uri, requestBody, { headers });
+      // LINE 回傳的 transactionId 可能超過 JS 安全整數範圍，先以純文字取得 response 再手動解析，將過長數字轉為字串
+      const rawResponse = await this.httpClient.post(uri, requestBody, { headers, responseType: 'text' });
+      const parsed = this.handleBigInteger(rawResponse.data);
 
-      if (response.data.returnCode === '0000') {
+      if (parsed.returnCode === '0000') {
+        // 確保 transactionId 被視為字串
+        if (parsed.info && parsed.info.transactionId !== undefined) parsed.info.transactionId = String(parsed.info.transactionId);
+
         logger.info('✅ [LINE Pay] Request API 成功', {
           orderId: params.orderId,
-          transactionId: response.data.info?.transactionId,
-          paymentUrl: response.data.info?.paymentUrl.web,
+          transactionId: parsed.info?.transactionId,
+          paymentUrl: parsed.info?.paymentUrl?.web,
         });
 
         return {
           success: true,
-          data: response.data.info,
+          data: parsed.info,
         };
       } else {
         logger.error('❌ [LINE Pay] Request API 失敗', {
           orderId: params.orderId,
-          returnCode: response.data.returnCode,
-          returnMessage: response.data.returnMessage,
+          returnCode: parsed.returnCode,
+          returnMessage: parsed.returnMessage,
         });
 
         return {
           success: false,
-          error: response.data.returnMessage,
-          errorCode: response.data.returnCode,
+          error: parsed.returnMessage,
+          errorCode: parsed.returnCode,
         };
       }
     } catch (error) {
@@ -369,7 +390,8 @@ export class LinePayService {
    * @returns 確認結果
    */
   async confirmPayment(params: LinePayConfirmParams): Promise<ServiceResponse<LinePayConfirmResponse['info']>> {
-    const uri = `/v3/payments/requests/${params.transactionId}/confirm`;
+    // NOTE: Confirm API path is /v3/payments/{transactionId}/confirm (no 'requests' segment)
+    const uri = `/v3/payments/${params.transactionId}/confirm`;
 
     try {
       if (!this.isConfigured()) {
@@ -393,29 +415,30 @@ export class LinePayService {
         amount: params.amount,
       });
 
-      const response = await this.httpClient.post<LinePayConfirmResponse>(uri, requestBody, { headers });
+      const rawResponse = await this.httpClient.post(uri, requestBody, { headers, responseType: 'text' });
+      const parsed = this.handleBigInteger(rawResponse.data);
 
-      if (response.data.returnCode === '0000') {
+      if (parsed.returnCode === '0000') {
         logger.info('✅ [LINE Pay] Confirm API 成功', {
           transactionId: params.transactionId,
-          orderId: response.data.info?.orderId,
+          orderId: parsed.info?.orderId,
         });
 
         return {
           success: true,
-          data: response.data.info,
+          data: parsed.info,
         };
       } else {
         logger.error('❌ [LINE Pay] Confirm API 失敗', {
           transactionId: params.transactionId,
-          returnCode: response.data.returnCode,
-          returnMessage: response.data.returnMessage,
+          returnCode: parsed.returnCode,
+          returnMessage: parsed.returnMessage,
         });
 
         return {
           success: false,
-          error: response.data.returnMessage,
-          errorCode: response.data.returnCode,
+          error: parsed.returnMessage,
+          errorCode: parsed.returnCode,
         };
       }
     } catch (error) {
@@ -440,7 +463,8 @@ export class LinePayService {
    * @returns 退款結果
    */
   async refundPayment(params: LinePayRefundParams): Promise<ServiceResponse<LinePayRefundResponse['info']>> {
-    const uri = `/v3/payments/requests/${params.transactionId}/refund`;
+    // Refund API path is /v3/payments/{transactionId}/refund
+    const uri = `/v3/payments/${params.transactionId}/refund`;
 
     try {
       if (!this.isConfigured()) {
@@ -464,29 +488,30 @@ export class LinePayService {
         refundAmount: params.refundAmount,
       });
 
-      const response = await this.httpClient.post<LinePayRefundResponse>(uri, requestBody, { headers });
+      const rawResponse = await this.httpClient.post(uri, requestBody, { headers, responseType: 'text' });
+      const parsed = this.handleBigInteger(rawResponse.data);
 
-      if (response.data.returnCode === '0000') {
+      if (parsed.returnCode === '0000') {
         logger.info('✅ [LINE Pay] Refund API 成功', {
           transactionId: params.transactionId,
-          refundTransactionId: response.data.info?.refundTransactionId,
+          refundTransactionId: parsed.info?.refundTransactionId,
         });
 
         return {
           success: true,
-          data: response.data.info,
+          data: parsed.info,
         };
       } else {
         logger.error('❌ [LINE Pay] Refund API 失敗', {
           transactionId: params.transactionId,
-          returnCode: response.data.returnCode,
-          returnMessage: response.data.returnMessage,
+          returnCode: parsed.returnCode,
+          returnMessage: parsed.returnMessage,
         });
 
         return {
           success: false,
-          error: response.data.returnMessage,
-          errorCode: response.data.returnCode,
+          error: parsed.returnMessage,
+          errorCode: parsed.returnCode,
         };
       }
     } catch (error) {
@@ -511,7 +536,8 @@ export class LinePayService {
    * @returns 支付狀態
    */
   async checkPaymentStatus(transactionId: string): Promise<ServiceResponse<LinePayStatusResponse['info']>> {
-    const uri = `/v3/payments/requests/${transactionId}/check`;
+    // Check API path is /v3/payments/{transactionId}/check
+    const uri = `/v3/payments/${transactionId}/check`;
 
     try {
       if (!this.isConfigured()) {
@@ -529,29 +555,30 @@ export class LinePayService {
         transactionId,
       });
 
-      const response = await this.httpClient.get<LinePayStatusResponse>(uri, { headers });
+      const rawResponse = await this.httpClient.get(uri, { headers, responseType: 'text' });
+      const parsed = this.handleBigInteger(rawResponse.data);
 
-      if (response.data.returnCode === '0000') {
+      if (parsed.returnCode === '0000') {
         logger.info('✅ [LINE Pay] Check Payment Status API 成功', {
           transactionId,
-          info: response.data.info,
+          info: parsed.info,
         });
 
         return {
           success: true,
-          data: response.data.info,
+          data: parsed.info,
         };
       } else {
         logger.error('❌ [LINE Pay] Check Payment Status API 失敗', {
           transactionId,
-          returnCode: response.data.returnCode,
-          returnMessage: response.data.returnMessage,
+          returnCode: parsed.returnCode,
+          returnMessage: parsed.returnMessage,
         });
 
         return {
           success: false,
-          error: response.data.returnMessage,
-          errorCode: response.data.returnCode,
+          error: parsed.returnMessage,
+          errorCode: parsed.returnCode,
         };
       }
     } catch (error) {

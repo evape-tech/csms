@@ -41,11 +41,6 @@ export async function GET(request: NextRequest) {
       return redirectToResult('cancelled', '訂單不存在');
     }
 
-    // 確保是 LINE Pay 直連訂單
-    if (paymentOrder.payment_method !== 'linepay_direct') {
-      console.warn('⚠️ [LINE Pay 直連取消] 訂單支付方式不符:', paymentOrder.payment_method);
-    }
-
     // 取消訂單
     const result = await PaymentRepository.cancelDirectLinePayOrder(orderId);
 
@@ -82,14 +77,14 @@ function redirectToResult(
       status,
       message,
       orderId,
-      provider: 'linepay_direct'
+      provider: 'direct_linepay'
     });
   }
 
   const params = new URLSearchParams({
     status,
     message,
-    provider: 'linepay_direct'
+    provider: 'direct_linepay'
   });
 
   if (orderId) params.set('orderId', orderId);
