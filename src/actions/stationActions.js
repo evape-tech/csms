@@ -350,3 +350,48 @@ export async function updateMaxPower(formData) {
     return { success: false, error: error.message };
   }
 }
+
+export async function createStationAction(formData) {
+  try {
+    // Simple validation
+    const station_code = formData.get('station_code');
+    const name = formData.get('name');
+    const address = formData.get('address');
+    const floor = formData.get('floor');
+    const operator_id = formData.get('operator_id');
+
+    if (!station_code) {
+      return { success: false, error: '請提供場域代碼 (station_code)'};
+    }
+
+    console.log(`🔍 [createStationAction] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
+
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+
+    const created = await databaseService.createStation({
+      station_code: String(station_code),
+      name: name ? String(name) : undefined,
+      address: address ? String(address) : undefined,
+      floor: floor ? String(floor) : undefined,
+      operator_id: operator_id ? String(operator_id) : undefined
+    });
+
+    // Revalidate stations list if pages rely on it (guard in case revalidatePath is unavailable)
+    try {
+      if (typeof revalidatePath === 'function') {
+        revalidatePath('/api/stations');
+      } else {
+        console.warn('[createStationAction] revalidatePath is not available in this runtime');
+      }
+    } catch (err) {
+      console.warn('[createStationAction] revalidatePath error:', err);
+    }
+
+    return { success: true, data: created };
+  } catch (error) {
+    console.error('createStationAction error:', error);
+    // Prisma unique constraint error handling
+    const errMsg = (error && error.code === 'P2002') ? '場域代碼已存在，請使用其他代碼' : (error instanceof Error ? error.message : String(error));
+    return { success: false, error: errMsg };
+  }
+}
