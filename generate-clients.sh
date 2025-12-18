@@ -1,17 +1,9 @@
 #!/bin/bash
 
-echo "🔧 Generating Prisma clients for both databases..."
+echo "🔧 Generating Prisma client for MySQL..."
 
-# 生成 MySQL 客戶端
 echo "📊 Generating MySQL client..."
 npx prisma generate --schema=prisma/schema.prisma
 
-# 生成 MSSQL 客戶端
-echo "📊 Generating MSSQL client..."
-npx prisma generate --schema=prisma/schema.mssql.prisma
-
-echo "✅ All Prisma clients generated successfully!"
-echo ""
-echo "Client locations:"
-echo "  MySQL:  prisma-clients/mysql/"
-echo "  MSSQL:  prisma-clients/mssql/"
+echo "✅ Prisma client generated successfully!"
+echo "Client location: prisma-clients/mysql/"

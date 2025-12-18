@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '@/lib/database/utils.js';
 import { getDatabaseClient } from '@/lib/database/adapter.js';
+import { decimalToNumber } from '@/lib/numberUtils';
 import ExcelJS from 'exceljs';
 
 export const dynamic = 'force-dynamic';
@@ -13,14 +14,7 @@ const parseDate = (value: string | null, isEnd = false) => {
   return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
 };
 
-const decimalToNumber = (value: any, fractionDigits = 2) => {
-  if (value === null || value === undefined) return 0;
-  const parsed = Number(value);
-  if (Number.isNaN(parsed)) {
-    return 0;
-  }
-  return Number(parsed.toFixed(fractionDigits));
-};
+// use shared decimalToNumber helper
 
 const buildWhereClause = (searchParams: URLSearchParams) => {
   const startDate = parseDate(searchParams.get('startDate'));

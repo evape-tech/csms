@@ -46,7 +46,7 @@ export default function LoginPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'transparent', p: 0 }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'transparent', p: 0 }}>
       {/* Two-column card: left for branding/image, right for login form. Left is hidden on small screens. */}
       <Card sx={{ width: '100%', maxWidth: 1000, display: 'flex', boxShadow: 3, borderRadius: 3, mx: 2 }}>
         {/* Left panel: branding / gorilla image placeholder */}
@@ -92,11 +92,6 @@ export default function LoginPage() {
               <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth autoFocus />
               <TextField label="密碼" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required fullWidth />
 
-              {/* Quick-fill button for default credentials */}
-              <Button variant="text" onClick={() => { setEmail('evape@gmail.com'); setPassword('123456'); }} sx={{ alignSelf: 'flex-end' }}>
-                使用範例帳密
-              </Button>
-
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <FormControlLabel control={<Checkbox />} label="記住我" />
                 <a href="#" style={{ fontSize: 14 }}>忘記密碼？</a>
@@ -106,15 +101,17 @@ export default function LoginPage() {
                 {isPending ? <CircularProgress size={18} color="inherit" /> : '登入'}
               </Button>
 
-              <Divider sx={{ my: 1 }}>或</Divider>
-
-              <Button variant="outlined" fullWidth startIcon={<LockOutlinedIcon />}>
-                使用其他方式登入
-              </Button>
+            </Box>
+            {/* Footer under login button */}
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="caption" color="text.secondary">
+                © {new Date().getFullYear()} Evape Tech. All rights reserved.
+              </Typography>
             </Box>
           </Box>
         </Box>
       </Card>
+      
     </Box>
   );
 }

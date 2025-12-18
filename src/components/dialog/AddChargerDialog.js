@@ -2,6 +2,8 @@
 import React, { useState, useTransition, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, TextField, MenuItem, Stack, Alert, CircularProgress, FormControl, InputLabel, Select, Chip, Box, Grid, Paper, Divider, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction } from '@mui/material';
 import { createGunAction, updateGunAction } from '../../actions/gunActions';
+import { getChargingStandards } from '../../actions/chargingStandardActions';
+import { getTariffs } from '../../actions/tariffActions';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -33,6 +35,8 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
   const [selectedMeterId, setSelectedMeterId] = useState('');
   const [selectedTariffs, setSelectedTariffs] = useState([]); // 格式: [{tariffId, priority}]
   const [availableTariffs, setAvailableTariffs] = useState([]);
+  const [chargingStandards, setChargingStandards] = useState([]);
+  const [selectedChargingStandardId, setSelectedChargingStandardId] = useState('');
   const [saveError, setSaveError] = useState(null);
   const [loadingTariffs, setLoadingTariffs] = useState(false);
   
@@ -43,15 +47,15 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
   useEffect(() => {
     const loadTariffs = async () => {
       if (!open) return;
-      
+
       setLoadingTariffs(true);
       try {
-        const response = await fetch('/api/tariffs');
-        if (response.ok) {
-          const result = await response.json();
+        // use server action instead of client-side API fetch
+        const result = await getTariffs();
+        if (result && result.success) {
           setAvailableTariffs(result.data || []);
         } else {
-          console.error('Failed to load tariffs');
+          console.error('Failed to load tariffs', result?.error);
         }
       } catch (error) {
         console.error('Error loading tariffs:', error);
@@ -60,7 +64,22 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
       }
     };
 
+    const loadChargingStandards = async () => {
+      try {
+        // use server action instead of client-side API fetch
+        const result = await getChargingStandards();
+        if (result && result.success) {
+          setChargingStandards(result.data || []);
+        } else {
+          console.error('Failed to load charging standards', result?.error);
+        }
+      } catch (e) {
+        console.error('Error loading charging standards:', e);
+      }
+    };
+
     loadTariffs();
+    loadChargingStandards();
   }, [open]);
 
   // 當編輯模式時，載入現有資料
@@ -73,6 +92,7 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
       setMaxPower(charger.max_kw ? charger.max_kw.toString() : (charger.maxPower ? charger.maxPower.toString() : ''));
       setDesc(charger.guns_memo1 || charger.desc || '');
       setSelectedMeterId(charger.meter_id ? charger.meter_id.toString() : '');
+  setSelectedChargingStandardId(charger.charging_standard_id ? charger.charging_standard_id.toString() : (charger.charging_standard && charger.charging_standard.id ? charger.charging_standard.id.toString() : ''));
       
       // 載入現有的費率配置
       if (charger.gun_tariffs && Array.isArray(charger.gun_tariffs)) {
@@ -95,6 +115,7 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
       setMaxPower('');
       setDesc('');
       setSelectedMeterId('');
+  setSelectedChargingStandardId('');
       setSelectedTariffs([]);
       setSaveError(null);
     }
@@ -205,6 +226,8 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
             // 如果沒有選擇費率，發送空數組來清除現有配置
             formData.append('tariff_data', JSON.stringify([]));
           }
+          // 編輯模式也可以更新充電標準
+          if (selectedChargingStandardId) formData.append('charging_standard_id', selectedChargingStandardId);
           
           const result = await updateGunAction(formData);
           
@@ -235,6 +258,7 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
             }));
             formData.append('tariff_data', JSON.stringify(tariffData));
           }
+          if (selectedChargingStandardId) formData.append('charging_standard_id', selectedChargingStandardId);
           
           const result = await createGunAction(formData);
           
@@ -351,6 +375,22 @@ export default function AddChargerDialog({ open, onClose, onAdd, onSave, station
                           </MenuItem>
                         )) : []
                       )}
+                    </TextField>
+                    <TextField
+                      select
+                      label="充電標準"
+                      value={selectedChargingStandardId}
+                      onChange={(e) => setSelectedChargingStandardId(e.target.value)}
+                      fullWidth
+                      size="medium"
+                      sx={{ bgcolor: 'background.paper', mt: 1 }}
+                    >
+                      <MenuItem value="">無</MenuItem>
+                      {chargingStandards.map((std) => (
+                        <MenuItem key={std.id} value={String(std.id)}>
+                          {std.name} {std.code ? `(${std.code})` : ''}
+                        </MenuItem>
+                      ))}
                     </TextField>
                     <TextField 
                       label="最大功率 (kW)" 

@@ -107,6 +107,17 @@ class DatabaseService {
     });
   }
 
+  /**
+   * 獲取充電標準列表（可選篩選）
+   */
+  async getChargingStandards(filter = {}) {
+    const client = getDatabaseClient();
+    return await client.charging_standards.findMany({
+      where: filter,
+      orderBy: { name: 'asc' }
+    });
+  }
+
   async updateGun(id, data) {
     const client = getDatabaseClient();
     return await client.guns.update({ 
@@ -1249,8 +1260,8 @@ class DatabaseService {
     return await client.wallet_transactions.updateMany({
       where: { payment_reference: orderId },
       data: {
-        description: `TapPay ${paymentReference}`,
         status: status,
+        rec_trade_id: String(paymentReference),
         updatedAt: new Date()
       }
     });
@@ -1295,8 +1306,8 @@ class DatabaseService {
           where: { payment_reference: orderId },
           data: {
             status: finalStatus,
-            description: `TapPay 充值成功 (${callbackData.rec_trade_id})`,
-            rec_trade_id: callbackData.rec_trade_id, // 新增：存儲 rec_trade_id
+            description: `充值成功 (${callbackData.rec_trade_id})`,
+            rec_trade_id: String(callbackData.rec_trade_id),
             updatedAt: new Date()
           }
         });
@@ -1308,8 +1319,8 @@ class DatabaseService {
       where: { payment_reference: orderId },
       data: {
         status: finalStatus,
-        description: `TapPay 充值失敗 (${callbackData.rec_trade_id})`,
-        rec_trade_id: callbackData.rec_trade_id, // 新增：存儲 rec_trade_id
+        description: `充值失敗 (${callbackData.rec_trade_id})`,
+        rec_trade_id: String(callbackData.rec_trade_id),
         updatedAt: new Date()
       }
     });

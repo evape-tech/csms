@@ -57,8 +57,8 @@ export async function GET(request: NextRequest) {
       id: user.uuid,
       email: user.email,
       role: user.role,
-      firstName: user.first_name || user.firstName,
-      lastName: user.last_name || user.lastName,
+      firstName: user.first_name,
+      lastName: user.last_name,
       phone: user.phone,
       dateOfBirth: user.date_of_birth,
       emailVerified: user.email_verified,
@@ -181,8 +181,8 @@ export async function PATCH(request: NextRequest) {
       user: {
         id: updatedUser.uuid,
         email: updatedUser.email,
-        firstName: updatedUser.first_name || updatedUser.firstName,
-        lastName: updatedUser.last_name || updatedUser.lastName,
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
         phone: updatedUser.phone,
         dateOfBirth: updatedUser.date_of_birth
       }

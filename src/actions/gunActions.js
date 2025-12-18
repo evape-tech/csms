@@ -21,6 +21,7 @@ export async function createGunAction(formData) {
     const maxKw = formData.get('max_kw');
     const gunsMemo1 = formData.get('guns_memo1');
     const meterId = formData.get('meter_id');
+    const chargingStandardId = formData.get('charging_standard_id');
     const tariffIdsStr = formData.get('tariff_ids');
     const tariffDataStr = formData.get('tariff_data');
     
@@ -33,6 +34,7 @@ export async function createGunAction(formData) {
     if (maxKw) data.max_kw = Number(maxKw);
     if (gunsMemo1) data.guns_memo1 = gunsMemo1;
     if (meterId) data.meter_id = Number(meterId);
+    if (chargingStandardId) data.charging_standard_id = Number(chargingStandardId);
     
     // 預設狀態為 'Unavailable'
     data.guns_status = 'Unavailable';
@@ -53,10 +55,16 @@ export async function createGunAction(formData) {
       try {
         const tariffData = JSON.parse(tariffDataStr);
         if (Array.isArray(tariffData) && tariffData.length > 0) {
-          for (const item of tariffData) {
-            const tariffId = parseInt(item.tariffId);
-            const priority = parseInt(item.priority) || 1;
-            if (!isNaN(tariffId)) {
+            const seen = new Set();
+            for (const item of tariffData) {
+              const tariffId = parseInt(item.tariffId);
+              const priority = parseInt(item.priority) || 1;
+              if (isNaN(tariffId)) continue;
+              if (seen.has(tariffId)) {
+                console.warn(`[createGunAction] duplicate tariffId ${tariffId} in payload, skipping`);
+                continue;
+              }
+              seen.add(tariffId);
               await databaseService.createGunTariff({
                 gun_id: created.id,
                 tariff_id: tariffId,
@@ -65,7 +73,6 @@ export async function createGunAction(formData) {
               });
               console.log(`✅ [createGunAction] Created gun-tariff association: gun ${created.id} -> tariff ${tariffId} (priority: ${priority})`);
             }
-          }
         }
       } catch (error) {
         console.error('Failed to create gun-tariff associations:', error);
@@ -78,9 +85,12 @@ export async function createGunAction(formData) {
       try {
         const tariffIds = JSON.parse(tariffIdsStr);
         if (Array.isArray(tariffIds) && tariffIds.length > 0) {
-          for (let i = 0; i < tariffIds.length; i++) {
-            const tariffId = parseInt(tariffIds[i]);
-            if (!isNaN(tariffId)) {
+            const seen = new Set();
+            for (let i = 0; i < tariffIds.length; i++) {
+              const tariffId = parseInt(tariffIds[i]);
+              if (isNaN(tariffId)) continue;
+              if (seen.has(tariffId)) continue;
+              seen.add(tariffId);
               await databaseService.createGunTariff({
                 gun_id: created.id,
                 tariff_id: tariffId,
@@ -89,7 +99,6 @@ export async function createGunAction(formData) {
               });
               console.log(`✅ [createGunAction] Created gun-tariff association (legacy): gun ${created.id} -> tariff ${tariffId}`);
             }
-          }
         }
       } catch (error) {
         console.error('Failed to create gun-tariff associations (legacy):', error);
@@ -159,6 +168,7 @@ export async function updateGunAction(formData) {
     const maxKw = formData.get('max_kw');
     const gunsMemo1 = formData.get('guns_memo1');
     const gunsStatus = formData.get('guns_status');
+    const chargingStandardId = formData.get('charging_standard_id');
     const tariffDataStr = formData.get('tariff_data');
     
     if (cpid !== null) data.cpid = cpid;
@@ -168,6 +178,7 @@ export async function updateGunAction(formData) {
     if (maxKw !== null) data.max_kw = Number(maxKw);
     if (gunsMemo1 !== null) data.guns_memo1 = gunsMemo1;
     if (gunsStatus !== null) data.guns_status = gunsStatus;
+    if (chargingStandardId !== null) data.charging_standard_id = Number(chargingStandardId);
     
     if (Object.keys(data).length === 0 && !tariffDataStr) {
       return {
@@ -186,32 +197,33 @@ export async function updateGunAction(formData) {
     // 處理費率配置更新
     if (tariffDataStr) {
       try {
-        // 先獲取現有的 gun-tariff 關聯，然後逐一刪除
-        const existingGunTariffs = await databaseService.getGunTariffs(gunId);
-        if (existingGunTariffs && existingGunTariffs.length > 0) {
-          for (const gunTariff of existingGunTariffs) {
-            await databaseService.deleteGunTariff(gunId, gunTariff.tariff_id);
-          }
-          console.log(`✅ [updateGunAction] Deleted ${existingGunTariffs.length} existing gun-tariff associations for gun ${gunId}`);
-        }
-        
-        // 創建新的 gun-tariff 關聯
+        // 使用事務（transaction）先刪除再批量建立，並跳過重複項以避免 unique constraint 錯誤
         const tariffData = JSON.parse(tariffDataStr);
+        const entries = [];
+        const seen = new Set();
         if (Array.isArray(tariffData) && tariffData.length > 0) {
           for (const item of tariffData) {
             const tariffId = parseInt(item.tariffId);
             const priority = parseInt(item.priority) || 1;
-            if (!isNaN(tariffId)) {
-              await databaseService.createGunTariff({
-                gun_id: gunId,
-                tariff_id: tariffId,
-                priority: priority,
-                is_active: true
-              });
-              console.log(`✅ [updateGunAction] Created gun-tariff association: gun ${gunId} -> tariff ${tariffId} (priority: ${priority})`);
-            }
+            if (isNaN(tariffId)) continue;
+            if (seen.has(tariffId)) continue;
+            seen.add(tariffId);
+            entries.push({ gun_id: gunId, tariff_id: tariffId, priority: priority, is_active: true, createdAt: new Date(), updatedAt: new Date() });
           }
         }
+
+        await databaseService.withTransaction(async (prisma) => {
+          // 刪除舊的關聯
+          await prisma.gun_tariffs.deleteMany({ where: { gun_id: gunId } });
+
+          // 批量建立新的關聯（skipDuplicates 防止重複鍵錯誤）
+          if (entries.length > 0) {
+            await prisma.gun_tariffs.createMany({ data: entries, skipDuplicates: true });
+            console.log(`✅ [updateGunAction] Re-created ${entries.length} gun-tariff associations for gun ${gunId}`);
+          } else {
+            console.log(`✅ [updateGunAction] Cleared gun-tariff associations for gun ${gunId}`);
+          }
+        });
       } catch (error) {
         console.error('Failed to update gun-tariff associations:', error);
         return {

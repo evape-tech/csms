@@ -5,7 +5,7 @@
 ## API 服務架構
 
 ### 服務分離
-- **Next.js API** (Port 3000): 前端業務邏輯、用戶管理、認證、錢包等
+- **Next.js API** (Port 7500): 前端業務邏輯、用戶管理、認證、錢包等
 - **OCPP Server** (Port 8089): OCPP 協議處理、充電樁管理、EMS 能源管理
 
 ### API 版本管理
@@ -22,7 +22,7 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 
 ## API 路徑結構
 
-### 1. Next.js API 端點 (http://localhost:3000)
+### 1. Next.js API 端點 (http://localhost:7500)
 
 #### 🔐 認證與用戶管理
 - `POST /api/auth/login` - 使用者登入
@@ -109,17 +109,17 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 
 ## API 使用範例
 
-### Next.js API 範例 (http://localhost:3000)
+### Next.js API 範例 (http://localhost:7500)
 
 #### 用戶認證
 ```bash
 # 使用者登入
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:7500/api/auth/login \
      -H "Content-Type: application/json" \
      -d '{"email": "admin@example.com", "password": "password"}'
 
 # 創建會話 cookie
-curl -X POST http://localhost:3000/api/session \
+curl -X POST http://localhost:7500/api/session \
      -H "Content-Type: application/json" \
      -d '{"idToken": "firebase_id_token", "next": "/dashboard"}'
 ```
@@ -127,40 +127,40 @@ curl -X POST http://localhost:3000/api/session \
 #### 用戶管理
 ```bash
 # 獲取用戶列表
-curl http://localhost:3000/api/users
+curl http://localhost:7500/api/users
 
 # 新增用戶
-curl -X POST http://localhost:3000/api/users \
+curl -X POST http://localhost:7500/api/users \
      -H "Content-Type: application/json" \
      -d '{"name": "新用戶", "email": "user@example.com", "role": "user"}'
 
 # 更新用戶資訊
-curl -X PUT http://localhost:3000/api/users/1 \
+curl -X PUT http://localhost:7500/api/users/1 \
      -H "Content-Type: application/json" \
      -d '{"name": "更新用戶名", "email": "updated@example.com"}'
 
 # 刪除用戶
-curl -X DELETE http://localhost:3000/api/users/1
+curl -X DELETE http://localhost:7500/api/users/1
 
 # 獲取用戶錢包資訊
-curl http://localhost:3000/api/users/1/wallet
+curl http://localhost:7500/api/users/1/wallet
 
 # 獲取用戶交易記錄
-curl http://localhost:3000/api/users/1/transactions
+curl http://localhost:7500/api/users/1/transactions
 
 # 獲取用戶 RFID 卡片
-curl http://localhost:3000/api/users/1/cards
+curl http://localhost:7500/api/users/1/cards
 ```
 
 #### 錢包操作
 ```bash
 # 錢包儲值
-curl -X POST http://localhost:3000/api/wallet/topup \
+curl -X POST http://localhost:7500/api/wallet/topup \
      -H "Content-Type: application/json" \
      -d '{"userId": 1, "amount": 100, "paymentMethod": "credit_card"}'
 
 # 錢包扣款
-curl -X POST http://localhost:3000/api/wallet/deduct \
+curl -X POST http://localhost:7500/api/wallet/deduct \
      -H "Content-Type: application/json" \
      -d '{"userId": 1, "amount": 50, "reason": "charging_fee"}'
 ```
@@ -168,46 +168,46 @@ curl -X POST http://localhost:3000/api/wallet/deduct \
 #### 卡片管理
 ```bash
 # 獲取所有卡片資訊
-curl http://localhost:3000/api/cards/all
+curl http://localhost:7500/api/cards/all
 
 # 新增 RFID 卡片
-curl -X POST http://localhost:3000/api/cards \
+curl -X POST http://localhost:7500/api/cards \
      -H "Content-Type: application/json" \
      -H "X-API-Key: admin-secret-key" \
      -d '{"card_number": "1234567890", "user_id": "user-uuid", "card_type": "RFID"}'
 
 # 更新 RFID 卡片
-curl -X PUT http://localhost:3000/api/cards/1 \
+curl -X PUT http://localhost:7500/api/cards/1 \
      -H "Content-Type: application/json" \
      -d '{"status": "INACTIVE"}'
 
 # 刪除 RFID 卡片
-curl -X DELETE http://localhost:3000/api/cards/1
+curl -X DELETE http://localhost:7500/api/cards/1
 ```
 
 #### 計費與費率
 ```bash
 # 獲取計費渠道
-curl http://localhost:3000/api/billing/channels
+curl http://localhost:7500/api/billing/channels
 
 # 新增計費渠道
-curl -X POST http://localhost:3000/api/billing/channels \
+curl -X POST http://localhost:7500/api/billing/channels \
      -H "Content-Type: application/json" \
      -d '{"name": "信用卡支付", "code": "credit_card", "status": 1}'
 
 # 更新計費渠道
-curl -X PUT http://localhost:3000/api/billing/channels \
+curl -X PUT http://localhost:7500/api/billing/channels \
      -H "Content-Type: application/json" \
      -d '{"id": 1, "name": "更新後的支付方式", "status": 1}'
 
 # 刪除計費渠道
-curl -X DELETE "http://localhost:3000/api/billing/channels?id=1"
+curl -X DELETE "http://localhost:7500/api/billing/channels?id=1"
 
 # 獲取費率方案
-curl http://localhost:3000/api/tariffs
+curl http://localhost:7500/api/tariffs
 
 # 新增費率方案
-curl -X POST http://localhost:3000/api/tariffs \
+curl -X POST http://localhost:7500/api/tariffs \
      -H "Content-Type: multipart/form-data" \
      -F "name=標準費率" \
      -F "peak_rate=5.5" \
@@ -217,10 +217,10 @@ curl -X POST http://localhost:3000/api/tariffs \
 #### 充電站管理
 ```bash
 # 獲取所有充電站
-curl http://localhost:3000/api/stations
+curl http://localhost:7500/api/stations
 
 # 更新充電站設定
-curl -X PATCH http://localhost:3000/api/stations \
+curl -X PATCH http://localhost:7500/api/stations \
      -H "Content-Type: application/json" \
      -d '{"station_id": 1, "name": "更新充電站", "max_power_kw": 150}'
 ```
@@ -228,21 +228,21 @@ curl -X PATCH http://localhost:3000/api/stations \
 #### 系統管理
 ```bash
 # 獲取操作日誌
-curl "http://localhost:3000/api/operation-logs?page=1&limit=50"
+curl "http://localhost:7500/api/operation-logs?page=1&limit=50"
 
 # 獲取操作日誌 (含篩選)
-curl "http://localhost:3000/api/operation-logs?actionType=LOGIN&startDate=2025-09-01&endDate=2025-09-30"
+curl "http://localhost:7500/api/operation-logs?actionType=LOGIN&startDate=2025-09-01&endDate=2025-09-30"
 
 # 資料庫健康檢查
-curl http://localhost:3000/api/database
+curl http://localhost:7500/api/database
 
 # 測試資料庫連接
-curl -X POST http://localhost:3000/api/database \
+curl -X POST http://localhost:7500/api/database \
      -H "Content-Type: application/json" \
      -d '{"action": "test"}'
 
 # 切換資料庫
-curl -X POST http://localhost:3000/api/database \
+curl -X POST http://localhost:7500/api/database \
      -H "Content-Type: application/json" \
      -d '{"action": "switch", "provider": "mysql"}'
 ```
@@ -335,7 +335,7 @@ WebSocket 連接路徑保持不變：
 ## API 總結
 
 ### 服務端口分配
-- **Next.js 應用**: http://localhost:3000 (前端界面 + API)
+- **Next.js 應用**: http://localhost:7500 (前端界面 + API)
 - **OCPP Server**: http://localhost:8089 (OCPP協議 + REST API)
 - **WebSocket**: ws://localhost:8089/ocpp (OCPP WebSocket通訊)
 

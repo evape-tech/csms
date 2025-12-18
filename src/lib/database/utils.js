@@ -53,19 +53,13 @@ class DatabaseUtils {
    */
   static async testConnection(provider) {
     try {
-      const originalProvider = databaseManager.getProvider();
-      
-      if (provider && provider !== originalProvider) {
-        await databaseManager.switchDatabase(provider);
+      // 目前僅支援 MySQL
+      if (provider && provider !== 'mysql') {
+        console.warn(`testConnection: provider '${provider}' not supported. Only 'mysql' is supported.`);
+        return false;
       }
-      
+
       const isHealthy = await databaseManager.healthCheck();
-      
-      // 如果切換了provider，切換回原來的
-      if (provider && provider !== originalProvider && originalProvider) {
-        await databaseManager.switchDatabase(originalProvider);
-      }
-      
       return isHealthy;
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -77,27 +71,14 @@ class DatabaseUtils {
    * 測試所有可用的數據庫連接
    */
   static async testAllConnections() {
-    const results = {
-      mysql: false,
-      mssql: false
-    };
+    console.log('🔍 Testing MySQL connection...');
+    const results = { mysql: false };
 
-    console.log('🔍 Testing all database connections...');
-
-    // 測試 MySQL
     try {
       results.mysql = await this.testConnection('mysql');
       console.log(`MySQL: ${results.mysql ? '✅ Connected' : '❌ Failed'}`);
     } catch (error) {
       console.log('MySQL: ❌ Failed');
-    }
-
-    // 測試 MSSQL
-    try {
-      results.mssql = await this.testConnection('mssql');
-      console.log(`MSSQL: ${results.mssql ? '✅ Connected' : '❌ Failed'}`);
-    } catch (error) {
-      console.log('MSSQL: ❌ Failed');
     }
 
     return results;

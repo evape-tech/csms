@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '@/lib/database/utils.js';
+import { decimalToNumber } from '@/lib/numberUtils';
 import { getDatabaseClient } from '@/lib/database/adapter.js';
 import ExcelJS from 'exceljs';
 
@@ -13,11 +14,7 @@ const parseDate = (value: string | null, isEnd = false) => {
   return new Date(year, month - 1, day, isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0, isEnd ? 999 : 0);
 };
 
-const decimalToNumber = (value: any) => {
-  if (value === null || value === undefined) return 0;
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-};
+// use shared decimalToNumber helper
 
 const formatUserName = (user?: { first_name?: string | null; last_name?: string | null; email?: string | null; }) => {
   const firstName = user?.first_name?.trim();

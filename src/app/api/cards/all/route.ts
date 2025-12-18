@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '未授權的請求' }, { status: 401 });
     }
 
-    // 初始化並獲取數據庫客戶端
-    const db = await getDatabase(process.env.DB_PROVIDER);
+  // 初始化並獲取數據庫客戶端
+    const db = await getDatabase();
 
     // 獲取所有 RFID 卡片以及對應的用戶信息
     const rfidCards = await db.$queryRaw`

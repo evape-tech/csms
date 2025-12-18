@@ -6,7 +6,7 @@ services:
     container_name: csms-web
     restart: always
     ports:
-      - "3000:3000"
+      - "7500:7500"
     environment:
       - NODE_ENV=production
     env_file:

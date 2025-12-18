@@ -42,13 +42,12 @@ interface DatabaseStats {
 
 interface ConnectionTest {
   mysql: boolean;
-  mssql: boolean;
 }
 
 export default function DatabaseManagementPage() {
   const [currentProvider, setCurrentProvider] = useState<string>('');
   const [stats, setStats] = useState<DatabaseStats>({});
-  const [connectionTests, setConnectionTests] = useState<ConnectionTest>({ mysql: false, mssql: false });
+  const [connectionTests, setConnectionTests] = useState<ConnectionTest>({ mysql: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -276,18 +275,7 @@ export default function DatabaseManagementPage() {
                   />
                 </Box>
               </Grid>
-              <Grid size={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <DatabaseIcon />
-                  <Typography variant="subtitle1">MSSQL</Typography>
-                  <Chip 
-                  icon={connectionTests.mssql ? <CheckIcon /> : <ErrorIcon />}
-                  label={connectionTests.mssql ? 'Available' : 'Unavailable'} 
-                  color={connectionTests.mssql ? 'success' : 'error'}
-                  size="small"
-                />
-                </Box>
-              </Grid>
+              {/* MSSQL support removed */}
             </Grid>
 
             <Button 
@@ -311,34 +299,21 @@ export default function DatabaseManagementPage() {
             </Typography>
               
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Switch between MySQL and MSSQL databases at runtime. The application will automatically 
-              reconnect to the selected database.
+              The application uses MySQL as the single supported database. You can ensure the MySQL connection here.
             </Typography>
 
               <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-              <Button
-                variant={currentProvider === 'mysql' ? 'contained' : 'outlined'}
-                startIcon={<SwitchIcon />}
-                onClick={() => switchDatabase('mysql')}
-                disabled={loading || currentProvider === 'mysql' || !connectionTests.mysql}
-                fullWidth
-                sx={{ height: 60 }}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Switch to MySQL'}
-              </Button>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-              <Button
-                variant={currentProvider === 'mssql' ? 'contained' : 'outlined'}
-                startIcon={<SwitchIcon />}
-                onClick={() => switchDatabase('mssql')}
-                disabled={loading || currentProvider === 'mssql' || !connectionTests.mssql}
-                fullWidth
-                sx={{ height: 60 }}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Switch to MSSQL'}
-              </Button>
+              <Grid>
+                <Button
+                  variant={currentProvider === 'mysql' ? 'contained' : 'outlined'}
+                  startIcon={<SwitchIcon />}
+                  onClick={() => switchDatabase('mysql')}
+                  disabled={loading || currentProvider === 'mysql' || !connectionTests.mysql}
+                  fullWidth
+                  sx={{ height: 60 }}
+                >
+                  {loading ? <CircularProgress size={24} /> : 'Ensure MySQL Connection'}
+                </Button>
               </Grid>
             </Grid>
 

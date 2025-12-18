@@ -95,19 +95,16 @@ export async function POST(request: NextRequest) {
 
     console.log('🚀 開始建立支付訂單:', { userId: currentUser.userId, amount, paymentMethod });
 
-    // 根據支付方式分別處理
+    const paymentProvider = process.env.PAYMENT_PROVIDER || 'tappay';
     let result;
-
     switch (paymentMethod) {
-      case 'credit_card':
-        // 信用卡支付（TapPay）- 同步模式
+      case 'tappay_credit':
         if (!metadata?.prime) {
           return NextResponse.json({
             success: false,
             error: '信用卡支付缺少 prime token'
           }, { status: 400 });
         }
-
         result = await PaymentRepository.createCreditCardOrder({
           userId: currentUser.userId,
           amount,
@@ -116,10 +113,17 @@ export async function POST(request: NextRequest) {
           metadata
         });
         break;
-
-      case 'line_pay':
-        // Line Pay - 返回支付 URL
+      case 'tappay_linepay':
         result = await PaymentRepository.createLinePayOrder({
+            userId: currentUser.userId,
+            amount,
+            description,
+            transactionId,
+            metadata
+          });
+        break;
+      case 'direct_linepay':
+        result = await PaymentRepository.createDirectLinePayOrder({
           userId: currentUser.userId,
           amount,
           description,
@@ -127,10 +131,8 @@ export async function POST(request: NextRequest) {
           metadata
         });
         break;
-
-      case 'easy_wallet':
-          // EasyWallet (優游付) - 返回支付 URL
-          result = await PaymentRepository.createEasyWalletOrder({
+      case 'tappay_easywallet':
+        result = await PaymentRepository.createEasyWalletOrder({
           userId: currentUser.userId,
           amount,
           description,
@@ -138,7 +140,6 @@ export async function POST(request: NextRequest) {
           metadata
         });
         break;
-
       default:
         return NextResponse.json({
           success: false,

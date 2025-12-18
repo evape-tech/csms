@@ -182,8 +182,8 @@ export async function POST(request: NextRequest) {
         phone: user.phone,
         email: user.email,
         role: user.role || 'user',
-        firstName: user.first_name || user.firstName || null,
-        lastName: user.last_name || user.lastName || null,
+        firstName: user.first_name || null,
+        lastName: user.last_name || null,
         provider: provider
       },
       process.env.JWT_SECRET || 'your-secret-key',
@@ -222,8 +222,8 @@ export async function POST(request: NextRequest) {
         phone: user.phone,
         email: user.email,
         role: user.role || 'user',
-        firstName: user.first_name || user.firstName || null,
-        lastName: user.last_name || user.lastName || null,
+        firstName: user.first_name || null,
+        lastName: user.last_name || null,
         provider: provider
       }
     });

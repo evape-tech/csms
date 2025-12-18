@@ -8,17 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model cp_logs {
-  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
-  cpid      String?   @db.VarChar(255)
-  cpsn      String?   @db.VarChar(255)
-  log       String?   @db.LongText
-  inout     String?   @db.VarChar(45)
-  time      DateTime? @db.DateTime(0)
-  createdAt DateTime? @db.DateTime(0)
-  updatedAt DateTime? @db.DateTime(0)
-}
-
 model guns {
   id                   Int                 @id @default(autoincrement())
   connector            String?             @db.VarChar(45)
@@ -285,27 +274,28 @@ model user_wallets {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model wallet_transactions {
-  id                      BigInt                               @id @default(autoincrement()) @db.UnsignedBigInt
-  user_id                 String                               @db.VarChar(36)
-  wallet_id               Int                                  @db.UnsignedInt
+  id                      BigInt                                @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id                 String                                @db.VarChar(36)
+  wallet_id               Int                                   @db.UnsignedInt
   transaction_type        wallet_transactions_transaction_type
-  amount                  Decimal                              @db.Decimal(10, 2)
-  balance_before          Decimal                              @db.Decimal(10, 2)
-  balance_after           Decimal                              @db.Decimal(10, 2)
-  billing_record_id       BigInt?                              @db.UnsignedBigInt
-  charging_transaction_id String?                              @db.VarChar(50)
-  payment_method          String?                              @db.VarChar(50)
-  payment_reference       String?                              @db.VarChar(100)
-  description             String?                              @db.VarChar(255)
-  rec_trade_id            String?                              @db.VarChar(100)
-  status                  wallet_transactions_status           @default(PENDING)
-  createdAt               DateTime                             @default(now()) @db.DateTime(0)
-  updatedAt               DateTime                             @default(now()) @db.DateTime(0)
-  billing_records         billing_records?                     @relation(fields: [billing_record_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_billing")
-  charging_transactions   charging_transactions?               @relation(fields: [charging_transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_charging_transaction")
-  billing_channels        billing_channels?                    @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_payment_method")
-  users                   users                                @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_user_uuid")
-  user_wallets            user_wallets                         @relation(fields: [wallet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_wallet")
+  amount                  Decimal                               @db.Decimal(10, 2)
+  balance_before          Decimal                               @db.Decimal(10, 2)
+  balance_after           Decimal                               @db.Decimal(10, 2)
+  billing_record_id       BigInt?                               @db.UnsignedBigInt
+  charging_transaction_id String?                               @db.VarChar(50)
+  payment_method          String?                               @db.VarChar(50)
+  payment_reference       String?                               @db.VarChar(100)
+  payment_provider        wallet_transactions_payment_provider?
+  description             String?                               @db.VarChar(255)
+  rec_trade_id            String?                               @db.VarChar(100)
+  status                  wallet_transactions_status            @default(PENDING)
+  createdAt               DateTime                              @default(now()) @db.DateTime(0)
+  updatedAt               DateTime                              @default(now()) @db.DateTime(0)
+  billing_records         billing_records?                      @relation(fields: [billing_record_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_billing")
+  charging_transactions   charging_transactions?                @relation(fields: [charging_transaction_id], references: [transaction_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_charging_transaction")
+  billing_channels        billing_channels?                     @relation(fields: [payment_method], references: [code], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_payment_method")
+  users                   users                                 @relation(fields: [user_id], references: [uuid], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_user_uuid")
+  user_wallets            user_wallets                          @relation(fields: [wallet_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_wallet_transactions_wallet")
 
   @@index([payment_method], map: "fk_wallet_transactions_payment_method")
   @@index([billing_record_id], map: "idx_billing_record_id")
@@ -315,28 +305,6 @@ model wallet_transactions {
   @@index([transaction_type], map: "idx_transaction_type")
   @@index([user_id], map: "idx_user_id")
   @@index([wallet_id], map: "idx_wallet_id")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model operation_logs {
-  id          BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
-  user_id     String?                    @db.VarChar(36)
-  user_email  String?                    @db.VarChar(255)
-  user_name   String?                    @db.VarChar(100)
-  action_type operation_logs_action_type
-  entity_type operation_logs_entity_type
-  entity_id   String?                    @db.VarChar(100)
-  entity_name String?                    @db.VarChar(255)
-  description String?                    @db.VarChar(500)
-  status      operation_logs_status      @default(SUCCESS)
-  createdAt   DateTime                   @default(now()) @db.DateTime(0)
-  users       users?                     @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "fk_operation_logs_user_uuid")
-
-  @@index([action_type], map: "idx_action_type")
-  @@index([createdAt], map: "idx_created_at")
-  @@index([entity_type], map: "idx_entity_type")
-  @@index([user_email], map: "idx_user_email")
-  @@index([user_id], map: "idx_user_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -356,6 +324,34 @@ model gun_tariffs {
   @@index([is_active], map: "IX_gun_tariffs_is_active")
   @@index([priority], map: "IX_gun_tariffs_priority")
   @@index([tariff_id], map: "IX_gun_tariffs_tariff_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model charging_standards {
+  id            Int                              @id @default(autoincrement())
+  name          String                           @db.VarChar(100)
+  code          String                           @unique(map: "code") @db.VarChar(20)
+  charging_type charging_standards_charging_type
+  description   String?                          @db.VarChar(255)
+  is_active     Boolean                          @default(true)
+  createdAt     DateTime                         @default(now()) @db.DateTime(0)
+  updatedAt     DateTime                         @default(now()) @db.DateTime(0)
+  guns          guns[]
+
+  @@index([charging_type], map: "idx_charging_type")
+  @@index([is_active], map: "idx_is_active")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cp_logs {
+  id        BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  cpid      String?   @db.VarChar(255)
+  cpsn      String?   @db.VarChar(255)
+  log       String?   @db.LongText
+  inout     String?   @db.VarChar(45)
+  time      DateTime? @db.DateTime(0)
+  createdAt DateTime? @db.DateTime(0)
+  updatedAt DateTime? @db.DateTime(0)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -427,19 +423,58 @@ model maintenance_records {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model charging_standards {
-  id            Int                              @id @default(autoincrement())
-  name          String                           @db.VarChar(100)
-  code          String                           @unique(map: "code") @db.VarChar(20)
-  charging_type charging_standards_charging_type
-  description   String?                          @db.VarChar(255)
-  is_active     Boolean                          @default(true)
-  createdAt     DateTime                         @default(now()) @db.DateTime(0)
-  updatedAt     DateTime                         @default(now()) @db.DateTime(0)
-  guns          guns[]
+model operation_logs {
+  id          BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id     String?                    @db.VarChar(36)
+  user_email  String?                    @db.VarChar(255)
+  user_name   String?                    @db.VarChar(100)
+  action_type operation_logs_action_type
+  entity_type operation_logs_entity_type
+  entity_id   String?                    @db.VarChar(100)
+  entity_name String?                    @db.VarChar(255)
+  description String?                    @db.VarChar(500)
+  status      operation_logs_status      @default(SUCCESS)
+  createdAt   DateTime                   @default(now()) @db.DateTime(0)
+  users       users?                     @relation(fields: [user_id], references: [uuid], onUpdate: NoAction, map: "fk_operation_logs_user_uuid")
 
-  @@index([charging_type], map: "idx_charging_type")
-  @@index([is_active], map: "idx_is_active")
+  @@index([action_type], map: "idx_action_type")
+  @@index([createdAt], map: "idx_created_at")
+  @@index([entity_type], map: "idx_entity_type")
+  @@index([user_email], map: "idx_user_email")
+  @@index([user_id], map: "idx_user_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_invoices {
+  id                  BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  invoice_number      String                       @unique(map: "invoice_number") @db.VarChar(20)
+  invoice_provider    String                       @default("TAPPAY") @db.VarChar(50)
+  provider_invoice_id String?                      @db.VarChar(100)
+  user_id             String                       @db.VarChar(36)
+  invoice_date        DateTime                     @db.Date
+  invoice_time        DateTime?                    @db.Time(0)
+  subtotal            Decimal                      @db.Decimal(10, 2)
+  tax_rate            Decimal?                     @default(0.00) @db.Decimal(5, 2)
+  tax_amount          Decimal?                     @default(0.00) @db.Decimal(10, 2)
+  total_amount        Decimal                      @db.Decimal(10, 2)
+  currency            String                       @default("TWD") @db.VarChar(3)
+  status              user_invoices_status         @default(DRAFT)
+  payment_status      user_invoices_payment_status @default(UNPAID)
+  payment_method      String?                      @db.VarChar(50)
+  payment_reference   String?                      @db.VarChar(100)
+  sent_at             DateTime?                    @db.DateTime(0)
+  paid_at             DateTime?                    @db.DateTime(0)
+  description         String?                      @db.Text
+  error_message       String?                      @db.VarChar(255)
+  createdAt           DateTime                     @default(now()) @db.DateTime(0)
+  updatedAt           DateTime                     @default(now()) @db.DateTime(0)
+  users               users                        @relation(fields: [user_id], references: [uuid], map: "fk_user_invoices_user")
+
+  @@index([invoice_date], map: "idx_invoice_date")
+  @@index([invoice_provider], map: "idx_invoice_provider")
+  @@index([payment_status], map: "idx_payment_status")
+  @@index([status], map: "idx_status")
+  @@index([user_id], map: "idx_user_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -479,39 +514,6 @@ model vehicle_brands {
   user_vehicles user_vehicles[]
 
   @@index([is_active], map: "idx_is_active")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_invoices {
-  id                  BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
-  invoice_number      String                       @unique(map: "invoice_number") @db.VarChar(20)
-  invoice_provider    String                       @default("TAPPAY") @db.VarChar(50)
-  provider_invoice_id String?                      @db.VarChar(100)
-  user_id             String                       @db.VarChar(36)
-  invoice_date        DateTime                     @db.Date
-  invoice_time        DateTime?                    @db.Time(0)
-  subtotal            Decimal                      @db.Decimal(10, 2)
-  tax_rate            Decimal?                     @default(0.00) @db.Decimal(5, 2)
-  tax_amount          Decimal?                     @default(0.00) @db.Decimal(10, 2)
-  total_amount        Decimal                      @db.Decimal(10, 2)
-  currency            String                       @default("TWD") @db.VarChar(3)
-  status              user_invoices_status         @default(DRAFT)
-  payment_status      user_invoices_payment_status @default(UNPAID)
-  payment_method      String?                      @db.VarChar(50)
-  payment_reference   String?                      @db.VarChar(100)
-  sent_at             DateTime?                    @db.DateTime(0)
-  paid_at             DateTime?                    @db.DateTime(0)
-  description         String?                      @db.Text
-  error_message       String?                      @db.VarChar(255)
-  createdAt           DateTime                     @default(now()) @db.DateTime(0)
-  updatedAt           DateTime                     @default(now()) @db.DateTime(0)
-  users               users                        @relation(fields: [user_id], references: [uuid], map: "fk_user_invoices_user")
-
-  @@index([invoice_date], map: "idx_invoice_date")
-  @@index([invoice_provider], map: "idx_invoice_provider")
-  @@index([payment_status], map: "idx_payment_status")
-  @@index([status], map: "idx_status")
-  @@index([user_id], map: "idx_user_id")
 }
 
 enum guns_acdc {
@@ -565,38 +567,6 @@ enum users_account_status {
   PENDING
 }
 
-enum operation_logs_action_type {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  EXPORT
-  IMPORT
-  APPROVE
-  REJECT
-  RESET
-}
-
-enum operation_logs_entity_type {
-  USER
-  STATION
-  METER
-  GUN
-  TARIFF
-  TRANSACTION
-  BILLING
-  WALLET
-  RFID_CARD
-  PAYMENT_CHANNEL
-  SYSTEM_CONFIG
-}
-
-enum operation_logs_status {
-  SUCCESS
-  FAILED
-}
-
 enum tariffs_season_type {
   SUMMER
   NON_SUMMER
@@ -613,6 +583,25 @@ enum tariffs_tariff_type {
   CUSTOM
 }
 
+enum charging_standards_charging_type {
+  AC
+  DC
+}
+
+enum wallet_transactions_status {
+  PENDING
+  UNPAID
+  PAID
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum wallet_transactions_payment_provider {
+  TAPPAY
+  LINEPAY
+}
+
 enum maintenance_records_maintenance_type {
   ROUTINE
   REPAIR
@@ -620,6 +609,19 @@ enum maintenance_records_maintenance_type {
   INSPECTION
   CLEANING
   OTHER
+}
+
+enum operation_logs_action_type {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  IMPORT
+  APPROVE
+  REJECT
+  RESET
 }
 
 enum fault_reports_fault_type {
@@ -638,6 +640,20 @@ enum maintenance_records_priority {
   URGENT
 }
 
+enum operation_logs_entity_type {
+  USER
+  STATION
+  METER
+  GUN
+  TARIFF
+  TRANSACTION
+  BILLING
+  WALLET
+  RFID_CARD
+  PAYMENT_CHANNEL
+  SYSTEM_CONFIG
+}
+
 enum fault_reports_severity {
   LOW
   MEDIUM
@@ -653,17 +669,9 @@ enum fault_reports_status {
   CLOSED
 }
 
-enum maintenance_records_status {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
+enum operation_logs_status {
+  SUCCESS
   FAILED
-}
-
-enum charging_standards_charging_type {
-  AC
-  DC
 }
 
 enum user_vehicles_status {
@@ -688,11 +696,10 @@ enum user_invoices_payment_status {
   PAID
 }
 
-enum wallet_transactions_status {
-  PENDING
-  UNPAID
-  PAID
+enum maintenance_records_status {
+  SCHEDULED
+  IN_PROGRESS
   COMPLETED
-  FAILED
   CANCELLED
+  FAILED
 }

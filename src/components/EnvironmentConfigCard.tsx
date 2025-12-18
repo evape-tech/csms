@@ -22,6 +22,10 @@ export function EnvironmentConfigCard({
   // client side toggle
   const [visible, setVisible] = useState(true);
 
+  // 只在開發環境顯示此組件（build-time NODE_ENV 或傳入的 environment）
+  const isDev = (process.env.NODE_ENV === 'development') || environment === 'development';
+  if (!isDev) return null;
+
    const envColor = environment === 'production' ? 'error' : 'warning';
 
   return (

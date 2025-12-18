@@ -24,14 +24,14 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'switch':
-        if (!provider || !['mysql', 'mssql'].includes(provider)) {
+        if (!provider || provider !== 'mysql') {
           return NextResponse.json(
-            { error: 'Invalid provider. Must be mysql or mssql' },
+            { error: "Invalid provider. Only 'mysql' is supported" },
             { status: 400 }
           );
         }
 
-        const switched = await DatabaseUtils.switchDatabase(provider);
+        const switched = await DatabaseUtils.switchDatabase('mysql');
         if (switched) {
           return NextResponse.json({
             success: true,
@@ -47,11 +47,11 @@ export async function POST(request: NextRequest) {
 
       case 'test':
         if (provider) {
-          const result = await DatabaseUtils.testConnection(provider);
-          return NextResponse.json({
-            provider,
-            connected: result
-          });
+          if (provider !== 'mysql') {
+            return NextResponse.json({ error: "Only 'mysql' is supported" }, { status: 400 });
+          }
+          const result = await DatabaseUtils.testConnection('mysql');
+          return NextResponse.json({ provider: 'mysql', connected: result });
         } else {
           const results = await DatabaseUtils.testAllConnections();
           return NextResponse.json(results);

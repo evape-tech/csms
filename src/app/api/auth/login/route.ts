@@ -111,8 +111,8 @@ export async function POST(request: NextRequest) {
         userId: user.uuid, // 使用 UUID 而不是數字 ID，因為外鍵約束需要 UUID
         email: user.email, 
         role: user.role,
-        firstName: user.first_name || user.firstName || null,
-        lastName: user.last_name || user.lastName || null
+        firstName: user.first_name || null,
+        lastName: user.last_name || null
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '30d' } // 30 天
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
         id: user.uuid, // 使用 UUID 保持一致性
         email: user.email,
         role: user.role,
-        firstName: user.first_name || user.firstName || null,
-        lastName: user.last_name || user.lastName || null
+        firstName: user.first_name || null,
+        lastName: user.last_name || null
       }
     });
 
@@ -144,9 +144,10 @@ export async function POST(request: NextRequest) {
 
     // 記錄登入成功日誌
     try {
+      const emailForLog: string = (user.email ?? user.uuid ?? 'unknown');
       await OperationLogger.logAuthOperation(
         'LOGIN',
-        user.email,
+        emailForLog,
         true,
         `管理員登入成功 (IP: ${request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'})`
       );
