@@ -3,6 +3,7 @@ import { PaymentRepository } from '@/servers/repositories/paymentRepository';
 import { databaseService } from '@/lib/database/service';
 import { linePayService } from '@/servers/services/linePayService';
 import DatabaseUtils from '@/lib/database/utils';
+import { decimalToNumber } from '@/lib/numberUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,10 +60,8 @@ export async function GET(request: NextRequest) {
       return redirectToResult('error', '訂單狀態異常');
     }
 
-    // 取得金額
-    const amount = typeof paymentOrder.amount === 'number' 
-      ? paymentOrder.amount 
-      : parseFloat(paymentOrder.amount);
+    // 取得金額（支援 Prisma Decimal）
+    const amount = decimalToNumber(paymentOrder.amount);
 
     console.log('🔄 [LINE Pay 直連確認] 開始確認支付:', {
       orderId,

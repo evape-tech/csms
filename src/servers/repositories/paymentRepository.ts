@@ -60,6 +60,8 @@ interface PendingOrder {
 // 不再需要待定訂單機制（使用同步模式）
 // const pendingOrders: Map<string, PendingOrder> = new Map();
 
+import { decimalToNumber } from '@/lib/numberUtils';
+
 export class PaymentRepository {
   /**
    * 建立信用卡支付訂單（TapPay）- 同步模式
@@ -450,7 +452,7 @@ export class PaymentRepository {
         };
       }
 
-      // 2. 更新訂單狀態為 PAID（注意：不開立發票，直接標記為 COMPLETED）
+      // 2. 更新訂單狀態為 PAID 已付款
       const updateResult = await PaymentRepository.updatePaymentOrderFromCallback({
         orderId,
         callbackData: {
@@ -458,7 +460,7 @@ export class PaymentRepository {
           rec_trade_id: transactionId,
           order_number: orderId
         },
-        status: 'COMPLETED' // 直接標記為完成，不需要後續發票處理
+        status: 'PAID'
       });
 
       if (!updateResult.success) {
@@ -605,10 +607,10 @@ export class PaymentRepository {
 
       return {
         success: true,
-        orderId: order.payment_reference,
+        orderId: order.payment_reference ?? undefined,
         status: order.status,
-        amount: parseFloat(order.amount),
-        paymentMethod: order.payment_method,
+        amount: decimalToNumber(order.amount),
+        paymentMethod: order.payment_method ?? undefined,
         paidAt: order.updatedAt
       };
 

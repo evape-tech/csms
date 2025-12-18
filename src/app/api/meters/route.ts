@@ -4,7 +4,7 @@ import { getDatabase, getDatabaseClient } from '@/lib/database/adapter';
 
 export const GET = async (request: NextRequest) => {
   try {
-    await getDatabase(process.env.DB_PROVIDER);
+    await getDatabase();
     const client = getDatabaseClient() as any; // 避免跨資料庫 PrismaClient union 造成的 overload 衝突
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';

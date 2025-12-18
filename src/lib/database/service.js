@@ -107,6 +107,17 @@ class DatabaseService {
     });
   }
 
+  /**
+   * 獲取充電標準列表（可選篩選）
+   */
+  async getChargingStandards(filter = {}) {
+    const client = getDatabaseClient();
+    return await client.charging_standards.findMany({
+      where: filter,
+      orderBy: { name: 'asc' }
+    });
+  }
+
   async updateGun(id, data) {
     const client = getDatabaseClient();
     return await client.guns.update({ 
