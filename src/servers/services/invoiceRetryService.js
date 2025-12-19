@@ -1,6 +1,9 @@
 const { logger } = require('../utils/index.js');
 const { InvoiceRepository } = require('../repositories/invoiceRepository.js');
 
+// 只在 PAYMENT_PROVIDER=tappay 時啟動發票重試流程
+const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || '').toLowerCase();
+
 // Dynamic import helper for ESM modules
 let dbServiceInstance;
 async function getDatabaseService() {
@@ -21,6 +24,11 @@ class InvoiceRetryService {
       maxRetryCount: 5,              // 最大重試次數
       batchSize: 10                  // 每次批次處理數量
     };
+    // 初始化時判斷是否啟用（僅在 PAYMENT_PROVIDER=tappay 時啟用）
+    this.enabled = (PAYMENT_PROVIDER === 'tappay');
+    if (!this.enabled) {
+      logger.info(`[發票重試監控] 服務已在初始化時停用 (PAYMENT_PROVIDER='${PAYMENT_PROVIDER}'), 僅在 'tappay' 時啟用`);
+    }
   }
 
   /**
@@ -30,6 +38,11 @@ class InvoiceRetryService {
   start(options = {}) {
     if (this.isRunning) {
       logger.warn('[發票重試監控] 服務已在運行中');
+      return;
+    }
+    // 根據初始化時的 enabled 判斷是否啟動
+    if (!this.enabled) {
+      logger.info(`[發票重試監控] 服務未啟動 - PAYMENT_PROVIDER='${PAYMENT_PROVIDER}' (僅在 'tappay' 時啟動)`);
       return;
     }
 

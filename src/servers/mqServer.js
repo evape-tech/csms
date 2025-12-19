@@ -1,8 +1,19 @@
 const amqp = require('amqplib');
 const path = require('path');
 
-// 根據 NODE_ENV 決定使用哪個 .env 文件
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+// 根據 NODE_ENV 決定使用哪個 .env 文件（使用 switch，支援 production / dev / 其他）
+let envFile;
+switch (process.env.NODE_ENV) {
+  case 'production':
+    envFile = '.env.production';
+    break;
+  case 'development':
+    envFile = '.env.development';
+    break;
+  default:
+    envFile = '.env';
+}
+
 require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
 
 const { MQ_ENABLED, MQ_CONFIG, getMqUrl } = require('./config/mqConfig');
