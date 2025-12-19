@@ -1094,7 +1094,7 @@ class DatabaseService {
     });
   }
 
-  async createUserWallet(userId, initialBalance = 5000) {
+  async createUserWallet(userId, initialBalance = 0) {
     const client = getDatabaseClient();
     return await client.user_wallets.create({
       data: {
