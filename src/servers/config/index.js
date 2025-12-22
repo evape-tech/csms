@@ -2,10 +2,7 @@
  * 配置模块导出
  */
 
-const mqConfig = require('./mqConfig');
-const apiConfig = require('./apiConfig');
+import * as mqConfig from './mqConfig.js';
+import * as apiConfig from './apiConfig.js';
 
-module.exports = {
-  mqConfig,
-  apiConfig
-};
+export { mqConfig, apiConfig };

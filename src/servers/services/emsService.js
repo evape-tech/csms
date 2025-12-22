@@ -4,16 +4,16 @@
  * 
  * 从旧版 ocppController.js 迁移而来
  */
-const mqService = require('./mqService');
-const { EXCHANGES } = require('../mqServer');
-const { logger } = require('../utils');
-const { chargePointRepository } = require('../repositories');
-const connectionService = require('./connectionService');
-const ocppMessageService = require('./ocppMessageService');
-const { databaseService } = require('../../lib/database/service.js');
+import * as mqService from './mqService.js';
+import { EXCHANGES } from '../mqServer.js';
+import { logger } from '../utils/index.js';
+import { chargePointRepository } from '../repositories/index.js';
+import * as connectionService from './connectionService.js';
+import * as ocppMessageService from './ocppMessageService.js';
+import { databaseService } from '../../lib/database/service.js';
 
 // 引入EMS分配算法
-const { calculateEmsAllocation } = require('../../lib');
+import { calculateEmsAllocation } from '../../lib/index.js';
 
 // 电表和充电枪相关辅助函数
 // let databaseService; // 移除懶加載，改為直接導入
@@ -1307,7 +1307,7 @@ async function configureStationPowerDistribution(cpids, options = {}) {
   }
 }
 
-module.exports = {
+export {
   EVENT_TYPES,
   PROFILE_UPDATE_DEBOUNCE_MS,
   PROFILE_MIN_INTERVAL_MS,

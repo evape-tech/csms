@@ -283,12 +283,4 @@ function calculateRateByType(transaction, tariff) {
 }
 
 // 匯出所有函數
-module.exports = {
-  calculateFixedRate,
-  calculateTimeOfUse,
-  calculateProgressive,
-  calculateDiscount,
-  calculateCustomRate,
-  calculateRateByType,
-  safeParseFloat
-};
+export { calculateFixedRate, calculateTimeOfUse, calculateProgressive, calculateDiscount, calculateCustomRate, calculateRateByType, safeParseFloat };

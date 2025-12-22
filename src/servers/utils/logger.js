@@ -115,10 +115,5 @@ function debug(message, details = null) {
   }
 }
 
-// 对外导出接口
-module.exports = {
-  error,
-  warn,
-  info,
-  debug
-};
+// 对外导出接口 (ESM)
+export { error, warn, info, debug };

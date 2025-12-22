@@ -2,15 +2,15 @@
  * 服务模块导出
  */
 
-const connectionService = require('./connectionService');
-const ocppMessageService = require('./ocppMessageService');
-const emsService = require('./emsService');
-const notificationService = require('./notificationService');
-const systemStatusService = require('./systemStatusService');
-const { orphanTransactionService } = require('./orphanTransactionService');
-const { invoiceRetryService } = require('./invoiceRetryService');
+import * as connectionService from './connectionService.js';
+import * as ocppMessageService from './ocppMessageService.js';
+import * as emsService from './emsService.js';
+import * as notificationService from './notificationService.js';
+import * as systemStatusService from './systemStatusService.js';
+import { orphanTransactionService } from './orphanTransactionService.js';
+import { invoiceRetryService } from './invoiceRetryService.js';
 
-module.exports = {
+export {
   connectionService,
   ocppMessageService,
   emsService,

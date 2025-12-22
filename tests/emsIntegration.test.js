@@ -3,7 +3,7 @@
  * 此測試模擬真實的 OCPP 控制器環境並驗證 EMS 分配邏輯
  */
 
-const { calculateEmsAllocation } = require('../src/lib/emsAllocator');
+import { calculateEmsAllocation } from '../src/lib/emsAllocator.js';
 
 // 模擬 databaseService.getGuns 函式
 const mockDatabaseService = {

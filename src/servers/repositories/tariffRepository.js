@@ -12,7 +12,7 @@
  * 遵循单一职责原则，与 billingService 职责分离
  */
 
-const { databaseService } = require('../../lib/database/service.js');
+import { databaseService } from '../../lib/database/service.js';
 
 /**
  * 费率管理仓库类
@@ -358,4 +358,4 @@ class TariffRepository {
 
 // 导出单例实例
 const tariffRepository = new TariffRepository();
-module.exports = tariffRepository;
+export default tariffRepository;

@@ -2,7 +2,7 @@
  * OCPP事件发布者
  * 负责发布OCPP相关事件到消息队列
  */
-const chargeEventService = require('../services/chargeEventService');
+import * as chargeEventService from '../services/chargeEventService.js';
 
 // 重新导出事件类型，方便使用
 const EVENT_TYPES = chargeEventService.EVENT_TYPES;
@@ -93,11 +93,4 @@ async function publishConnectionState(data) {
   return await chargeEventService.publishConnectionState(eventData);
 }
 
-module.exports = {
-  EVENT_TYPES,
-  publishChargingStarted,
-  publishChargingStopped,
-  publishStatusChanged,
-  publishMeterValues,
-  publishConnectionState
-};
+export { EVENT_TYPES, publishChargingStarted, publishChargingStopped, publishStatusChanged, publishMeterValues, publishConnectionState };

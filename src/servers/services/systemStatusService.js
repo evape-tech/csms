@@ -3,9 +3,9 @@
  * 管理和报告系统各组件状态
  */
 
-const mqServer = require('../mqServer');
-const { MQ_ENABLED } = require('../config/mqConfig');
-const notificationService = require('./notificationService');
+import * as mqServer from '../mqServer.js';
+import { MQ_ENABLED } from '../config/mqConfig.js';
+import * as notificationService from './notificationService.js';
 
 // 系统组件状态
 const systemStatus = {
@@ -108,7 +108,7 @@ async function sendStatusReport(reason = 'periodic') {
   }
 }
 
-module.exports = {
+export {
   updateServerStatus,
   updateMqStatus,
   updateConnectionCount,

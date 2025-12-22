@@ -2,8 +2,8 @@
  * 充电事件处理服务
  * 处理所有与充电相关的事件
  */
-const mqService = require('./mqService');
-const { EXCHANGES } = require('../mqServer');
+import * as mqService from './mqService.js';
+import { EXCHANGES } from '../mqServer.js';
 
 // 定义事件类型
 const EVENT_TYPES = {
@@ -91,13 +91,4 @@ async function handleChargingStopped(data) {
   });
 }
 
-module.exports = {
-  EVENT_TYPES,
-  publishChargingStarted,
-  publishChargingStopped,
-  publishStatusChanged,
-  publishMeterValues,
-  publishConnectionState,
-  handleChargingStarted,
-  handleChargingStopped
-};
+export { EVENT_TYPES, publishChargingStarted, publishChargingStopped, publishStatusChanged, publishMeterValues, publishConnectionState, handleChargingStarted, handleChargingStopped };

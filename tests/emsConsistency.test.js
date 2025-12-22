@@ -3,7 +3,7 @@
  * 這個測試確保提取的純函式與原始 OCPP 控制器中的邏輯產生相同結果
  */
 
-const { calculateEmsAllocation } = require('../src/lib/emsAllocator');
+import { calculateEmsAllocation } from '../src/lib/emsAllocator.js';
 
 // 模擬 ocppController 中的 EMS 邏輯 (簡化版本用於比較)
 function simulateOcppControllerEms(siteSetting, guns, onlineCpids = []) {

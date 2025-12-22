@@ -40,7 +40,7 @@
 
 ```javascript
 {
-  checkIntervalMinutes: 30,    // 檢查間隔：30分鐘
+   checkIntervalMinutes: 360,    // 檢查間隔：360分鐘 (6 小時)
   retryAfterMinutes: 10,       // 創建後多久才重試：10分鐘
   maxRetryCount: 5,            // 最大重試次數（預留功能）
   batchSize: 10                // 每次批次處理數量：10張
@@ -54,13 +54,8 @@
 服務會在 OCPP 服務器啟動時自動啟動，無需額外配置：
 
 ```javascript
-// 在 ocppServer.js 中自動啟動
-invoiceRetryService.start({
-  checkIntervalMinutes: 30,
-  retryAfterMinutes: 10,
-  maxRetryCount: 5,
-  batchSize: 10
-});
+// 在 ocppServer.js 中自動啟動（使用服務內部預設）
+invoiceRetryService.start();
 ```
 
 ### 手動觸發檢查
@@ -94,12 +89,12 @@ console.log(status);
 // {
 //   isRunning: true,
 //   config: {
-//     checkIntervalMinutes: 30,
+//     checkIntervalMinutes: 360,
 //     retryAfterMinutes: 10,
 //     maxRetryCount: 5,
 //     batchSize: 10
 //   },
-//   nextCheckIn: '30 分鐘'
+//   nextCheckIn: '360 分鐘 (6 小時)'
 // }
 ```
 
@@ -211,7 +206,7 @@ invoiceRetryService.start({
 服務會輸出詳細的日誌，方便監控和問題排查：
 
 ```
-[發票重試監控] 啟動服務 - 檢查間隔: 30分鐘, 重試延遲: 10分鐘
+[發票重試監控] 啟動服務 - 檢查間隔: 360分鐘 (6 小時), 重試延遲: 10分鐘
 [發票重試監控] 開始執行檢查...
 [發票重試監控] 發現 3 張需要重試的發票
 [發票重試監控] 重試發票: INV-20250101-001 (用戶: user@example.com)

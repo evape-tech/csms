@@ -2,9 +2,9 @@
  * EMS事件消费者
  * 处理能源管理系统相关事件
  */
-const mqService = require('../services/mqService');
-const { EXCHANGES } = require('../mqServer');
-const emsService = require('../services/emsService');
+import * as mqService from '../services/mqService.js';
+import { EXCHANGES } from '../mqServer.js';
+import * as emsService from '../services/emsService.js';
 
 // 队列名称
 const QUEUES = {
@@ -151,7 +151,4 @@ async function initConsumers() {
   }
 }
 
-module.exports = {
-  initConsumers,
-  QUEUES
-};
+export { initConsumers, QUEUES };

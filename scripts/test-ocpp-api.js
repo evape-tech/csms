@@ -3,7 +3,9 @@
  * 專門測試 trigger_meter_reallocation API
  */
 
-const http = require('http');
+import http from 'http';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
 
 const HOST = 'localhost';
 const PORT = 8089;
@@ -88,9 +90,8 @@ function testApiEndpoint() {
 // 同時測試其他端點進行對比
 async function testMultipleEndpoints() {
     const endpoints = [
-        { path: '/health', method: 'GET', description: '健康檢查' },
-        { path: '/ocpp/api/v1/connections', method: 'GET', description: '查看連接' },
-        { path: '/ocpp/api/v1/trigger_meter_reallocation', method: 'POST', description: '觸發電表重分配' }
+    { path: '/health', method: 'GET', description: '健康檢查' },
+    { path: '/ocpp/api/v1/trigger_meter_reallocation', method: 'POST', description: '觸發電表重分配' }
     ];
 
     console.log(`\n🔍 測試多個端點進行對比...`);
@@ -192,8 +193,8 @@ async function main() {
 }
 
 // 如果直接執行此腳本
-if (require.main === module) {
+if (process.argv[1] === __filename) {
     main();
 }
 
-module.exports = { testApiEndpoint, testMultipleEndpoints };
+export { testApiEndpoint, testMultipleEndpoints };

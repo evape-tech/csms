@@ -3,11 +3,12 @@
  * 統一管理API路徑和版本
  */
 
-const path = require('path');
+import path from 'path';
+import dotenv from 'dotenv';
 
 // 根據 NODE_ENV 決定使用哪個 .env 文件
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 // API配置
 const API = {
@@ -53,8 +54,6 @@ function buildSystemApiPath(path = '') {
 const API_PATHS = {
   // 系統級路徑（不帶版本）
   HEALTH: buildSystemApiPath('/health'),
-  MQ_HEALTH: buildSystemApiPath('/mq/health'),
-  SYSTEM_STATUS: buildSystemApiPath('/system/status'),
   
   // 標準REST API路徑（帶版本）
   CHARGEPOINTS_ONLINE: buildApiPath('/chargepoints/online'),
@@ -68,16 +67,9 @@ const API_PATHS = {
   BILLING_GENERATE: buildApiPath('/billing/generate'),
   
   // OCPP專用API路徑（帶版本）
-  OCPP_CONNECTIONS: buildOcppApiPath('/connections'),
   OCPP_TRIGGER_PROFILE_UPDATE: buildOcppApiPath('/trigger_profile_update'),
   OCPP_TRIGGER_METER_REALLOCATION: buildOcppApiPath('/trigger_meter_reallocation'),
   OCPP_TRIGGER_STATION_REALLOCATION: buildOcppApiPath('/trigger_station_reallocation')
 };
 
-module.exports = {
-  API,
-  API_PATHS,
-  buildApiPath,
-  buildOcppApiPath,
-  buildSystemApiPath
-};
+export { API, API_PATHS, buildApiPath, buildOcppApiPath, buildSystemApiPath };

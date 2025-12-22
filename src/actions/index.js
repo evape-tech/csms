@@ -2,20 +2,12 @@
  * Actions 模块导出
  */
 
-const authActions = require('./authActions');
-const gunActions = require('./gunActions');
-const meterActions = require('./meterActions');
-const paymentActions = require('./paymentActions');
-const stationActions = require('./stationActions');
-const tariffActions = require('./tariffActions');
-const userActions = require('./userActions');
+import * as authActions from './authActions.js';
+import * as gunActions from './gunActions.js';
+import * as meterActions from './meterActions.js';
+import * as paymentActions from './paymentActions.js';
+import * as stationActions from './stationActions.js';
+import * as tariffActions from './tariffActions.js';
+import * as userActions from './userActions.js';
 
-module.exports = {
-  authActions,
-  gunActions,
-  meterActions,
-  paymentActions,
-  stationActions,
-  tariffActions,
-  userActions
-};
+export { authActions, gunActions, meterActions, paymentActions, stationActions, tariffActions, userActions };

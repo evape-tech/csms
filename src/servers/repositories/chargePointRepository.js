@@ -4,16 +4,17 @@
  */
 
 // 导入日志工具
-const { logger } = require('../utils');
+import { logger } from '../utils/index.js';
 
 // 直接导入数据库服务
-const { databaseService } = require('../../lib/database/service.js');
-const DatabaseUtils = require('../../lib/database/utils.js').default;
+import { databaseService } from '../../lib/database/service.js';
+import DatabaseUtils from '../../lib/database/utils.js';
 const createCpLog = databaseService.createCpLog;
 
-// 延遲載入 billingRepository，避免循環依賴
-const getBillingRepository = () => {
-  return require('./billingRepository.js');
+// 延遲載入 billingRepository，避免循環依賴 (使用动态导入)
+const getBillingRepository = async () => {
+  const mod = await import('./billingRepository.js');
+  return mod.default || mod;
 };
 
 // 数据库初始化标志
@@ -460,7 +461,7 @@ async function updateTransactionRecord(ocppTransactionId, updateData) {
     
     if (shouldCheckBilling) {
       try {
-        const billingService = getBillingRepository();
+        const billingService = await getBillingRepository();
         
         // generateBillingForTransaction 內部已有防重複機制，直接調用即可
         const billing = await billingService.generateBillingForTransaction(
@@ -679,7 +680,7 @@ async function handleOrphanTransaction(transaction) {
     console.log(`🔄 [孤兒交易Billing] 開始為孤兒交易 ${transaction.transaction_id} 生成billing記錄...`);
     
     try {
-      const billingService = getBillingRepository();
+      const billingService = await getBillingRepository();
       console.log(`📦 [孤兒交易Billing] billingService 已載入，呼叫 generateBillingForTransaction...`);
       
       const billing = await billingService.generateBillingForTransaction(
@@ -752,7 +753,7 @@ function formatDuration(seconds) {
   return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-module.exports = {
+export {
   ensureDbInitialized,
   getAllGuns,
   getGunByCpid,

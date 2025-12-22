@@ -3,9 +3,9 @@
  * 将OCPP控制器与MQ系统集成
  */
 
-const ocppEventPublisher = require('../publishers/ocppEventPublisher');
-const { isConnected } = require('../mqServer');
-const systemStatusService = require('../services/systemStatusService');
+import * as ocppEventPublisher from '../publishers/ocppEventPublisher.js';
+import { isConnected } from '../mqServer.js';
+import * as systemStatusService from '../services/systemStatusService.js';
 
 /**
  * 发布充电桩状态事件
@@ -117,10 +117,4 @@ async function publishOcppMessage(chargePointId, message, direction) {
   }
 }
 
-module.exports = {
-  publishStatusEvent,
-  publishChargingStarted,
-  publishChargingStopped,
-  publishMeterValues,
-  publishOcppMessage
-};
+export { publishStatusEvent, publishChargingStarted, publishChargingStopped, publishMeterValues, publishOcppMessage };

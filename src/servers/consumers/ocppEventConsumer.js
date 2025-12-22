@@ -2,9 +2,9 @@
  * OCPP事件消费者
  * 处理OCPP相关事件
  */
-const mqService = require('../services/mqService');
-const { EXCHANGES } = require('../mqServer');
-const chargeEventService = require('../services/chargeEventService');
+import * as mqService from '../services/mqService.js';
+import { EXCHANGES } from '../mqServer.js';
+import * as chargeEventService from '../services/chargeEventService.js';
 
 // 队列名称
 const QUEUES = {
@@ -175,7 +175,4 @@ async function initConsumers() {
   }
 }
 
-module.exports = {
-  initConsumers,
-  QUEUES
-};
+export { initConsumers, QUEUES };

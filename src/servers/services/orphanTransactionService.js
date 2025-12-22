@@ -3,8 +3,8 @@
  * 負責監控和處理因斷電、網路中斷等原因產生的孤兒交易
  */
 
-const { logger } = require('../utils');
-const { chargePointRepository } = require('../repositories');
+import { logger } from '../utils/index.js';
+import { chargePointRepository } from '../repositories/index.js';
 
 class OrphanTransactionService {
   constructor() {
@@ -141,7 +141,4 @@ class OrphanTransactionService {
 // 創建單例實例
 const orphanTransactionService = new OrphanTransactionService();
 
-module.exports = {
-  OrphanTransactionService,
-  orphanTransactionService
-};
+export { OrphanTransactionService, orphanTransactionService };

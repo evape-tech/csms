@@ -158,7 +158,7 @@ OCPP 伺服器將在 [http://localhost:8089](http://localhost:8089) 提供以下
 - WebSocket 服務: `ws://localhost:8089/ocpp`
 - REST API: `http://localhost:8089/api/v1`
 - 健康檢查: `http://localhost:8089/health`
-- 系統狀態: `http://localhost:8089/system/status`
+ 
 
 #### 🐇 RabbitMQ 服務 (可選)
 
@@ -193,8 +193,8 @@ rabbitmq-server
 - **充電站管理**: 站點設定、設備監控、功率分析
 - **系統管理**: 操作日誌、故障報告、報表生成
 
-#### ⚡ OCPP Server API (http://localhost:8089)
-- **系統監控**: 健康檢查、系統狀態、MQ連接狀態
+- #### ⚡ OCPP Server API (http://localhost:8089)
+- **系統監控**: 健康檢查、MQ連接狀態
 - **充電樁管理**: 遠程控制、狀態查詢、重啟操作
 - **能源管理**: EMS功率分配、電表管理、站點調度
 
@@ -342,10 +342,10 @@ npm test tests/emsIntegration.test.js
    - 檢查 EMS 定時校正是否啟動：查看日誌中的定時器消息
    - 驗證事件驅動機制：查看 StatusNotification、StartTransaction 等事件處理
    - 檢查資料庫連接：`npm run db:init` 測試資料庫連接
-   - 查看系統狀態：`GET /system/status`
+    - 檢查資料庫連接：`npm run db:init` 測試資料庫連接
 
 5. **MQ 相關問題 (如果啟用)**
-   - 檢查消息隊列連接狀態：`GET /mq/health`
+   - 檢查消息隊列連接狀態：`GET /health`（回傳中包含 MQ 狀態資訊）
    - 查看 MQ 管理介面：http://localhost:15672 (guest/guest)
    - 檢查事件發布者狀態：查看日誌中的發布消息
 
@@ -372,7 +372,6 @@ npm test tests/emsIntegration.test.js
 ```bash
 # 檢查服務狀態
 curl http://localhost:8089/health
-curl http://localhost:8089/system/status
 
 # API 使用範例請參考
 # 📖 完整的 API 使用範例和文檔：docs/API_STRUCTURE.md

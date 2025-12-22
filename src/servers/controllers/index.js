@@ -2,10 +2,7 @@
  * 控制器模块导出
  */
 
-const ocppController = require('./ocppController');
-const emsController = require('./emsController');
+import * as ocppController from './ocppController.js';
+import * as emsController from './emsController.js';
 
-module.exports = {
-  ocppController,
-  emsController
-};
+export { ocppController, emsController };

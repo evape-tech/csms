@@ -7,7 +7,7 @@
  * - 發票會透過 TapPay 平台自動寄送郵件給用戶
  */
 
-const axios = require('axios');
+import axios from 'axios';
 // databaseService is ESM, so we need to import it dynamically or assume it's handled.
 // But this file is being converted to CJS.
 // We will handle databaseService injection or dynamic import.
@@ -290,4 +290,4 @@ class InvoiceRepository {
   }
 }
 
-module.exports = { InvoiceRepository };
+export { InvoiceRepository };

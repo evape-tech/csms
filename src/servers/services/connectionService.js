@@ -3,9 +3,9 @@
  * 管理WebSocket连接和充电站状态
  */
 
-const { logger } = require('../utils');
-const { chargePointRepository } = require('../repositories');
-const { mqConfig } = require('../config');
+import { logger } from '../utils/index.js';
+import { chargePointRepository } from '../repositories/index.js';
+import { mqConfig } from '../config/index.js';
 const { MQ_ENABLED } = mqConfig;
 
 // WebSocket客户端池
@@ -513,7 +513,7 @@ async function sendCommandToStation(cpsn, command) {
   }
 }
 
-module.exports = {
+export {
   wsClients,
   wsCpdatas,
   registerConnection,

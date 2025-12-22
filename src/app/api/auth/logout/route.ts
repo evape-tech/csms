@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import jwt from 'jsonwebtoken';
 import { OperationLogger } from '@/lib/operationLogger';
 
 // 強制動態渲染，避免靜態快取
@@ -20,8 +21,7 @@ export async function POST(request: NextRequest) {
         if (sessionCookie) {
           const token = sessionCookie.split('=')[1];
           try {
-            const jwt = require('jsonwebtoken');
-            const decoded = jwt.decode(token);
+            const decoded = jwt.decode(token as string) as { email?: string } | null;
             userEmail = decoded?.email || 'unknown';
           } catch {
             // 忽略解析錯誤

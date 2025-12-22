@@ -12,8 +12,8 @@
  * 本服务完全通过数据库抽象层操作，不直接依赖任何特定数据库客户端
  */
 
-const { databaseService } = require('../../lib/database/service.js');
-const { calculateRateByType } = require('../../lib/rateCalculator');
+import { databaseService } from '../../lib/database/service.js';
+import { calculateRateByType } from '../../lib/rateCalculator.js';
 
 /**
  * 计费服务类
@@ -27,10 +27,10 @@ class BillingRepository {
   /**
    * 延遲載入 tariffRepository，避免循環依賴問題
    */
-  get tariffRepository() {
+  async getTariffRepository() {
     if (!this._tariffRepository) {
-      const { tariffRepository } = require('./index');
-      this._tariffRepository = tariffRepository;
+      const mod = await import('./index.js');
+      this._tariffRepository = mod.tariffRepository;
     }
     return this._tariffRepository;
   }
@@ -96,7 +96,7 @@ class BillingRepository {
       
       if (tariffId) {
         // 情況1: 手動指定費率方案ID
-        tariff = await this.tariffRepository.getTariffById(tariffId);
+  tariff = await (await this.getTariffRepository()).getTariffById(tariffId);
         if (!tariff) {
           const error = `费率方案 ID ${tariffId} 不存在`;
           if (autoMode) {
@@ -118,13 +118,13 @@ class BillingRepository {
         // - 季節匹配（season_start_month/season_end_month，如TIME_OF_USE）
         // - 優先級排序（priority欄位）
         // - 如果該槍沒有綁定費率，自動返回預設費率
-        tariff = await this.tariffRepository.getTariffForGun(gunId, chargingTime);
+  tariff = await (await this.getTariffRepository()).getTariffForGun(gunId, chargingTime);
         
         // 步驟3: 若仍未找到（理論上getTariffForGun最後會返回默認費率），額外安全檢查
         if (!tariff) {
           console.warn(`[計費] 交易 ${transactionId} 的充電槍 ${gunId} 未找到綁定費率，使用預設費率`);
           const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
-          tariff = await this.tariffRepository.getDefaultTariff({ isAC, isDC: !isAC });
+          tariff = await (await this.getTariffRepository()).getDefaultTariff({ isAC, isDC: !isAC });
         }
       }
 
@@ -512,4 +512,4 @@ class BillingRepository {
 
 // 导出单例实例
 const billingService = new BillingRepository();
-module.exports = billingService;
+export default billingService;

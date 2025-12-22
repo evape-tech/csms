@@ -1,5 +1,5 @@
-const { logger } = require('../utils/index.js');
-const { InvoiceRepository } = require('../repositories/invoiceRepository.js');
+import { logger } from '../utils/index.js';
+import { InvoiceRepository } from '../repositories/invoiceRepository.js';
 
 // Dynamic import helper for ESM modules
 let dbServiceInstance;
@@ -16,7 +16,7 @@ class InvoiceRetryService {
     this.isRunning = false;
     this.intervalId = null;
     this.config = {
-      checkIntervalMinutes: 180,      // 檢查間隔：3小時 (3 * 60)
+      checkIntervalMinutes: 360,      // 檢查間隔：6小時 (6 * 60)
       retryAfterMinutes: 10,         // 創建後多久才重試：10分鐘
       maxRetryCount: 5,              // 最大重試次數
       batchSize: 10                  // 每次批次處理數量
@@ -361,9 +361,6 @@ class InvoiceRetryService {
 }
 
 // 創建單例實例
-const invoiceRetryService = new InvoiceRetryService();
+export const invoiceRetryService = new InvoiceRetryService();
 
-module.exports = {
-  InvoiceRetryService,
-  invoiceRetryService
-};
+export { InvoiceRetryService };

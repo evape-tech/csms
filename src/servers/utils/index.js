@@ -2,10 +2,7 @@
  * 工具模块导出
  */
 
-const logger = require('./logger');
-const { generateUniqueId } = require('./helpers');
+import * as logger from './logger.js';
+import { generateUniqueId } from './helpers.js';
 
-module.exports = {
-  logger,
-  generateUniqueId
-};
+export { logger, generateUniqueId };

@@ -2,10 +2,7 @@
  * 消息消费者模块导出
  */
 
-const ocppEventConsumer = require('./ocppEventConsumer');
-const emsEventConsumer = require('./emsEventConsumer');
+import * as ocppEventConsumer from './ocppEventConsumer.js';
+import * as emsEventConsumer from './emsEventConsumer.js';
 
-module.exports = {
-  ocppEventConsumer,
-  emsEventConsumer
-};
+export { ocppEventConsumer, emsEventConsumer };
