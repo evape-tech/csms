@@ -1,0 +1,109 @@
+name: Build and Push Docker image
+
+on:
+  push:
+    branches: [ prod ]
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: 'Run npm test'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies & Run tests
+        if: ${{ inputs.run_tests == 'true' }}
+        run: |
+          npm ci
+          npm test
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/csms" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+            ${{ steps.meta.outputs.image }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # 只在 prod branch 或 tag 時才執行 deploy
+    if: |
+      github.ref == 'refs/heads/prod' ||
+      startsWith(github.ref, 'refs/tags/v')
+      
+    steps:
+      - name: Check required deploy secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.SERVER_HOST }}" ] || \
+             [ -z "${{ secrets.SERVER_USER }}" ] || \
+             [ -z "${{ secrets.SERVER_SSH_KEY }}" ] || \
+             [ -z "${{ secrets.PROD_ENV }}" ]; then
+            echo "Missing required secrets for deployment. Skipping deploy."
+            echo "deploy_enabled=false" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_enabled=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to production server
+        if: steps.check-secrets.outputs.deploy_enabled == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT || '22' }}
+          script: |
+            set -e
+            
+            APP_DIR=/home/${{ secrets.SERVER_USER }}/csms
+            
+            # 確保目錄存在
+            mkdir -p $APP_DIR
+            
+            # 寫入生產環境變數
+            echo "${{ secrets.PROD_ENV }}" > $APP_DIR/.env.production
+            chown ${{ secrets.SERVER_USER }}:${{ secrets.SERVER_USER }} $APP_DIR/.env.production
+            
+            # 執行 docker compose
+            cd $APP_DIR
+            docker compose pull
+            docker compose up -d --remove-orphans

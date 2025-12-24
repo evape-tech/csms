@@ -558,6 +558,24 @@ npm run start:ocpp:prod # OCPP Server (生產模式)
 
 查看 [Next.js 部署文件](https://nextjs.org/docs/app/building-your-application/deploying) 以獲取更多詳細資訊。
 
+### CI/CD 自動部署（建議）
+
+建議使用 GitHub Actions 負責建置與鏡像發佈，並在部署階段（而非 build 階段）注入生產環境變數：
+
+- **不要**把 `.env.production` 烙進映像（Dockerfile 已移除 COPY `.env.production` 行）。
+- 在 GitHub Repository → Settings → Secrets 中設定：
+   - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`（用於 push 映像）
+   - `PROD_ENV`（整個 `.env.production` 的內容，用於寫入部署主機）
+   - `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`（用於 SSH 部署）
+
+Workflow 範式：
+1. CI Build & Push 到 registry（不包含生產 env）
+2. Deploy job（如果存在 `SERVER_HOST`、`SERVER_SSH_KEY`、`PROD_ENV`）：透過 SSH 把 `PROD_ENV` 寫入到部署主機 `/home/<SERVER_USER>/csms/.env.production`，再執行 `docker compose pull` 與 `docker compose up -d --no-build`。
+
+安全建議：
+- 儘量使用短期或可撤銷的 access token，並定期輪換。  
+- 若需要更高安全等級，請使用專業的 secrets manager（Vault、AWS Secrets Manager）或 Kubernetes Secrets。  
+
 ## 貢獻
 
 歡迎任何形式的貢獻！如果你有任何問題或建議，請隨時提出。
