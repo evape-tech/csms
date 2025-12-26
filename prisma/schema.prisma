@@ -38,14 +38,18 @@ model guns {
 }
 
 model stations {
-  id           Int      @id @default(autoincrement())
-  station_code String   @unique(map: "uniq_station_code") @db.VarChar(50)
-  name         String?  @db.VarChar(100)
-  address      String?  @db.VarChar(255)
-  floor        String?  @db.VarChar(50)
-  operator_id  String?  @db.VarChar(50)
-  updated_at   DateTime @default(now()) @db.DateTime(0)
-  meters       meters[] @relation("station_meters")
+  id           Int       @id @default(autoincrement())
+  station_code String    @unique(map: "uniq_station_code") @db.VarChar(50)
+  name         String?   @db.VarChar(100)
+  address      String?   @db.VarChar(255)
+  floor        String?   @db.VarChar(50)
+  operator_id  String?   @db.VarChar(50)
+  time_zone    String    @default("Asia/Taipei") @db.VarChar(64)
+  updated_at   DateTime  @default(now()) @db.DateTime(0)
+  meters       meters[]  @relation("station_meters")
+  timezones    timezones @relation(fields: [time_zone], references: [code], map: "fk_stations_time_zone")
+
+  @@index([time_zone], map: "idx_time_zone")
 }
 
 model meters {
@@ -514,6 +518,16 @@ model vehicle_brands {
   user_vehicles user_vehicles[]
 
   @@index([is_active], map: "idx_is_active")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model timezones {
+  code         String     @id @db.VarChar(64)
+  display_name String?    @db.VarChar(128)
+  utc_offset   String?    @db.VarChar(6)
+  createdAt    DateTime   @default(now()) @db.DateTime(0)
+  updatedAt    DateTime   @default(now()) @db.DateTime(0)
+  stations     stations[]
 }
 
 enum guns_acdc {

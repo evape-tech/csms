@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     // 如果錢包不存在，自動創建一個
     if (!wallet) {
       console.log('📝 [API /api/users/me/wallet] 錢包不存在，自動創建新錢包');
-      wallet = await databaseService.createUserWallet(currentUser.userId, 5000);
+      wallet = await databaseService.createUserWallet(currentUser.userId, 0);
       console.log('✅ [API /api/users/me/wallet] 新錢包已創建');
     }
     
