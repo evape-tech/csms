@@ -478,6 +478,36 @@ class DatabaseService {
     });
   }
 
+  /**
+   * 根據 gunId 查詢該槍所屬的 station（只回傳單一站點）
+   * @param {number} gunId
+   * @returns {Promise<Object|null>} station 或 null
+   */
+  async getStationByGunId(gunId) {
+    const client = getDatabaseClient();
+    // 使用 Prisma 的關聯條件查詢，避免讀取整個 stations 集合
+    return await client.stations.findFirst({
+      where: {
+        meters: {
+          some: {
+            guns: {
+              some: {
+                id: gunId
+              }
+            }
+          }
+        }
+      },
+      include: {
+        meters: {
+          include: {
+            guns: true
+          }
+        }
+      }
+    });
+  }
+
   async updateStation(id, data) {
     const client = getDatabaseClient();
     // 更新場域基本資訊
