@@ -119,7 +119,20 @@ class BillingRepository {
         // - 季節匹配（season_start_month/season_end_month，如TIME_OF_USE）
         // - 優先級排序（priority欄位）
         // - 如果該槍沒有綁定費率，自動返回預設費率
-  tariff = await (await this.getTariffRepository()).getTariffForGun(gunId, chargingTime);
+        // 在選費率前，嘗試取用場域時區，讓季節判斷與場域時區一致
+        let tariffTimeZone = undefined;
+        try {
+          if (gunId) {
+            const station = await this.databaseService.getStationByGunId(gunId);
+            if (station && station.time_zone) tariffTimeZone = station.time_zone;
+          }
+        } catch (err) {
+          // 不阻斷選擇，之後會退回UTC行為
+          // 使用 logger if available
+          try { logger.warn(`[計費] 取得場域時區失敗於選擇費率: ${err.message}`); } catch(e){/* ignore */}
+        }
+
+        tariff = await (await this.getTariffRepository()).getTariffForGun(gunId, chargingTime, { timeZone: tariffTimeZone });
         
         // 步驟3: 若仍未找到（理論上getTariffForGun最後會返回默認費率），額外安全檢查
         if (!tariff) {

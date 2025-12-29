@@ -4,6 +4,7 @@ import DatabaseUtils from '../../../../../lib/database/utils.js';
 import { databaseService } from '../../../../../lib/database/service.js';
 import { tariffRepository } from '../../../../../servers/repositories/index.js';
 import { calculateRateByType } from '../../../../../lib/rateCalculator.js';
+import { logger } from '../../../../../servers/utils/index.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,15 @@ async function calculateRealtimeCost(transaction: any) {
 
     // 獲取適用的費率方案
     const chargingTime = transaction.start_time || new Date();
-    const tariff: any = await tariffRepository.getTariffForGun(gunId, chargingTime);
+    // 先嘗試取得場域時區並傳入 getTariffForGun，以確保季節判斷使用場域當地時間
+    let tariffTimeZone: string | undefined = undefined;
+    try {
+      const station: any = await databaseService.getStationByGunId(gunId);
+      if (station && (station as any).time_zone) tariffTimeZone = (station as any).time_zone;
+    } catch (err: any) {
+      logger.warn(`⚠️ [calculateRealtimeCost] 取得場域時區(選tariff)失敗，將使用預設: ${err?.message ?? String(err)}`);
+    }
+    const tariff: any = await tariffRepository.getTariffForGun(gunId, chargingTime, { timeZone: tariffTimeZone });
 
     if (!tariff) {
       console.warn(`⚠️ [calculateRealtimeCost] 未找到費率方案 for gun ${gunId}`);
@@ -45,13 +54,12 @@ async function calculateRealtimeCost(transaction: any) {
     let timeZone: string | undefined = undefined;
     if (tariff && (tariff as any).tariff_type === 'TIME_OF_USE') {
       try {
-        const gunId = gunId; // keep existing gunId from earlier
         if (gunId) {
-          const station = await databaseService.getStationByGunId(gunId as number);
-          if (station && station.time_zone) timeZone = station.time_zone;
+          const station: any = await databaseService.getStationByGunId(gunId as number);
+          if (station && (station as any).time_zone) timeZone = (station as any).time_zone;
         }
-      } catch (err) {
-        console.warn('⚠️ [calculateRealtimeCost] 取得場域時區失敗，將使用 UTC', err);
+      } catch (err: any) {
+        logger.warn('⚠️ [calculateRealtimeCost] 取得場域時區失敗，將使用 UTC', err);
       }
       if (!timeZone) timeZone = 'UTC';
     }
@@ -72,8 +80,8 @@ async function calculateRealtimeCost(transaction: any) {
       billing_details: billingDetails,
       calculation_time: new Date().toISOString()
     };
-  } catch (error) {
-    console.error(`❌ [calculateRealtimeCost] 計算費用失敗:`, error);
+  } catch (error: any) {
+    logger.error(`❌ [calculateRealtimeCost] 計算費用失敗:`, error);
     return null;
   }
 }
