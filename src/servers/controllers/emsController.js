@@ -3,10 +3,10 @@
  * 处理能源管理系统(Energy Management System)相关接口和逻辑
  */
 
-const { logger, generateUniqueId } = require('../utils');
-const { connectionService, ocppMessageService, emsService } = require('../services');
-const { chargePointRepository } = require('../repositories');
-const { calculateEmsAllocation } = require('../../lib');
+import { logger, generateUniqueId } from '../utils/index.js';
+import { connectionService, ocppMessageService, emsService } from '../services/index.js';
+import { chargePointRepository } from '../repositories/index.js';
+import { calculateEmsAllocation } from '../../lib/index.js';
 
 /**
  * 全站功率重新分配调度器
@@ -36,14 +36,10 @@ async function scheduleGlobalPowerReallocation(eventType, eventDetails = {}, imm
         
         // 2. 清除所有现有的功率配置定时器，避免冲突
         logger.debug(`[全站重分配] 🧹 清除现有功率配置定时器...`);
-        if (emsService.clearAllProfileUpdateTimers) {
-            emsService.clearAllProfileUpdateTimers();
-        }
-        
-        // 3. 依序處理每個站點下的所有電表
-        let totalProcessedMeters = 0;
-        let totalScheduledUpdates = 0;
-        const executionMode = immediate ? '立即执行' : '延迟排程';
+    if (emsService.clearAllProfileUpdateTimers) {
+        emsService.clearAllProfileUpdateTimers();
+    }
+    const executionMode = immediate ? '立即执行' : '延迟排程';
         
         logger.info(`[全站重分配] 🚀 開始批量${executionMode}所有站點電表的功率配置更新...`);
         
@@ -884,8 +880,8 @@ function initializeEmsSystem() {
     }
 }
 
-// 暴露模块API
-module.exports = {
+// 暴露模块API (ESM)
+export {
     scheduleGlobalPowerReallocation,
     scheduleSpecificMeterPowerReallocation,
     processOcppEvent,

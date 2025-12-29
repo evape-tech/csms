@@ -3,27 +3,21 @@
  * 实现OCPP协议通信的WebSocket服务器
  */
 
-const path = require('path');
-
-// 根據 NODE_ENV 決定使用哪個 .env 文件
-// - production (Docker) → .env.production
-// - development/其他 (本地) → .env
+import path from 'path';
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
 const envPath = path.resolve(process.cwd(), envFile);
 
-console.log(`🔧 [OCPP] 環境: ${process.env.NODE_ENV || 'development'}`);
-console.log(`📄 [OCPP] 載入配置: ${envFile}`);
+import dotenv from 'dotenv';
+dotenv.config({ path: envPath });
 
-require('dotenv').config({ path: envPath });
-
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const cors = require('cors');
-const { logger } = require('./utils');
+import express from 'express';
+import http from 'http';
+import WebSocket from 'ws';
+import cors from 'cors';
+import { logger } from './utils/index.js';
 
 // 引入配置
-const { mqConfig, apiConfig } = require('./config');
+import { mqConfig, apiConfig } from './config/index.js';
 const { MQ_ENABLED } = mqConfig;
 const { API_PATHS } = apiConfig;
 
@@ -37,7 +31,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // 创建HTTP服务器
 const server = http.createServer(app);
-const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
 
 // 创建WebSocket服务器
 const wss = new WebSocket.Server({
@@ -66,38 +59,16 @@ const wss = new WebSocket.Server({
   }
 });
 
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+
 // 引入控制器 (在wss初始化之后)
-const { ocppController, emsController } = require('./controllers');
+import { ocppController, emsController } from './controllers/index.js';
 
 // 引入MQ服务 (如果启用)
-const mqServer = MQ_ENABLED ? require('./mqServer') : null;
-const { ocppEventPublisher } = MQ_ENABLED ? require('./publishers') : { ocppEventPublisher: null };
-const { ocppEventConsumer, emsEventConsumer } = MQ_ENABLED ? require('./consumers') : { ocppEventConsumer: null, emsEventConsumer: null };
-const { notificationService, systemStatusService, orphanTransactionService, invoiceRetryService } = require('./services');
-
-/**
- * 发布充电桩连接状态事件到MQ
- * @param {string} id - 充电桩ID 
- * @param {string} state - 连接状态
- * @param {Object} additionalData - 其他相关数据
- */
-async function publishConnectionState(id, state, additionalData = {}) {
-  // 检查MQ是否已初始化且启用
-  if (!MQ_ENABLED || !mqServer || !mqServer.isConnected() || !ocppEventPublisher) {
-    return;
-  }
-  
-  try {
-    await ocppEventPublisher.publishConnectionState({
-      cpsn: id,
-      state,
-      timestamp: new Date().toISOString(),
-      ...additionalData
-    });
-  } catch (err) {
-    logger.warn(`MQ发布${state}事件失败: ${err.message}`);
-  }
-}
+import * as mqServer from './mqServer.js';
+import * as ocppEventPublisher from './publishers/ocppEventPublisher.js';
+import { systemStatusService, orphanTransactionService, invoiceRetryService } from './services/index.js';
 
 /**
  * 初始化REST API路由
@@ -105,61 +76,41 @@ async function publishConnectionState(id, state, additionalData = {}) {
 function initializeRoutes() {
   // 健康检查端点 - 系统级别，不带版本
   app.get(API_PATHS.HEALTH, (req, res) => {
-    res.status(200).json({ 
-      status: 'ok', 
+    const response = {
+      status: 'ok',
       version: '1.0.0',
       apiVersion: apiConfig.API.VERSION,
-      timestamp: new Date().toISOString()
-    });
-  });
-  
-  // MQ健康检查端点
-  app.get(API_PATHS.MQ_HEALTH, (req, res) => {
-    if (!MQ_ENABLED) {
-      return res.json({ 
-        status: 'disabled', 
-        message: 'MQ功能已通过配置禁用',
-        mqEnabled: MQ_ENABLED,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    const mqChannel = mqServer.getChannel();
-    const health = {
-      mqEnabled: MQ_ENABLED,
-      mqInitialized: mqServer.isInitialized(),
-      mqConnected: mqServer.isConnected(),
-      mqChannelReady: !!mqChannel,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    
-    if (health.mqConnected && health.mqChannelReady) {
-      return res.json({ 
-        status: 'ok', 
-        message: 'MQ系统正常运行', 
-        ...health 
-      });
-    } else if (health.mqInitialized) {
-      return res.status(503).json({ 
-        status: 'degraded', 
-        message: 'MQ连接当前不可用，系统可能正在尝试重连', 
-        ...health 
-      });
-    } else {
-      return res.status(503).json({ 
-        status: 'unavailable', 
-        message: 'MQ系统未初始化或初始化失败，系统运行在降级模式', 
-        ...health 
-      });
+
+    // 附帶 MQ 狀態資訊（若啟用）
+    try {
+      if (MQ_ENABLED && mqServer) {
+        const mqChannel = mqServer.getChannel();
+        response.mq = {
+          enabled: MQ_ENABLED,
+          initialized: mqServer.isInitialized ? mqServer.isInitialized() : false,
+          connected: mqServer.isConnected ? mqServer.isConnected() : false,
+          channelReady: !!mqChannel
+        };
+      } else {
+        response.mq = { enabled: false };
+      }
+    } catch (err) {
+      response.mq = { enabled: MQ_ENABLED, error: err.message };
     }
+
+    // 附帶系統狀態資訊（僅供內部檢查）
+    try {
+      if (systemStatusService && typeof systemStatusService.getSystemStatus === 'function') {
+        response.system = systemStatusService.getSystemStatus();
+      }
+    } catch (err) {
+      response.system = { error: err.message };
+    }
+
+    res.status(200).json(response);
   });
-  
-  // 系统状态端点
-  if (systemStatusService) {
-    app.get(API_PATHS.SYSTEM_STATUS, (req, res) => {
-      res.json(systemStatusService.getSystemStatus());
-    });
-  }
   
   // 获取在线充电桩列表
   app.get(API_PATHS.CHARGEPOINTS_ONLINE, async (req, res) => {
@@ -245,27 +196,6 @@ function initializeRoutes() {
     }
   });
   
-  // 獲取OCPP連接狀態 - 新版本API
-  app.get(API_PATHS.OCPP_CONNECTIONS, async (req, res) => {
-    try {
-      const onlineCpids = await ocppController.getOnlineChargePoints();
-      res.status(200).json({ 
-        status: 'success', 
-        data: { online: onlineCpids },
-        apiVersion: apiConfig.API.VERSION,
-        timestamp: new Date().toISOString()
-      });
-    } catch (err) {
-      logger.error('获取连接列表失败', err);
-      res.status(500).json({ 
-        status: 'error', 
-        message: err.message,
-        apiVersion: apiConfig.API.VERSION,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-  
   // EMS功率管理API端點 - 新版本
   app.post(API_PATHS.OCPP_TRIGGER_PROFILE_UPDATE, async (req, res) => {
     try {
@@ -310,8 +240,14 @@ function initializeWebSocketServer() {
       
       logger.info(`新WebSocket连接: id=${id}, remote=${remote}, agent=${userAgent}`);
       
-      // 发布连接事件到MQ
-      publishConnectionState(id, 'connected', { remote, userAgent });
+      // 发布连接事件到MQ（由 publisher 处理可用性与错误）
+      ocppEventPublisher.publishConnectionState({
+        cpsn: id,
+        state: 'connected',
+        timestamp: new Date().toISOString(),
+        remote,
+        userAgent
+      }).catch((err) => logger.warn(`MQ发布connected事件失败: ${err.message}`));
       
       // 委托给控制器处理
       await ocppController.handleConnection(ws, req);
@@ -320,25 +256,31 @@ function initializeWebSocketServer() {
       ws.on('close', (code, reason) => {
         logger.info(`WebSocket断开: id=${id}, code=${code}, reason=${reason || 'No reason'}`);
         
-        // 发布断开连接事件到MQ
-        publishConnectionState(id, 'disconnected', { 
-          remote, 
-          userAgent, 
-          code, 
-          reason: reason?.toString() 
-        });
+        // 发布断开连接事件到MQ（由 publisher 处理可用性与错误）
+        ocppEventPublisher.publishConnectionState({
+          cpsn: id,
+          state: 'disconnected',
+          timestamp: new Date().toISOString(),
+          remote,
+          userAgent,
+          code,
+          reason: reason?.toString()
+        }).catch((err) => logger.warn(`MQ发布disconnected事件失败: ${err.message}`));
       });
       
       // 监听WebSocket错误事件
       ws.on('error', (error) => {
         logger.error(`WebSocket错误: id=${id}: ${error.message}`);
         
-        // 发布WebSocket错误事件到MQ
-        publishConnectionState(id, 'ws_error', { 
-          remote, 
-          userAgent, 
-          error: error.message 
-        });
+        // 发布WebSocket错误事件到MQ（由 publisher 处理可用性与错误）
+        ocppEventPublisher.publishConnectionState({
+          cpsn: id,
+          state: 'ws_error',
+          timestamp: new Date().toISOString(),
+          remote,
+          userAgent,
+          error: error.message
+        }).catch((err) => logger.warn(`MQ发布ws_error事件失败: ${err.message}`));
       });
     } catch (err) {
       logger.error('处理WebSocket连接时出错', err);
@@ -353,122 +295,109 @@ function initializeWebSocketServer() {
 }
 
 /**
- * 初始化MQ连接和消费者
- * @param {number} maxRetries - 最大重试次数
- * @param {number} retryDelay - 重试间隔(毫秒)
- * @returns {Promise<boolean>} - 初始化是否成功
+ * 启动服务器（可包含重试逻辑）
+ * @param {Object} options 可选配置 { maxRetries, retryDelay, backoffMultiplier, maxRetryDelay }
  */
-async function initializeMQ(maxRetries = 3, retryDelay = 5000) {
-  // 如果MQ功能未启用，直接返回
-  if (!MQ_ENABLED || !mqServer) {
-    logger.info('MQ功能已通过配置禁用，系统将在无MQ模式下运行');
-    return false;
-  }
-  
-  try {
-    logger.info('初始化消息队列连接...');
-    
-    // 尝试连接，带有重试逻辑
-    let mqConnection = null;
-    let retryCount = 0;
-    
-    while (!mqConnection && retryCount < maxRetries) {
-      if (retryCount > 0) {
-        logger.info(`MQ连接重试 (${retryCount}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-      }
-      
-      mqConnection = await mqServer.connect();
-      retryCount++;
-    }
-    
-    // 如果连接失败，降级运行
-    if (!mqConnection) {
-      logger.warn('无法连接到RabbitMQ，系统将在无MQ模式下运行');
-      return false;
-    }
-    
-    logger.info('消息队列连接成功，开始初始化消费者...');
-    
-    try {
-      // 初始化各种消费者，使用Promise.allSettled以允许部分成功
-      const results = await Promise.allSettled([
-        ocppEventConsumer.initConsumers(),
-        emsEventConsumer.initConsumers()
-      ]);
-      
-      // 检查消费者初始化结果
-      const failures = results.filter(r => r.status === 'rejected');
-      if (failures.length > 0) {
-        logger.warn(`${failures.length}个消费者初始化失败，系统将使用部分MQ功能运行`);
-        failures.forEach((failure, index) => {
-          logger.warn(`消费者初始化错误 ${index+1}: ${failure.reason.message}`);
-        });
-      } else {
-        logger.info('所有MQ消费者初始化成功!');
-      }
-      
-      // 更新MQ状态
-      if (systemStatusService) {
-        systemStatusService.updateMqStatus({
-          initialized: true,
-          connected: true,
-          consumers: results.filter(r => r.status === 'fulfilled').length
-        });
-      }
-      
-      // 尝试发送系统启动通知
-      if (systemStatusService) {
-        try {
-          await systemStatusService.sendStatusReport('startup');
-          logger.info('系统启动通知已发送');
-        } catch (notifyError) {
-          logger.warn(`发送启动通知失败: ${notifyError.message}`);
-        }
-      }
-      
-      return true;
-    } catch (consumerError) {
-      logger.error(`初始化消费者失败: ${consumerError.message}`);
-      logger.info('将使用部分MQ功能运行');
-      return true; // 仍然返回true，因为MQ连接成功
-    }
-  } catch (error) {
-    logger.error(`MQ初始化失败: ${error.message}`);
-    logger.info('将使用降级模式运行，不依赖MQ功能');
-    return false;
-  }
-}
+async function startServer(options = {}) {
+  // 支持兩種傳入格式：
+  // - startServer({ retry: { enabled: true, maxRetries, retryDelay, ... } })
+  // - startServer({ retryEnabled: true/false })
+  const retryOpt = options.retry || {};
+  const retryEnabled = (typeof options.retryEnabled === 'boolean') ? options.retryEnabled : (retryOpt.enabled ?? true);
 
-/**
- * 启动服务器（帶重試機制）
- */
-async function startServerWithRetry() {
   const RETRY_CONFIG = {
-    maxRetries: 5,
-    retryDelay: 3000,
-    backoffMultiplier: 1.5,
-    maxRetryDelay: 15000
+    maxRetries: retryOpt.maxRetries ?? options.maxRetries ?? 5,
+    retryDelay: retryOpt.retryDelay ?? options.retryDelay ?? 3000,
+    backoffMultiplier: retryOpt.backoffMultiplier ?? options.backoffMultiplier ?? 1.5,
+    maxRetryDelay: retryOpt.maxRetryDelay ?? options.maxRetryDelay ?? 15000
   };
-  
+
+  // Helper: resolve host/port from env or options
+  function getHostAndPort(options = {}) {
+    const HOST = options.host || process.env.OCPP_HOST || '0.0.0.0';
+    const PORT = options.port ? parseInt(options.port, 10) : parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
+    return { HOST, PORT };
+  }
+
+  // Helper: log server addresses
+  function logServerAddresses(host, port) {
+    logger.info(`OCPP服务器正在监听端口 ${port} (綁定到: ${host})`);
+    logger.info(`REST API: http://${host}:${port}${apiConfig.API.BASE_PATH}/${apiConfig.API.VERSION}`);
+    logger.info(`OCPP API: http://${host}:${port}${apiConfig.API.OCPP_BASE_PATH}/${apiConfig.API.VERSION}`);
+    logger.info(`WebSocket服务: ws://${host}:${port}/ocpp`);
+    logger.info(`健康檢查: http://${host}:${port}${API_PATHS.HEALTH}`);
+    if (host === '0.0.0.0') {
+      logger.info(`本地訪問: http://localhost:${port}`);
+      logger.info(`局域網訪問: http://0.0.0.0:${port}`);
+    }
+  }
+
+  // 内部一次性启动函数，复用原有 startServer 实现
+  async function startOnce(startOptions = {}) {
+    return new Promise((resolve, reject) => {
+      try {
+        // 檢查服務器是否已經在監聽
+        if (server && server.listening) {
+          logger.warn('服務器已在運行，跳過重複啟動');
+          resolve();
+          return;
+        }
+
+        // 初始化API路由與WebSocket
+        initializeRoutes();
+        initializeWebSocketServer();
+
+        // 异步初始化其他服务
+        initializeServices().then((mqInitialized) => {
+          const { HOST, PORT } = getHostAndPort(startOptions);
+          const serverInstance = server.listen(PORT, HOST, () => {
+            logServerAddresses(HOST, PORT);
+            logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
+
+            // 更新系统状态並設定定時回報
+            if (systemStatusService) {
+              systemStatusService.updateServerStatus('running');
+              const statusReportInterval = parseInt(process.env.STATUS_REPORT_INTERVAL || '600000', 10);
+              if (statusReportInterval > 0) {
+                setInterval(() => {
+                  systemStatusService.sendStatusReport('periodic');
+                }, statusReportInterval);
+              }
+            }
+
+            resolve();
+          });
+
+          serverInstance.on('error', (error) => {
+            reject(error);
+          });
+        }).catch(reject);
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // 如果外部關閉重試，則只執行一次 startOnce，發生錯誤時拋出給呼叫者處理
+  if (!retryEnabled) {
+    logger.info('啟動時已禁用重試，僅嘗試一次啟動');
+    await startOnce();
+    logger.info('✅ OCPP Server 啟動成功（無重試模式）！');
+    return;
+  }
+
   let retryCount = 0;
-  
   while (retryCount < RETRY_CONFIG.maxRetries) {
     try {
-      logger.info(retryCount > 0 ? 
-        `🔄 重試啟動 OCPP Server (第 ${retryCount + 1} 次)` : 
-        '🚀 啟動 OCPP Server...');
-      
-      await startServer();
-      
-      // 啟動成功
-      logger.info(`✅ OCPP Server 啟動成功！`);
+      logger.info(retryCount > 0 ? `🔄 重試啟動 OCPP Server (第 ${retryCount + 1} 次)` : '🚀 啟動 OCPP Server...');
+      await startOnce();
+      logger.info('✅ OCPP Server 啟動成功！');
       return;
-      
     } catch (error) {
       retryCount++;
       logger.error(`❌ 啟動失敗 (嘗試 ${retryCount}/${RETRY_CONFIG.maxRetries}): ${error.message}`);
-      
+
       // 清理失敗的服務器實例
       try {
         if (server && server.listening) {
@@ -482,88 +411,22 @@ async function startServerWithRetry() {
       } catch (cleanupError) {
         logger.warn(`清理服務器實例時出錯: ${cleanupError.message}`);
       }
-      
+
       if (retryCount >= RETRY_CONFIG.maxRetries) {
-        logger.error(`💥 已達到最大重試次數，OCPP Server 啟動失敗`);
+        logger.error('💥 已達到最大重試次數，OCPP Server 啟動失敗');
         process.exit(1);
       }
-      
+
       // 計算退避延遲
       const delay = Math.min(
         RETRY_CONFIG.retryDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, retryCount - 1),
         RETRY_CONFIG.maxRetryDelay
       );
-      
+
       logger.info(`⏳ ${delay/1000} 秒後重試...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-}
-
-/**
- * 启动服务器（基本版本）
- */
-async function startServer() {
-  return new Promise((resolve, reject) => {
-    try {
-      // 檢查服務器是否已經在監聽
-      if (server && server.listening) {
-        logger.warn('服務器已在運行，跳過重複啟動');
-        resolve();
-        return;
-      }
-      
-      // 初始化API路由
-      initializeRoutes();
-      
-      // 初始化WebSocket服务器
-      initializeWebSocketServer();
-      
-      // 异步初始化其他服务
-      initializeServices().then((mqInitialized) => {
-        // 启动HTTP服务器
-        const HOST = process.env.OCPP_HOST || '0.0.0.0';
-        const PORT = parseInt(process.env.OCPP_PORT || process.env.PORT || '8089', 10);
-        const serverInstance = server.listen(PORT, HOST, () => {
-          logger.info(`OCPP服务器正在监听端口 ${PORT} (綁定到: ${HOST})`);
-          logger.info(`REST API: http://${HOST}:${PORT}${apiConfig.API.BASE_PATH}/${apiConfig.API.VERSION}`);
-          logger.info(`OCPP API: http://${HOST}:${PORT}${apiConfig.API.OCPP_BASE_PATH}/${apiConfig.API.VERSION}`);
-          logger.info(`WebSocket服务: ws://${HOST}:${PORT}/ocpp`);
-          logger.info(`健康檢查: http://${HOST}:${PORT}${API_PATHS.HEALTH}`);
-          
-          // 如果綁定到所有接口，顯示額外的訪問地址
-          if (HOST === '0.0.0.0') {
-            logger.info(`本地訪問: http://localhost:${PORT}`);
-            logger.info(`局域網訪問: http://0.0.0.0:${PORT}`);
-          }
-          
-          logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
-          
-          // 更新系统状态
-          if (systemStatusService) {
-            systemStatusService.updateServerStatus('running');
-            
-            // 定期发送状态报告
-            const statusReportInterval = parseInt(process.env.STATUS_REPORT_INTERVAL || '600000', 10);
-            if (statusReportInterval > 0) {
-              setInterval(() => {
-                systemStatusService.sendStatusReport('periodic');
-              }, statusReportInterval);
-            }
-          }
-          
-          resolve();
-        });
-        
-        serverInstance.on('error', (error) => {
-          reject(error);
-        });
-      }).catch(reject);
-      
-    } catch (error) {
-      reject(error);
-    }
-  });
 }
 
 /**
@@ -574,7 +437,7 @@ async function initializeServices() {
   let mqInitialized = false;
   if (MQ_ENABLED) {
     try {
-      mqInitialized = await initializeMQ();
+      mqInitialized = await mqServer.initialize();
     } catch (error) {
       logger.warn(`MQ初始化失敗: ${error.message}`);
     }
@@ -607,12 +470,8 @@ async function initializeServices() {
   // 啟動發票重試監控服務
   try {
     if (!invoiceRetryService.isRunning) {
-      invoiceRetryService.start({
-        checkIntervalMinutes: 30,       // 每30分鐘檢查一次
-        retryAfterMinutes: 10,         // 創建後10分鐘才重試
-        maxRetryCount: 5,              // 最大重試次數
-        batchSize: 10                  // 每次批次處理10張發票
-      });
+        // 使用 InvoiceRetryService 的預設配置啟動（預設：checkIntervalMinutes=360，retryAfterMinutes=10）
+        invoiceRetryService.start();
       logger.info('📄 發票重試監控服務已啟動');
     } else {
       logger.debug('📄 發票重試監控服務已在運行，跳過重複啟動');
@@ -654,15 +513,15 @@ function handleCriticalError(type, error) {
       logger.info('🚀 正在重啟 OCPP Server...');
       
       // 清理現有連接
-      if (server && server.listening) {
+        if (server && server.listening) {
         server.close(() => {
-          startServerWithRetry().catch((restartError) => {
+          startServer().catch((restartError) => {
             logger.error(`重啟失敗: ${restartError.message}`);
             process.exit(1);
           });
         });
       } else {
-        startServerWithRetry().catch((restartError) => {
+        startServer().catch((restartError) => {
           logger.error(`重啟失敗: ${restartError.message}`);
           process.exit(1);
         });
@@ -716,16 +575,9 @@ async function gracefulShutdown(signal) {
 }
 
 // 如果这个文件是直接运行的，则启动服务器
-if (require.main === module) {
-  startServerWithRetry();
+if (process.argv[1] === __filename) {
+  startServer();
 }
 
 // 导出供其他模块使用
-module.exports = {
-  app,
-  server,
-  wss,
-  startServer,
-  startServerWithRetry,
-  gracefulShutdown
-};
+export { app, server, wss, startServer, gracefulShutdown };

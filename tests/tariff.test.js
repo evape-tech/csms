@@ -1,10 +1,5 @@
-const { PrismaClient } = require('../prisma-clients/mysql');
-const { 
-  calculateFixedRate,
-  calculateTimeOfUse,
-  calculateProgressive,
-  calculateDiscount
-} = require('../src/lib/rateCalculator');
+import { PrismaClient } from '../prisma-clients/mysql/index.js';
+import { calculateFixedRate, calculateTimeOfUse, calculateProgressive, calculateDiscount } from '../src/lib/rateCalculator.js';
 
 const prisma = new PrismaClient();
 
@@ -663,7 +658,7 @@ async function testValidityDateFiltering() {
 // 執行測試
 // ===========================
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   runAllTests().then(result => {
     console.log('\n測試完成');
     process.exit(result.failedTests > 0 ? 1 : 0);
@@ -673,14 +668,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = {
-  runAllTests,
-  testSeasonalTariffSelection,
-  testTimeOfUseBilling,
-  testFixedRateBilling,
-  testProgressiveBilling,
-  testDiscountBilling,
-  testValidityDateFiltering,
-  testActualTransaction,
-  getTariffForGun
-};
+export { runAllTests, testSeasonalTariffSelection, testTimeOfUseBilling, testFixedRateBilling, testProgressiveBilling, testDiscountBilling, testValidityDateFiltering, testActualTransaction, getTariffForGun };

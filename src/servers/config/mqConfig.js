@@ -3,11 +3,12 @@
  * 包含所有与消息队列相关的配置项
  */
 
-const path = require('path');
+import path from 'path';
+import dotenv from 'dotenv';
 
 // 根據 NODE_ENV 決定使用哪個 .env 文件
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 // 是否启用MQ功能
 const MQ_ENABLED = process.env.ENABLE_MQ !== 'false';
@@ -97,8 +98,4 @@ function getMqUrl(isDocker = false) {
   return `amqp://${user}:${password}@${hostname}:${port}${vhost}`;
 }
 
-module.exports = {
-  MQ_ENABLED,
-  MQ_CONFIG,
-  getMqUrl
-};
+export { MQ_ENABLED, MQ_CONFIG, getMqUrl };

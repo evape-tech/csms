@@ -3,11 +3,11 @@
  * 处理OCPP消息的核心控制器
  */
 
-const WebSocket = require('ws');
-const { logger } = require('../utils');
-const { connectionService, ocppMessageService } = require('../services');
-const { chargePointRepository } = require('../repositories');
-const { mqConfig } = require('../config');
+import WebSocket from 'ws';
+import { logger } from '../utils/index.js';
+import { connectionService, ocppMessageService } from '../services/index.js';
+import { chargePointRepository } from '../repositories/index.js';
+import { mqConfig } from '../config/index.js';
 const { MQ_ENABLED } = mqConfig;
 
 // OCPP消息类型常量
@@ -426,9 +426,9 @@ async function trigger_profile_update(req, res) {
   try {
     logger.info('🚀 收到手动触发全站功率配置更新请求，转发至EMS控制器...');
     
-    // 导入EMS控制器并调用其方法
-    const emsController = require('./emsController');
-    return await emsController.trigger_profile_update(req, res);
+  // 导入EMS控制器并调用其方法 (ESM 动态导入，避免循环依赖)
+  const emsModule = await import('./emsController.js');
+  return await emsModule.trigger_profile_update(req, res);
     
   } catch (error) {
     logger.error('❌ 转发至EMS控制器过程中发生错误:', error);
@@ -465,9 +465,9 @@ async function trigger_meter_reallocation(req, res) {
     
     logger.info(`🎯 针对电表 ${meter_id} 触发功率重新分配`);
     
-    // 导入EMS控制器并调用其方法
-    const emsController = require('./emsController');
-    return await emsController.trigger_meter_reallocation(req, res);
+  // 导入EMS控制器并调用其方法 (ESM 动态导入，避免循环依赖)
+  const emsModule = await import('./emsController.js');
+  return await emsModule.trigger_meter_reallocation(req, res);
     
   } catch (error) {
     logger.error('❌ 触发电表功率重新分配过程中发生错误:', error);
@@ -503,9 +503,9 @@ async function trigger_station_reallocation(req, res) {
     
     logger.info(`🎯 针对站点 ${station_id} 触发功率重新分配`);
     
-    // 导入EMS控制器并调用其方法
-    const emsController = require('./emsController');
-    return await emsController.trigger_station_reallocation(req, res);
+  // 导入EMS控制器并调用其方法 (ESM 动态导入，避免循环依赖)
+  const emsModule = await import('./emsController.js');
+  return await emsModule.trigger_station_reallocation(req, res);
     
   } catch (error) {
     logger.error('❌ 触发站点功率重新分配过程中发生错误:', error);
@@ -519,7 +519,7 @@ async function trigger_station_reallocation(req, res) {
   }
 }
 
-module.exports = {
+export {
   handleConnection,
   startRemoteCharging,
   stopRemoteCharging,

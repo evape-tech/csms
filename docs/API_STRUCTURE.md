@@ -64,8 +64,7 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 這些端點不包含版本號，主要用於系統健康檢查和基礎功能：
 
 - `GET /health` - 系統健康檢查
-- `GET /mq/health` - MQ連接健康檢查
-- `GET /system/status` - 系統狀態查詢
+ - `GET /health` - 系統健康檢查（回傳包含 MQ 狀態資訊）
 
 ### 3. OCPP Server 標準 REST API（含版本號）
 用於充電樁管理的標準化 REST API：
@@ -78,7 +77,6 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 ### 4. OCPP 專用 API（含版本號）
 用於 OCPP 協議專用功能的 API：
 
-- `GET /ocpp/api/v1/connections` - 獲取 OCPP 連接狀態
 - `POST /ocpp/api/v1/trigger_profile_update` - 觸發全站功率重新分配
 - `POST /ocpp/api/v1/trigger_meter_reallocation` - 觸發電表級功率重新分配
 - `POST /ocpp/api/v1/trigger_station_reallocation` - 觸發站點級功率重新分配
@@ -233,17 +231,11 @@ curl "http://localhost:7500/api/operation-logs?page=1&limit=50"
 # 獲取操作日誌 (含篩選)
 curl "http://localhost:7500/api/operation-logs?actionType=LOGIN&startDate=2025-09-01&endDate=2025-09-30"
 
-# 資料庫健康檢查
-curl http://localhost:7500/api/database
-
-# 測試資料庫連接
-curl -X POST http://localhost:7500/api/database \
-     -H "Content-Type: application/json" \
-     -d '{"action": "test"}'
-
-# 切換資料庫
-curl -X POST http://localhost:7500/api/database \
-     -H "Content-Type: application/json" \
+# 系統健康檢查
+```bash
+# 系統健康檢查 (回傳包含系統與 MQ 狀態資訊)
+curl http://localhost:8089/health
+```
      -d '{"action": "switch", "provider": "mysql"}'
 ```
 
@@ -254,17 +246,11 @@ curl -X POST http://localhost:7500/api/database \
 # 系統健康檢查
 curl http://localhost:8089/health
 
-# MQ 健康檢查
-curl http://localhost:8089/mq/health
-
-# 系統狀態查詢
-curl http://localhost:8089/system/status
-```
-
-### 充電樁管理
+# 系統健康檢查
 ```bash
-# 獲取在線充電樁列表
-curl http://localhost:8089/api/v1/chargepoints/online
+# 系統健康檢查（回傳包含系統與 MQ 狀態資訊）
+curl http://localhost:8089/health
+```
 
 # 遠程啟動充電
 curl -X POST http://localhost:8089/api/v1/chargepoints/CP001/remotestart \
@@ -284,9 +270,7 @@ curl -X POST http://localhost:8089/api/v1/chargepoints/CP001/reset \
 
 ### OCPP 功能
 ```bash
-# 獲取 OCPP 連接狀態
-curl http://localhost:8089/ocpp/api/v1/connections
-
+# `GET /ocpp/api/v1/connections` 已移除，請使用 `/health` 或查詢系統狀態服務。
 # 觸發全站功率重新分配
 curl -X POST http://localhost:8089/ocpp/api/v1/trigger_profile_update \
      -H "Content-Type: application/json" \

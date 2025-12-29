@@ -2,8 +2,8 @@
  * 通知服务
  * 处理系统通知和警报
  */
-const mqService = require('./mqService');
-const { EXCHANGES } = require('../mqServer');
+import * as mqService from './mqService.js';
+import { EXCHANGES } from '../mqServer.js';
 
 // 定义通知类型
 const NOTIFICATION_TYPES = {
@@ -121,11 +121,4 @@ async function handleStatus(data) {
   // 在这里添加状态通知处理逻辑
 }
 
-module.exports = {
-  NOTIFICATION_TYPES,
-  NOTIFICATION_LEVELS,
-  sendAlert,
-  sendMaintenance,
-  sendStatus,
-  handleNotification
-};
+export { NOTIFICATION_TYPES, NOTIFICATION_LEVELS, sendAlert, sendMaintenance, sendStatus, handleNotification };

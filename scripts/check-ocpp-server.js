@@ -3,8 +3,10 @@
  * 用於確認 OCPP Server 是否正確啟動並監聽正確的端口
  */
 
-const http = require('http');
-const { execSync } = require('child_process');
+import http from 'http';
+import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
 
 // 預設配置
 const OCPP_HOST = process.env.OCPP_HOST || '0.0.0.0';
@@ -231,17 +233,11 @@ async function runHealthCheck() {
 }
 
 // 如果直接執行此腳本
-if (require.main === module) {
+if (process.argv[1] === __filename) {
     runHealthCheck().catch(error => {
         console.error(`❌ 健康檢查過程中發生錯誤: ${error.message}`);
         process.exit(1);
     });
 }
 
-module.exports = {
-    runHealthCheck,
-    checkPortInUse,
-    checkNetworkConnectivity,
-    checkHealthEndpoint,
-    checkOcppApiEndpoint
-};
+export { runHealthCheck, checkPortInUse, checkNetworkConnectivity, checkHealthEndpoint, checkOcppApiEndpoint };

@@ -8,12 +8,8 @@
  * - import { InvoiceRepository } from '@/servers/repositories/invoiceRepository'
  */
 
-const chargePointRepository = require('./chargePointRepository');
-const tariffRepository = require('./tariffRepository');
-const billingRepository = require('./billingRepository'); // exports billingService instance
+import * as chargePointRepository from './chargePointRepository.js';
+import tariffRepository from './tariffRepository.js';
+import billingRepository from './billingRepository.js'; // exports billingService instance
 
-module.exports = {
-  chargePointRepository,
-  tariffRepository,
-  billingRepository // billingService 單例實例
-};
+export { chargePointRepository, tariffRepository, billingRepository };

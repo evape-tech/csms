@@ -4,9 +4,9 @@
  * 这个文件作为ocppController.js和MQ系统之间的桥梁
  * 用于在不修改原始ocppController.js的情况下添加MQ事件发布功能
  */
-const ocppEventPublisher = require('../publishers/ocppEventPublisher');
-const emsEventPublisher = require('../publishers/emsEventPublisher');
-const mqServer = require('../mqServer');
+import { ocppEventPublisher } from '../publishers/ocppEventPublisher.js';
+import { emsEventPublisher } from '../publishers/emsEventPublisher.js';
+import * as mqServer from '../mqServer.js';
 
 /**
  * 检查MQ是否可用
@@ -150,11 +150,4 @@ async function publishProfileUpdate(cpid, profileData) {
   }
 }
 
-module.exports = {
-  publishChargingStarted,
-  publishChargingStopped,
-  publishStatusChanged,
-  publishMeterValues,
-  publishGlobalReallocation,
-  publishProfileUpdate
-};
+export { publishChargingStarted, publishChargingStopped, publishStatusChanged, publishMeterValues, publishGlobalReallocation, publishProfileUpdate };

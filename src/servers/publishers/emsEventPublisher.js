@@ -2,7 +2,7 @@
  * EMS事件发布者
  * 负责发布能源管理系统相关事件到消息队列
  */
-const emsService = require('../services/emsService');
+import * as emsService from '../services/emsService.js';
 
 // 重新导出事件类型，方便使用
 const EVENT_TYPES = emsService.EVENT_TYPES;
@@ -59,9 +59,4 @@ async function publishGlobalReallocation(data) {
   return await emsService.publishGlobalReallocation(eventData);
 }
 
-module.exports = {
-  EVENT_TYPES,
-  requestAllocation,
-  publishProfileUpdate,
-  publishGlobalReallocation
-};
+export { EVENT_TYPES, requestAllocation, publishProfileUpdate, publishGlobalReallocation };

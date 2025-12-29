@@ -2,7 +2,7 @@
  * MQ基础服务封装
  * 提供消息发布和订阅的通用方法
  */
-const { getChannel, isConnected, MQ_CONFIG } = require('../mqServer');
+import { getChannel, isConnected, MQ_CONFIG } from '../mqServer.js';
 
 /**
  * 发布消息到指定交换机和路由键
@@ -220,10 +220,4 @@ async function setupDeadLetterQueue(queue, deadLetterExchange, deadLetterRouting
   }
 }
 
-module.exports = {
-  publishMessage,
-  setupConsumer,
-  bindQueue,
-  setupDeadLetterQueue,
-  getPrefetchCount
-};
+export { publishMessage, setupConsumer, bindQueue, setupDeadLetterQueue, getPrefetchCount };

@@ -3,11 +3,11 @@
  * 处理OCPP协议消息的发送和接收
  */
 
-const { logger, generateUniqueId } = require('../utils');
-const connectionService = require('./connectionService');
-const { chargePointRepository } = require('../repositories');
+import { logger, generateUniqueId } from '../utils/index.js';
+import * as connectionService from './connectionService.js';
+import { chargePointRepository } from '../repositories/index.js';
 // 移除對emsController的直接引用，打破循環依賴
-const EventEmitter = require('events');
+import EventEmitter from 'events';
 
 /**
  * 创建OCPP日志条目 - 只记录OCPP JSON消息
@@ -1095,8 +1095,9 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
     let unit, limit;
     
     try {
-      // 导入EMS分配算法
-      const { calculateEmsAllocation } = require('../../lib/emsAllocator');
+  // 导入EMS分配算法 (ESM 动态导入)
+  const emsModule = await import('../../lib/emsAllocator.js');
+  const { calculateEmsAllocation } = emsModule;
       
       // 如果指定了电表ID，只处理该电表下的充电桩
       let targetGuns, targetOnlineCpids;
@@ -1212,7 +1213,7 @@ async function sendChargingProfile(cpsn, connectorId, siteSetting) {
   }
 }
 
-module.exports = {
+export {
   handleBootNotification,
   handleStatusNotification,
   handleHeartbeat,
