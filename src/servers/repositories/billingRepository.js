@@ -309,12 +309,39 @@ class BillingRepository {
    */
   async calculateBilling(transaction, tariff) {
     try {
+      console.info(`[計費] 開始計算帳單: 交易 ${transaction.transaction_id}, CPID ${transaction.cpid}, CPSN ${transaction.cpsn}`);
+      console.debug(`[計費] 使用的費率方案: ${tariff && tariff.id ? `${tariff.id}` : 'unknown'} (${tariff && tariff.tariff_type ? tariff.tariff_type : 'unknown type'})`);
       if (!transaction.energy_consumed) {
         throw new Error('交易缺少用电量数据，无法计算账单');
       }
 
       // 使用 rateCalculator 計算費用
-      const { energyFee, appliedPrice, discountAmount, billingDetails } = calculateRateByType(transaction, tariff);
+      // 若為 TIME_OF_USE，嘗試取得場域時區 (station.time_zone)，若取不到則使用 'UTC'
+      let timeZone = undefined;
+      if (tariff && tariff.tariff_type === 'TIME_OF_USE') {
+        try {
+          const gunId = await this.getGunIdFromCpidCpsn(transaction.cpid, transaction.cpsn);
+          console.debug(`[計費] 查詢 gunId => ${gunId}`);
+          if (gunId) {
+            // 使用新的 DB helper 直接查詢該 gun 所屬的 station
+            const station = await this.databaseService.getStationByGunId(gunId);
+            if (station && station.time_zone) {
+              timeZone = station.time_zone;
+              console.debug(`[計費] 取得場域時區: ${timeZone} (station ${station.id})`);
+            } else {
+              console.debug(`[計費] 找不到場域時區於 station 或 station 為 null，gunId=${gunId}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`[計費] 取得場域時區失敗，將使用 UTC: ${err.message}`);
+        }
+        if (!timeZone) timeZone = 'UTC';
+        console.debug(`[計費] 最終使用時區: ${timeZone}`);
+      }
+
+      const { energyFee, appliedPrice, discountAmount, billingDetails } = calculateRateByType(transaction, tariff, { timeZone });
+      console.info(`[計費] 計算完成: energyFee=${energyFee}, appliedPrice=${appliedPrice}, discount=${discountAmount}`);
+      console.debug(`[計費] billingDetails: ${JSON.stringify(billingDetails)}`);
       
       // 其他費用項目
       const serviceFee = 0;

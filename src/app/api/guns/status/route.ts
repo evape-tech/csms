@@ -22,15 +22,26 @@ async function calculateRealtimeCost(transaction: any, gunId: number) {
 
     // 獲取適用的費率方案
     const chargingTime = transaction.start_time || new Date();
-    const tariff = await tariffRepository.getTariffForGun(gunId, chargingTime);
+    const tariff: any = await tariffRepository.getTariffForGun(gunId, chargingTime);
 
     if (!tariff) {
       console.warn(`⚠️ [calculateRealtimeCost] 未找到費率方案 for gun ${gunId}`);
       return null;
     }
 
-    // 使用 rateCalculator 計算費用
-    const result = calculateRateByType(transaction, tariff) as any;
+    // 若為 TIME_OF_USE，嘗試取得場域時區，找不到則使用 'UTC'
+    let timeZone: string | undefined = undefined;
+    if (tariff && (tariff as any).tariff_type === 'TIME_OF_USE') {
+      try {
+        const station = await databaseService.getStationByGunId(gunId);
+        if (station && station.time_zone) timeZone = station.time_zone;
+      } catch (err) {
+        console.warn('⚠️ [calculateRealtimeCost] 取得場域時區失敗，將使用 UTC', err);
+      }
+      if (!timeZone) timeZone = 'UTC';
+    }
+
+    const result = calculateRateByType(transaction, tariff, { timeZone }) as any;
     const { energyFee, appliedPrice, discountAmount, billingDetails } = result;
 
     return {

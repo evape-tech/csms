@@ -57,11 +57,31 @@ function calculateFixedRate(energyConsumed, tariff) {
  * @param {number} energyConsumed - 充電量 (kWh)
  * @param {Date} chargingStartTime - 充電開始時間
  * @param {object} tariff - 費率方案 {base_price, peak_hours_start, peak_hours_end, peak_hours_price, off_peak_price, weekend_price}
+ * @param {string} [timeZone='UTC'] - IANA 時區，例如 'Asia/Taipei'，若未提供預設為 'UTC'
  * @returns {object} {energyFee, appliedPrice, discountAmount, billingDetails}
  */
-function calculateTimeOfUse(energyConsumed, chargingStartTime, tariff) {
-  const chargingStartHour = chargingStartTime.getHours();
-  const chargingDay = chargingStartTime.getDay(); // 0=Sunday, 6=Saturday
+function calculateTimeOfUse(energyConsumed, chargingStartTime, tariff, timeZone = 'UTC') {
+  let chargingStartHour;
+  let chargingDay; // 0=Sunday, 6=Saturday
+
+  if (timeZone === 'UTC') {
+    chargingStartHour = new Date(chargingStartTime).getUTCHours();
+    chargingDay = new Date(chargingStartTime).getUTCDay();
+  } else {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', weekday: 'short', hour12: false }).formatToParts(new Date(chargingStartTime));
+      const hourPart = parts.find(p => p.type === 'hour');
+      const weekdayPart = parts.find(p => p.type === 'weekday');
+      chargingStartHour = hourPart ? parseInt(hourPart.value, 10) : new Date(chargingStartTime).getHours();
+      const weekdayStr = weekdayPart ? weekdayPart.value : null;
+      const mapWeekday = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      chargingDay = weekdayStr && mapWeekday[weekdayStr] !== undefined ? mapWeekday[weekdayStr] : new Date(chargingStartTime).getDay();
+    } catch (err) {
+      // fallback to UTC if Intl/timeZone parsing fails
+      chargingStartHour = new Date(chargingStartTime).getUTCHours();
+      chargingDay = new Date(chargingStartTime).getUTCDay();
+    }
+  }
   
   const peakStartHour = parseInt(tariff.peak_hours_start?.split(':')[0] || '9');
   const peakEndHour = parseInt(tariff.peak_hours_end?.split(':')[0] || '18');
@@ -256,7 +276,7 @@ function calculateCustomRate(energyConsumed, tariff) {
  * @param {object} tariff - 費率方案 {tariff_type, ...}
  * @returns {object} {energyFee, appliedPrice, discountAmount, billingDetails}
  */
-function calculateRateByType(transaction, tariff) {
+function calculateRateByType(transaction, tariff, options = {}) {
   const energyConsumed = safeParseFloat(transaction.energy_consumed);
   
   if (energyConsumed <= 0) {
@@ -268,7 +288,8 @@ function calculateRateByType(transaction, tariff) {
       return calculateFixedRate(energyConsumed, tariff);
       
     case 'TIME_OF_USE':
-      return calculateTimeOfUse(energyConsumed, transaction.start_time, tariff);
+      // options.timeZone 可為 IANA 時區字串；若未提供則預設 UTC
+      return calculateTimeOfUse(energyConsumed, transaction.start_time, tariff, options.timeZone || 'UTC');
       
     case 'PROGRESSIVE':
       return calculateProgressive(energyConsumed, tariff);
