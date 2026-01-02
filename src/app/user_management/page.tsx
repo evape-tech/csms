@@ -171,31 +171,43 @@ export default function UserManagement() {
   // 處理提交重設密碼表單
   const handleSubmitResetPassword = async (formData: FormData) => {
     try {
-      // 這裡需要實作重設密碼的API調用
       const headers = {
-        'X-API-Key': 'admin-secret-key'
+        'X-API-Key': 'admin-secret-key',
+        'Content-Type': 'application/json',
       };
       
+      const payload = {
+        userId: String(formData.get('userId') ?? ''),
+        newPassword: String(formData.get('password') ?? '')
+      };
+
+      // 詳細記錄 request
+      console.debug('[UI] POST /api/users/reset-password', { headers, payload });
+
       const response = await fetch('/api/users/reset-password', {
         method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: formData.get('userId'),
-          newPassword: formData.get('password')
-        })
+        headers,
+        body: JSON.stringify(payload)
       });
 
+      const text = await response.text().catch(() => null);
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch (e) { json = text; }
+
+      // 記錄回應內容以便排查
+      console.debug('[UI] /api/users/reset-password response', { status: response.status, body: json });
+
       if (!response.ok) {
-        throw new Error('重設密碼失敗');
+        const errMsg = (json && (json.error || json.message)) ? (json.error || json.message) : `Status ${response.status}`;
+        throw new Error(`重設密碼失敗: ${errMsg}`);
       }
 
       alert('密碼重設成功');
       handleCloseResetPasswordDialog();
     } catch (error) {
       console.error('重設密碼失敗:', error);
+      // 顯示更友善錯誤
+      alert(error instanceof Error ? error.message : '重設密碼失敗');
       throw error;
     }
   };
