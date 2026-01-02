@@ -231,16 +231,20 @@ export default function CardManagementDialog({
 
     setLoading(true);
     try {
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-
       const payload = {
         card_number: cardNumber,
         card_type: cardType,
         status: cardStatus,
         user_id: user?.uuid || user?.id
       };
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        // 若你已在 .env 設定 NEXT_PUBLIC_ADMIN_API_KEY，會自動帶入；否則可暫時使用開發用 key
+        'X-API-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin-secret-key'
+      };
+
+      console.debug('[UI] POST /api/cards', { headers, payload });
 
       let response;
       if (editingCard) {
@@ -259,15 +263,22 @@ export default function CardManagementDialog({
         });
       }
 
+      const text = await response.text().catch(() => null);
+      let json: any = null;
+      try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+      console.debug('[UI] /api/cards response', { status: response.status, body: json });
+
       if (!response.ok) {
-        throw new Error(editingCard ? '更新卡片失敗' : '新增卡片失敗');
+        const msg = (json && (json.error || json.message)) ? (json.error || json.message) : `Status ${response.status}`;
+        throw new Error(editingCard ? `更新卡片失敗: ${msg}` : `新增卡片失敗: ${msg}`);
       }
 
       setSuccess(editingCard ? '卡片更新成功' : '卡片新增成功');
       setShowAddForm(false);
       fetchUserCards();
     } catch (err: any) {
-      setError(err.message);
+      console.error('新增/更新卡片失敗:', err);
+      setError(err.message || '新增卡片失敗');
     } finally {
       setLoading(false);
     }
