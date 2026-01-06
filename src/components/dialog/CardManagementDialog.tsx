@@ -287,16 +287,20 @@ export default function CardManagementDialog({
   // 處理刪除卡片
   const handleDeleteCard = async (cardId: string) => {
     if (!confirm('確定要刪除這張卡片嗎？')) return;
-
+  
     setLoading(true);
     try {
       const response = await fetch(`/api/cards/${cardId}`, {
         method: 'DELETE',
+        headers: {
+          'X-API-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin-secret-key'
+        },
         credentials: 'include'
       });
-
-      if (!response.ok) throw new Error('刪除卡片失敗');
-
+  
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '刪除卡片失敗');
+  
       setSuccess('卡片刪除成功');
       fetchUserCards();
     } catch (err: any) {
@@ -305,6 +309,8 @@ export default function CardManagementDialog({
       setLoading(false);
     }
   };
+
+
 
   // 處理儲值
   const handleTopUp = async () => {
