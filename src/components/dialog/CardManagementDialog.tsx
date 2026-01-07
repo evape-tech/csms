@@ -535,60 +535,6 @@ export default function CardManagementDialog({
               </Button>
             </Box>
 
-            {/* 卡片列表 */}
-            {userCards.length > 0 ? (
-              <Stack spacing={2}>
-                {userCards.map((card) => (
-                  <Card key={card.id} variant="outlined">
-                    <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <CreditCardIcon color="primary" sx={{ fontSize: 28 }} />
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight={600}>
-                              {card.card_number}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              類型: {card.card_type} • 創建時間: {new Date(card.created_at).toLocaleString()}
-                            </Typography>
-                          </Box>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            label={card.status === 'ACTIVE' ? '啟用' : card.status === 'INACTIVE' ? '停用' : '未知'}
-                            color={card.status === 'ACTIVE' ? 'success' : card.status === 'INACTIVE' ? 'error' : 'default'}
-                            size="small"
-                          />
-                          <IconButton 
-                            onClick={() => handleEditCard(card)}
-                            size="small"
-                            disabled={loading}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton 
-                            onClick={() => handleDeleteCard(card.id)}
-                            size="small"
-                            color="error"
-                            disabled={loading}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            ) : (
-              <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
-                <CreditCardIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
-                <Typography variant="body1" color="text.secondary">
-                  尚未綁定任何 RFID 卡片
-                </Typography>
-              </Paper>
-            )}
-
             {/* 卡片表單 */}
             {showAddForm && (
               <Card sx={{ mt: 3, border: '2px solid', borderColor: 'primary.main' }}>
@@ -622,17 +568,22 @@ export default function CardManagementDialog({
                         </Select>
                       </FormControl>
                       
-                      <FormControl sx={{ minWidth: 150 }}>
-                        <InputLabel>狀態</InputLabel>
-                        <Select
-                          value={cardStatus}
-                          label="狀態"
-                          onChange={(e) => setCardStatus(e.target.value)}
-                        >
-                          <MenuItem value="ACTIVE">啟用</MenuItem>
-                          <MenuItem value="INACTIVE">停用</MenuItem>
-                        </Select>
-                      </FormControl>
+                      {editingCard && (
+                        <FormControl sx={{ minWidth: 150 }}>
+                          <InputLabel>狀態</InputLabel>
+                          <Select
+                            value={cardStatus}
+                            label="狀態"
+                            onChange={(e) => setCardStatus(e.target.value)}
+                          >
+                            <MenuItem value="ACTIVE">啟用</MenuItem>
+                            <MenuItem value="SUSPENDED">停用</MenuItem>
+                            <MenuItem value="LOST">遺失</MenuItem>
+                            <MenuItem value="EXPIRED">過期</MenuItem>
+                            <MenuItem value="BLOCKED">封鎖</MenuItem>
+                          </Select>
+                        </FormControl>
+                      )}
                     </Box>
                     
                     <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
@@ -655,6 +606,74 @@ export default function CardManagementDialog({
                 </CardContent>
               </Card>
             )}
+
+            {/* 卡片列表 */}
+            {userCards.length > 0 ? (
+              <Stack spacing={2}>
+                {userCards.map((card) => (
+                  <Card key={card.id} variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <CreditCardIcon color="primary" sx={{ fontSize: 28 }} />
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                              {card.card_number}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              類型: {card.card_type} • 創建時間: {new Date(card.created_at).toLocaleString()}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            label={
+                              card.status === 'ACTIVE' ? '啟用' :
+                              card.status === 'SUSPENDED' ? '停用' :
+                              card.status === 'LOST' ? '遺失' :
+                              card.status === 'EXPIRED' ? '過期' :
+                              card.status === 'BLOCKED' ? '封鎖' :
+                              '未知'
+                            }
+                            color={
+                              card.status === 'ACTIVE' ? 'success' :
+                              card.status === 'SUSPENDED' ? 'error' :
+                              card.status === 'LOST' ? 'warning' :
+                              card.status === 'EXPIRED' ? 'default' :
+                              card.status === 'BLOCKED' ? 'error' :
+                              'default'
+                            }
+                            size="small"
+                          />
+                          <IconButton 
+                            onClick={() => handleEditCard(card)}
+                            size="small"
+                            disabled={loading}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton 
+                            onClick={() => handleDeleteCard(card.id)}
+                            size="small"
+                            color="error"
+                            disabled={loading}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            ) : (
+              <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <CreditCardIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
+                <Typography variant="body1" color="text.secondary">
+                  尚未綁定任何 RFID 卡片
+                </Typography>
+              </Paper>
+            )}            
           </Stack>
         </TabPanel>
 
