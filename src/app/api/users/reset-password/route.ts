@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 嘗試 hash 密碼（開發環境若沒安裝 bcryptjs 會直接存明文）
-    let toUpdate: any = {};
+    const toUpdate: any = {};
     try {
       // 如果尚未安裝： npm install bcryptjs
       const bcrypt = require('bcryptjs');

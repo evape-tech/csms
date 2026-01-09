@@ -80,17 +80,19 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    // 先解析 params（支援 Next 傳入 Promise 的情況）
+    const resolvedParams = params instanceof Promise ? await params : params;
+
     // 檢查 API 金鑰
     const apiKey = request.headers.get('X-API-Key');
     if (apiKey !== ADMIN_SECRET_KEY) {
       return NextResponse.json({ error: '未授權的請求' }, { status: 401 });
     }
 
-    const cardId = params.id;
-
+    const cardId = resolvedParams?.id;
     if (!cardId || isNaN(Number(cardId))) {
       return NextResponse.json({ error: '無效的卡片 ID' }, { status: 400 });
     }
