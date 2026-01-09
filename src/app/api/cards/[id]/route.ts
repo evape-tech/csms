@@ -80,48 +80,43 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    // 先解析 params（支援 Next 傳入 Promise 的情況）
+    const resolvedParams = params instanceof Promise ? await params : params;
+
     // 檢查 API 金鑰
     const apiKey = request.headers.get('X-API-Key');
     if (apiKey !== ADMIN_SECRET_KEY) {
       return NextResponse.json({ error: '未授權的請求' }, { status: 401 });
     }
 
-    const { id: cardId } = await params;
-    const db = getDatabaseClient();
-
-    // 檢查卡片是否存在
-    const existingCard = await db.$queryRaw`
-      SELECT id FROM rfid_cards WHERE id = ${Number(cardId)}
-    ` as any[];
-
-    if (!Array.isArray(existingCard) || existingCard.length === 0) {
-      return NextResponse.json(
-        { error: '卡片不存在' },
-        { status: 404 }
-      );
+    const cardId = resolvedParams?.id;
+    if (!cardId || isNaN(Number(cardId))) {
+      return NextResponse.json({ error: '無效的卡片 ID' }, { status: 400 });
     }
 
-    // 軟刪除卡片（將狀態設為 DELETED）
+    const db = getDatabaseClient();
+
+    // 檢查卡片是否存在並取得資訊（用於後續記錄，若需要）
+    const existingCard = await db.$queryRaw`
+      SELECT card_number, user_id FROM rfid_cards WHERE id = ${Number(cardId)}
+    ` as any[];
+
+    if (existingCard.length === 0) {
+      return NextResponse.json({ error: '卡片不存在' }, { status: 404 });
+    }
+
+    // 執行刪除
     await db.$executeRaw`
-      UPDATE rfid_cards 
-      SET status = 'DELETED',
-          updatedAt = NOW()
-      WHERE id = ${Number(cardId)}
+      DELETE FROM rfid_cards WHERE id = ${Number(cardId)}
     `;
 
-    return NextResponse.json(
-      { message: '卡片刪除成功' },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: '卡片刪除成功' }, { status: 200 });
 
   } catch (error) {
     console.error('刪除卡片失敗:', error);
-    return NextResponse.json(
-      { error: '刪除卡片失敗' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '刪除卡片失敗' }, { status: 500 });
   }
 }

@@ -4,11 +4,92 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { NextResponse } from 'next/server';
 
 // 直接使用資料庫服務
 import DatabaseUtils from '../lib/database/utils.js';
 import { databaseService } from '../lib/database/service.js';
 import { OperationLogger } from '../lib/operationLogger';
+
+// 新增：非阻塞的欄位自增/更新 helper
+async function incrementUserFieldById(userId, field, delta = 1) {
+  try {
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+    // 若 databaseService 支援直接增量 API
+    if (databaseService && typeof databaseService.incrementUserField === 'function') {
+      await databaseService.incrementUserField(userId, field, delta);
+      return;
+    }
+    // 讀出使用者，計算後更新
+    let user = null;
+    if (databaseService && typeof databaseService.getUserById === 'function') {
+      user = await databaseService.getUserById(userId);
+    } else if (databaseService && typeof databaseService.getUser === 'function') {
+      user = await databaseService.getUser(userId);
+    }
+    const current = user && typeof user[field] !== 'undefined' ? Number(user[field]) || 0 : 0;
+    if (databaseService && typeof databaseService.updateUser === 'function') {
+      await databaseService.updateUser(userId, { [field]: current + delta });
+      return;
+    }
+    if (databaseService && typeof databaseService.update === 'function') {
+      // fallback generic update
+      await databaseService.update('users', userId, { [field]: current + delta });
+      return;
+    }
+    // 最後 fallback：呼叫內部 API（非同步、不阻塞）
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/users/${userId}/increment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, delta })
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('[authActions] incrementUserFieldById failed', err);
+  }
+}
+
+async function incrementFailedLoginByEmail(email) {
+  try {
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+    const user = (databaseService && typeof databaseService.getUserByEmail === 'function')
+      ? await databaseService.getUserByEmail(email)
+      : null;
+    if (user && user.id) {
+      await incrementUserFieldById(user.id, 'failed_login_attempts', 1);
+    }
+  } catch (err) {
+    console.warn('[authActions] incrementFailedLoginByEmail failed', err);
+  }
+}
+
+async function updateLastLogin(userId) {
+  try {
+    await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+    // 優先使用 databaseService 明確的更新方法
+    if (databaseService && typeof (databaseService).updateUser === 'function') {
+      await (databaseService).updateUser(userId, { last_login_at: new Date() });
+      return;
+    }
+    // 如果有其他命名，例如 update 或 patchUser
+    if (databaseService && typeof (databaseService).update === 'function') {
+      await (databaseService).update('users', userId, { last_login_at: new Date() });
+      return;
+    }
+
+    // fallback: 若使用 Prisma（範例）
+    // import prisma from '@/lib/prisma';
+    // await prisma.user.update({ where: { id: Number(userId) }, data: { last_login_at: new Date() } });
+
+    // fallback: 用內部 API 更新（若無 server-side DB helper）
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/users/${userId}/last_login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ last_login_at: new Date().toISOString() }),
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('[authActions] updateLastLogin failed', err);
+  }
+}
 
 export async function loginAction(formData) {
   try {
@@ -39,6 +120,9 @@ export async function loginAction(formData) {
       } catch (logError) {
         console.error('登入失敗日誌記錄失敗:', logError);
       }
+
+      // 增加失敗次數（非阻塞）
+      incrementFailedLoginByEmail(email).catch(() => {});
       
       return {
         success: false,
@@ -48,14 +132,10 @@ export async function loginAction(formData) {
 
     // 驗證密碼
     let isValidPassword = false;
-    
     if (typeof user.password === 'string') {
-      // 檢查是否為加密密碼
       if (user.password.startsWith('$2')) {
-        // 加密密碼 - 使用 bcrypt 比較
         isValidPassword = await bcrypt.compare(password, user.password);
       } else {
-        // 明文密碼 - 直接比較
         isValidPassword = password === user.password;
       }
     } else {
@@ -69,6 +149,9 @@ export async function loginAction(formData) {
       } catch (logError) {
         console.error('登入失敗日誌記錄失敗:', logError);
       }
+
+      // 增加失敗次數（非阻塞）
+      incrementUserFieldById(user.id, 'failed_login_attempts', 1).catch(() => {});
       
       return {
         success: false,
@@ -106,7 +189,12 @@ export async function loginAction(formData) {
       await OperationLogger.logAuthOperation('LOGIN', user.email, true, `管理員登入成功`);
     } catch (logError) {
       console.error('登入日誌記錄失敗:', logError);
-      // 不要因為日誌失敗而影響登入流程
+    }
+
+    // 在這裡更新最後登入時間與登入次數（非阻塞）
+    if (user && user.id) {
+      updateLastLogin(user.id).catch(() => {});
+      incrementUserFieldById(user.id, 'login_count', 1).catch(() => {});
     }
 
     // 成功後重定向

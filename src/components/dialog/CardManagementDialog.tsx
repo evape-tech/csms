@@ -231,16 +231,20 @@ export default function CardManagementDialog({
 
     setLoading(true);
     try {
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-
       const payload = {
         card_number: cardNumber,
         card_type: cardType,
         status: cardStatus,
         user_id: user?.uuid || user?.id
       };
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        // 若你已在 .env 設定 NEXT_PUBLIC_ADMIN_API_KEY，會自動帶入；否則可暫時使用開發用 key
+        'X-API-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin-secret-key'
+      };
+
+      console.debug('[UI] POST /api/cards', { headers, payload });
 
       let response;
       if (editingCard) {
@@ -259,15 +263,22 @@ export default function CardManagementDialog({
         });
       }
 
+      const text = await response.text().catch(() => null);
+      let json: any = null;
+      try { json = text ? JSON.parse(text) : null; } catch { json = text; }
+      console.debug('[UI] /api/cards response', { status: response.status, body: json });
+
       if (!response.ok) {
-        throw new Error(editingCard ? '更新卡片失敗' : '新增卡片失敗');
+        const msg = (json && (json.error || json.message)) ? (json.error || json.message) : `Status ${response.status}`;
+        throw new Error(editingCard ? `更新卡片失敗: ${msg}` : `新增卡片失敗: ${msg}`);
       }
 
       setSuccess(editingCard ? '卡片更新成功' : '卡片新增成功');
       setShowAddForm(false);
       fetchUserCards();
     } catch (err: any) {
-      setError(err.message);
+      console.error('新增/更新卡片失敗:', err);
+      setError(err.message || '新增卡片失敗');
     } finally {
       setLoading(false);
     }
@@ -276,16 +287,20 @@ export default function CardManagementDialog({
   // 處理刪除卡片
   const handleDeleteCard = async (cardId: string) => {
     if (!confirm('確定要刪除這張卡片嗎？')) return;
-
+  
     setLoading(true);
     try {
       const response = await fetch(`/api/cards/${cardId}`, {
         method: 'DELETE',
+        headers: {
+          'X-API-Key': process.env.NEXT_PUBLIC_ADMIN_API_KEY || 'admin-secret-key'
+        },
         credentials: 'include'
       });
-
-      if (!response.ok) throw new Error('刪除卡片失敗');
-
+  
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '刪除卡片失敗');
+  
       setSuccess('卡片刪除成功');
       fetchUserCards();
     } catch (err: any) {
@@ -294,6 +309,8 @@ export default function CardManagementDialog({
       setLoading(false);
     }
   };
+
+
 
   // 處理儲值
   const handleTopUp = async () => {
@@ -518,60 +535,6 @@ export default function CardManagementDialog({
               </Button>
             </Box>
 
-            {/* 卡片列表 */}
-            {userCards.length > 0 ? (
-              <Stack spacing={2}>
-                {userCards.map((card) => (
-                  <Card key={card.id} variant="outlined">
-                    <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <CreditCardIcon color="primary" sx={{ fontSize: 28 }} />
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight={600}>
-                              {card.card_number}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              類型: {card.card_type} • 創建時間: {new Date(card.created_at).toLocaleString()}
-                            </Typography>
-                          </Box>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            label={card.status === 'ACTIVE' ? '啟用' : card.status === 'INACTIVE' ? '停用' : '未知'}
-                            color={card.status === 'ACTIVE' ? 'success' : card.status === 'INACTIVE' ? 'error' : 'default'}
-                            size="small"
-                          />
-                          <IconButton 
-                            onClick={() => handleEditCard(card)}
-                            size="small"
-                            disabled={loading}
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton 
-                            onClick={() => handleDeleteCard(card.id)}
-                            size="small"
-                            color="error"
-                            disabled={loading}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            ) : (
-              <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
-                <CreditCardIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
-                <Typography variant="body1" color="text.secondary">
-                  尚未綁定任何 RFID 卡片
-                </Typography>
-              </Paper>
-            )}
-
             {/* 卡片表單 */}
             {showAddForm && (
               <Card sx={{ mt: 3, border: '2px solid', borderColor: 'primary.main' }}>
@@ -605,17 +568,22 @@ export default function CardManagementDialog({
                         </Select>
                       </FormControl>
                       
-                      <FormControl sx={{ minWidth: 150 }}>
-                        <InputLabel>狀態</InputLabel>
-                        <Select
-                          value={cardStatus}
-                          label="狀態"
-                          onChange={(e) => setCardStatus(e.target.value)}
-                        >
-                          <MenuItem value="ACTIVE">啟用</MenuItem>
-                          <MenuItem value="INACTIVE">停用</MenuItem>
-                        </Select>
-                      </FormControl>
+                      {editingCard && (
+                        <FormControl sx={{ minWidth: 150 }}>
+                          <InputLabel>狀態</InputLabel>
+                          <Select
+                            value={cardStatus}
+                            label="狀態"
+                            onChange={(e) => setCardStatus(e.target.value)}
+                          >
+                            <MenuItem value="ACTIVE">啟用</MenuItem>
+                            <MenuItem value="SUSPENDED">停用</MenuItem>
+                            <MenuItem value="LOST">遺失</MenuItem>
+                            <MenuItem value="EXPIRED">過期</MenuItem>
+                            <MenuItem value="BLOCKED">封鎖</MenuItem>
+                          </Select>
+                        </FormControl>
+                      )}
                     </Box>
                     
                     <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
@@ -638,6 +606,74 @@ export default function CardManagementDialog({
                 </CardContent>
               </Card>
             )}
+
+            {/* 卡片列表 */}
+            {userCards.length > 0 ? (
+              <Stack spacing={2}>
+                {userCards.map((card) => (
+                  <Card key={card.id} variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <CreditCardIcon color="primary" sx={{ fontSize: 28 }} />
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                              {card.card_number}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              類型: {card.card_type} • 創建時間: {new Date(card.created_at).toLocaleString()}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            label={
+                              card.status === 'ACTIVE' ? '啟用' :
+                              card.status === 'SUSPENDED' ? '停用' :
+                              card.status === 'LOST' ? '遺失' :
+                              card.status === 'EXPIRED' ? '過期' :
+                              card.status === 'BLOCKED' ? '封鎖' :
+                              '未知'
+                            }
+                            color={
+                              card.status === 'ACTIVE' ? 'success' :
+                              card.status === 'SUSPENDED' ? 'error' :
+                              card.status === 'LOST' ? 'warning' :
+                              card.status === 'EXPIRED' ? 'default' :
+                              card.status === 'BLOCKED' ? 'error' :
+                              'default'
+                            }
+                            size="small"
+                          />
+                          <IconButton 
+                            onClick={() => handleEditCard(card)}
+                            size="small"
+                            disabled={loading}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton 
+                            onClick={() => handleDeleteCard(card.id)}
+                            size="small"
+                            color="error"
+                            disabled={loading}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            ) : (
+              <Paper sx={{ p: 4, textAlign: 'center', bgcolor: 'grey.50' }}>
+                <CreditCardIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
+                <Typography variant="body1" color="text.secondary">
+                  尚未綁定任何 RFID 卡片
+                </Typography>
+              </Paper>
+            )}            
           </Stack>
         </TabPanel>
 

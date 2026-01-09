@@ -14,7 +14,6 @@
 
 import { databaseService } from '../../lib/database/service.js';
 import { calculateRateByType } from '../../lib/rateCalculator.js';
-import { logger } from '../utils/index.js';
 
 /**
  * 计费服务类
@@ -55,7 +54,7 @@ class BillingRepository {
       if (!transaction) {
         const error = `交易 ${transactionId} 不存在`;
         if (autoMode) {
-          logger.warn(`[自动计费] ${error}`);
+          console.warn(`[自动计费] ${error}`);
           return null;
         }
         throw new Error(error);
@@ -65,7 +64,7 @@ class BillingRepository {
       if (!['COMPLETED', 'STOPPED', 'ERROR'].includes(transaction.status)) {
         const error = `交易 ${transactionId} 状态为 ${transaction.status}，无法生成账单`;
         if (autoMode) {
-          logger.debug(`[自动计费] ${error}`);
+          console.debug(`[自动计费] ${error}`);
           return null;
         }
         throw new Error(error);
@@ -78,7 +77,7 @@ class BillingRepository {
 
       if (existingBillings.length > 0) {
         if (autoMode) {
-          logger.debug(`[自动计费] 交易 ${transactionId} 已存在账单记录，跳过生成`);
+          console.debug(`[自动计费] 交易 ${transactionId} 已存在账单记录，跳过生成`);
         }
         return existingBillings[0];
       }
@@ -86,7 +85,7 @@ class BillingRepository {
       // 检查充电量（只在自动模式下进行此检查）
       if (autoMode && !skipValidation) {
         if (!transaction.energy_consumed || parseFloat(transaction.energy_consumed) <= 0) {
-          logger.warn(`[自动计费] 交易 ${transactionId} 没有有效的充电量，不生成账单`);
+          console.warn(`[自动计费] 交易 ${transactionId} 没有有效的充电量，不生成账单`);
           return null;
         }
       }
@@ -101,7 +100,7 @@ class BillingRepository {
         if (!tariff) {
           const error = `费率方案 ID ${tariffId} 不存在`;
           if (autoMode) {
-            logger.error(`[自动计费] ${error}`);
+            console.error(`[自动计费] ${error}`);
             return null;
           }
           throw new Error(error);
@@ -136,7 +135,7 @@ class BillingRepository {
         
         // 步驟3: 若仍未找到（理論上getTariffForGun最後會返回默認費率），額外安全檢查
         if (!tariff) {
-          logger.warn(`[計費] 交易 ${transactionId} 的充電槍 ${gunId} 未找到綁定費率，使用預設費率`);
+          console.warn(`[計費] 交易 ${transactionId} 的充電槍 ${gunId} 未找到綁定費率，使用預設費率`);
           const isAC = transaction.cpid.includes('AC') || (await this.getChargerType(transaction.cpid, transaction.cpsn)) === 'AC';
           tariff = await (await this.getTariffRepository()).getDefaultTariff({ isAC, isDC: !isAC });
         }
@@ -146,7 +145,7 @@ class BillingRepository {
       if (!tariff) {
         const error = '未找到合适的费率方案';
         if (autoMode) {
-          logger.error(`[自动计费] 交易 ${transactionId}: ${error}`);
+          console.error(`[自动计费] 交易 ${transactionId}: ${error}`);
           return null;
         }
         throw new Error(error);
@@ -290,7 +289,7 @@ class BillingRepository {
       
       return guns.length > 0 ? (guns[0].acdc || 'AC') : 'AC'; // 默认为AC
     } catch (error) {
-      logger.error(`获取充电桩类型失败: ${error.message}`);
+      console.error(`获取充电桩类型失败: ${error.message}`);
       return 'AC'; // 出错时默认为AC
     }
   }
@@ -310,7 +309,7 @@ class BillingRepository {
       
       return guns.length > 0 ? guns[0].id : null;
     } catch (error) {
-      logger.error(`获取枪ID失败: ${error.message}`);
+      console.error(`获取枪ID失败: ${error.message}`);
       return null;
     }
   }

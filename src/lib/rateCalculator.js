@@ -21,9 +21,6 @@ function safeParseFloat(value, defaultValue = 0) {
   return isNaN(parsed) ? defaultValue : parsed;
 }
 
-// 使用專案 logger（位於 servers utils）以保持日誌一致性
-import { logger } from '../servers/utils/index.js';
-
 /**
  * 計算固定費率 (FIXED_RATE)
  * 公式: 總金額 = 充電量 × 固定單價
@@ -70,7 +67,6 @@ function calculateTimeOfUse(energyConsumed, chargingStartTime, tariff, timeZone 
   if (timeZone === 'UTC') {
     chargingStartHour = new Date(chargingStartTime).getUTCHours();
     chargingDay = new Date(chargingStartTime).getUTCDay();
-    logger.debug(`[rateCalculator] TIME_OF_USE using UTC - start=${new Date(chargingStartTime).toISOString()}, hour=${chargingStartHour}, day=${chargingDay}`);
   } else {
     try {
       const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', weekday: 'short', hour12: false }).formatToParts(new Date(chargingStartTime));
@@ -80,12 +76,10 @@ function calculateTimeOfUse(energyConsumed, chargingStartTime, tariff, timeZone 
       const weekdayStr = weekdayPart ? weekdayPart.value : null;
       const mapWeekday = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
       chargingDay = weekdayStr && mapWeekday[weekdayStr] !== undefined ? mapWeekday[weekdayStr] : new Date(chargingStartTime).getDay();
-      logger.debug(`[rateCalculator] TIME_OF_USE using timeZone=${timeZone} - start=${new Date(chargingStartTime).toISOString()}, parsedHour=${chargingStartHour}, parsedWeekday=${weekdayStr}(${chargingDay})`);
     } catch (err) {
       // fallback to UTC if Intl/timeZone parsing fails
       chargingStartHour = new Date(chargingStartTime).getUTCHours();
       chargingDay = new Date(chargingStartTime).getUTCDay();
-      logger.warn(`[rateCalculator] 時區解析失敗(timeZone="${timeZone}"): ${err.message}. 已退回使用 UTC(hour=${chargingStartHour}, day=${chargingDay})`);
     }
   }
   
