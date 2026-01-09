@@ -7,7 +7,7 @@ let initialized = false;
 async function initialize() {
   if (initialized) return prisma;
   try {
-    console.log('� [DB] Connecting to MySQL...');
+    console.log('✅ [DB] Connecting to MySQL...');
     await prisma.$connect();
     // quick health check
     await prisma.$queryRaw`SELECT 1 as test`;

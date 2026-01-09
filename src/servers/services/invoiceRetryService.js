@@ -1,5 +1,19 @@
+import cron from 'node-cron';
 import { logger } from '../utils/index.js';
 import { InvoiceRepository } from '../repositories/invoiceRepository.js';
+
+// 默認設定
+// 每日執行一次（午夜 00:00）
+const DEFAULT_CRON_EXPRESSION = '0 0 * * *'; // 每日 00:00
+const DEFAULT_RETRY_AFTER_MINUTES = 10;
+const DEFAULT_MAX_RETRY_COUNT = 5;
+const DEFAULT_BATCH_SIZE = 10;
+const DEFAULT_INVOICE_CONFIG = {
+  cronExpression: DEFAULT_CRON_EXPRESSION,
+  retryAfterMinutes: DEFAULT_RETRY_AFTER_MINUTES,
+  maxRetryCount: DEFAULT_MAX_RETRY_COUNT,
+  batchSize: DEFAULT_BATCH_SIZE
+};
 
 // 只在 PAYMENT_PROVIDER=tappay 時啟動發票重試流程
 const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || '').toLowerCase();
@@ -15,21 +29,11 @@ async function getDatabaseService() {
 }
 
 class InvoiceRetryService {
-  constructor() {
-    this.isRunning = false;
-    this.intervalId = null;
-    this.config = {
-      checkIntervalMinutes: 360,      // 檢查間隔：6小時 (6 * 60)
-      retryAfterMinutes: 10,         // 創建後多久才重試：10分鐘
-      maxRetryCount: 5,              // 最大重試次數
-      batchSize: 10                  // 每次批次處理數量
-    };
-    // 初始化時判斷是否啟用（僅在 PAYMENT_PROVIDER=tappay 時啟用）
-    this.enabled = (PAYMENT_PROVIDER === 'tappay');
-    if (!this.enabled) {
-      logger.info(`[發票重試監控] 服務已在初始化時停用 (PAYMENT_PROVIDER='${PAYMENT_PROVIDER}'), 僅在 'tappay' 時啟用`);
-    }
-  }
+  // 初始狀態以常數為準
+  isRunning = false;
+  scheduler = null; // cron scheduler instance
+  config = { ...DEFAULT_INVOICE_CONFIG };
+  enabled = (PAYMENT_PROVIDER === 'tappay');
 
   /**
    * 啟動發票重試監控服務
@@ -46,15 +50,22 @@ class InvoiceRetryService {
       return;
     }
 
-    // 合併配置
+    // 合併配置（允許以 options 覆寫 cronExpression）
     this.config = { ...this.config, ...options };
-    
-    logger.info(`[發票重試監控] 啟動服務 - 檢查間隔: ${this.config.checkIntervalMinutes}分鐘, 重試延遲: ${this.config.retryAfterMinutes}分鐘`);
 
-    // 設置定期檢查
-    this.intervalId = setInterval(() => {
-      this.performCheck();
-    }, this.config.checkIntervalMinutes * 60 * 1000);
+    logger.info(`[發票重試監控] 啟動服務 - cron: ${this.config.cronExpression}, 重試延遲: ${this.config.retryAfterMinutes}分鐘`);
+
+    // 使用 cron 排程（不再使用 interval fallback）
+    try {
+      if (this.scheduler) {
+        this.scheduler.stop();
+      }
+      this.scheduler = cron.schedule(this.config.cronExpression, () => this.performCheck(), { scheduled: true });
+      logger.info(`[發票重試監控] 已排程 (cron): ${this.config.cronExpression}`);
+    } catch (err) {
+      logger.error('[發票重試監控] 建立 cron 排程失敗，服務未啟動', err);
+      return;
+    }
 
     this.isRunning = true;
   }
@@ -68,9 +79,14 @@ class InvoiceRetryService {
       return;
     }
 
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    // 停止 cron 排程
+    if (this.scheduler) {
+      try {
+        this.scheduler.stop();
+      } catch (err) {
+        logger.error('[發票重試監控] 停止 cron 排程時發生錯誤', err);
+      }
+      this.scheduler = null;
     }
 
     this.isRunning = false;
@@ -336,9 +352,9 @@ class InvoiceRetryService {
     return {
       isRunning: this.isRunning,
       config: this.config,
-      nextCheckIn: this.isRunning ? 
-        `${this.config.checkIntervalMinutes} 分鐘` : 
-        '服務未運行'
+      scheduler: this.scheduler ? 'cron' : 'stopped',
+      cronExpression: this.config.cronExpression || null,
+      nextCheckIn: this.isRunning ? `cron: ${this.config.cronExpression}` : '服務未運行'
     };
   }
 
@@ -355,9 +371,9 @@ class InvoiceRetryService {
       new: this.config 
     });
 
-    // 如果服務正在運行且檢查間隔改變，重啟服務
-    if (this.isRunning && oldConfig.checkIntervalMinutes !== this.config.checkIntervalMinutes) {
-      logger.info('[發票重試監控] 檢查間隔已改變，重啟服務');
+    // 如果服務正在運行且 cronExpression 改變，重啟服務
+    if (this.isRunning && oldConfig.cronExpression !== this.config.cronExpression) {
+      logger.info('[發票重試監控] 排程配置已改變，重啟服務');
       this.stop();
       this.start();
     }

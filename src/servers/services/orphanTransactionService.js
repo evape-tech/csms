@@ -3,19 +3,26 @@
  * 負責監控和處理因斷電、網路中斷等原因產生的孤兒交易
  */
 
+import cron from 'node-cron';
 import { logger } from '../utils/index.js';
 import { chargePointRepository } from '../repositories/index.js';
 
+// 默認設定
+// 每 12 小時執行一次（00:00、12:00）
+const DEFAULT_CRON_EXPRESSION = '0 */12 * * *'; // 每 12 小時
+const DEFAULT_TRANSACTION_TIMEOUT_MINUTES = 30;
+const DEFAULT_METER_UPDATE_TIMEOUT_MINUTES = 15;
+const DEFAULT_ORPHAN_CONFIG = {
+  cronExpression: DEFAULT_CRON_EXPRESSION,
+  transactionTimeoutMinutes: DEFAULT_TRANSACTION_TIMEOUT_MINUTES,
+  meterUpdateTimeoutMinutes: DEFAULT_METER_UPDATE_TIMEOUT_MINUTES
+};
+
 class OrphanTransactionService {
-  constructor() {
-    this.isRunning = false;
-    this.intervalId = null;
-    this.config = {
-      checkIntervalMinutes: 10,      // 檢查間隔：10分鐘
-      transactionTimeoutMinutes: 30, // 交易超時：30分鐘
-      meterUpdateTimeoutMinutes: 15  // 電表更新超時：15分鐘
-    };
-  }
+  // 初始狀態以常數為準
+  isRunning = false;
+  scheduler = null;
+  config = { ...DEFAULT_ORPHAN_CONFIG };
 
   /**
    * 啟動孤兒交易監控服務
@@ -27,18 +34,25 @@ class OrphanTransactionService {
       return;
     }
 
-    // 合併配置
+    // 合併配置（允許動態覆寫 cronExpression）
     this.config = { ...this.config, ...options };
-    
-    logger.info(`[孤兒交易監控] 啟動服務 - 檢查間隔: ${this.config.checkIntervalMinutes}分鐘, 交易超時: ${this.config.transactionTimeoutMinutes}分鐘`);
+
+    logger.info(`[孤兒交易監控] 啟動服務 - cron: ${this.config.cronExpression}, 交易超時: ${this.config.transactionTimeoutMinutes}分鐘`);
 
     // 立即執行一次檢查
     this.performCheck();
 
-    // 設置定期檢查
-    this.intervalId = setInterval(() => {
-      this.performCheck();
-    }, this.config.checkIntervalMinutes * 60 * 1000);
+    // 使用 cron 排程（不再使用 interval）
+    try {
+      if (this.scheduler) {
+        this.scheduler.stop();
+      }
+      this.scheduler = cron.schedule(this.config.cronExpression, () => this.performCheck(), { scheduled: true });
+      logger.info(`[孤兒交易監控] 已排程 (cron): ${this.config.cronExpression}`);
+    } catch (err) {
+      logger.error('[孤兒交易監控] 建立 cron 排程失敗，服務未啟動', err);
+      return;
+    }
 
     this.isRunning = true;
   }
@@ -51,10 +65,14 @@ class OrphanTransactionService {
       logger.warn('[孤兒交易監控] 服務未在運行');
       return;
     }
-
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    // 停止 cron 排程
+    if (this.scheduler) {
+      try {
+        this.scheduler.stop();
+      } catch (err) {
+        logger.error('[孤兒交易監控] 停止 cron 排程時發生錯誤', err);
+      }
+      this.scheduler = null;
     }
 
     this.isRunning = false;
@@ -110,9 +128,9 @@ class OrphanTransactionService {
     return {
       isRunning: this.isRunning,
       config: this.config,
-      nextCheckIn: this.isRunning ? 
-        `${this.config.checkIntervalMinutes} 分鐘` : 
-        '服務未運行'
+      scheduler: this.scheduler ? 'cron' : 'stopped',
+      cronExpression: this.config.cronExpression || null,
+      nextCheckIn: this.isRunning ? `cron: ${this.config.cronExpression}` : '服務未運行'
     };
   }
 
@@ -129,9 +147,9 @@ class OrphanTransactionService {
       new: this.config 
     });
 
-    // 如果服務正在運行且檢查間隔改變，重啟服務
-    if (this.isRunning && oldConfig.checkIntervalMinutes !== this.config.checkIntervalMinutes) {
-      logger.info('[孤兒交易監控] 檢查間隔已改變，重啟服務');
+    // 如果服務正在運行且 cronExpression 改變，重啟服務
+    if (this.isRunning && oldConfig.cronExpression !== this.config.cronExpression) {
+      logger.info('[孤兒交易監控] 排程配置已改變，重啟服務');
       this.stop();
       this.start();
     }

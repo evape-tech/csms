@@ -454,11 +454,8 @@ async function initializeServices() {
   // 啟動孤兒交易監控服務
   try {
     if (!orphanTransactionService.isRunning) {
-      orphanTransactionService.start({
-        checkIntervalMinutes: 10,      // 每10分鐘檢查一次
-        transactionTimeoutMinutes: 10, // 10分鐘超時
-        meterUpdateTimeoutMinutes: 10  // 10分鐘電表更新超時
-      });
+      // 使用服務內部常數設定，不從外部傳入排程或超時參數
+      orphanTransactionService.start();
       logger.info('🔍 孤兒交易監控服務已啟動');
     } else {
       logger.debug('🔍 孤兒交易監控服務已在運行，跳過重複啟動');
@@ -470,7 +467,7 @@ async function initializeServices() {
   // 啟動發票重試監控服務
   try {
     if (!invoiceRetryService.isRunning) {
-        // 使用 InvoiceRetryService 的預設配置啟動（預設：checkIntervalMinutes=360，retryAfterMinutes=10）
+        // 使用 InvoiceRetryService 的預設配置啟動（預設：每 6 小時）
         invoiceRetryService.start();
       logger.info('📄 發票重試監控服務已啟動');
     } else {
