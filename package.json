@@ -1,25 +1,29 @@
 {
-  "name": "csms-nextjs",
+  "name": "csms-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "ocpp-core"
+  ],
   "scripts": {
     "dev": "next dev --turbo",
+    "dev:all": "concurrently \"npm run dev\" \"npm run ocpp:dev\"",
     "build": "cross-env NODE_ENV=production next build --turbopack",
+    "build:all": "npm run ocpp:build && npm run build",
     "start": "cross-env NODE_ENV=production next start",
-    "start:prod": "concurrently \"npm:start\" \"npm:start:ocpp:prod\"",
+    "start:prod": "npm run start",
     "lint": "eslint",
-    "start:ocpp": "node src/servers/ocppServer.js",
-    "start:ocpp:prod": "cross-env NODE_ENV=production node src/servers/ocppServer.js",
-    "dev:ocpp": "nodemon --watch src/servers src/servers/ocppServer.js",
-    "dev:all": "concurrently \"npm:dev\" \"npm:dev:ocpp\"",
-    "check:ocpp": "node scripts/check-ocpp-server.js",
-    "test:ocpp-api": "node scripts/test-ocpp-api.js",
     "db:generate": "npx prisma generate --schema=prisma/schema.prisma",
     "db:migrate:mysql": "npx prisma migrate dev --schema=prisma/schema.prisma",
     "db:push:mysql": "npx prisma db push --schema=prisma/schema.prisma",
-    "db:pull:mysql": "npx prisma db pull --schema=prisma/schema.prisma"
+    "db:pull:mysql": "npx prisma db pull --schema=prisma/schema.prisma",
+    "ocpp:dev": "npm -w ocpp-core run dev",
+    "ocpp:build": "npm -w ocpp-core run build",
+    "ocpp:test": "npm -w ocpp-core run test",
+    "ocpp:start": "npm -w ocpp-core run start:prod"
   },
+  
   "dependencies": {
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "^11.14.0",

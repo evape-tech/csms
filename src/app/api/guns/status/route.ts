@@ -23,15 +23,8 @@ async function calculateRealtimeCost(transaction: any, gunId: number) {
 
     // 獲取適用的費率方案
     const chargingTime = transaction.start_time || new Date();
-    // 先嘗試取得場域時區，傳入 getTariffForGun 以便正確判斷季節
-    let tariffTimeZone: string | undefined = undefined;
-    try {
-      const station: any = await databaseService.getStationByGunId(gunId);
-      if (station && (station as any).time_zone) tariffTimeZone = (station as any).time_zone;
-    } catch (err: any) {
-      logger.warn(`⚠️ [calculateRealtimeCost] 取得場域時區(選tariff)失敗，將使用預設: ${err?.message ?? String(err)}`);
-    }
-    const tariff: any = await tariffRepository.getTariffForGun(gunId, chargingTime, { timeZone: tariffTimeZone });
+    // getTariffForGun 只接受 gunId 和 chargingTime，無額外參數選項
+    const tariff: any = await tariffRepository.getTariffForGun(gunId, chargingTime);
 
     if (!tariff) {
       console.warn(`⚠️ [calculateRealtimeCost] 未找到費率方案 for gun ${gunId}`);

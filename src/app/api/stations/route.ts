@@ -3,43 +3,28 @@ import { revalidatePath } from 'next/cache';
 // 使用統一的 database service
 import DatabaseUtils from '../../../lib/database/utils.js';
 import { databaseService } from '../../../lib/database/service.js';
+import { triggerRebalance } from '../../../lib/ocppCoreClient';
 
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
-
-// notify configuration for ocpp server (used to inform ocpp service after DB changes)
-const OCPP_BASE_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
-const OCPP_API_KEY = process.env.OCPP_API_KEY || '';
 
 async function notifyOcpp(payload: Record<string, unknown>) {
   console.log('[notifyOcpp] incoming payload:', JSON.stringify(payload));
 
   try {
-    // 使用新的API端點触发全站功率重新分配
-    const triggerPayload = {
-      source: (payload?.action as string) || 'site_setting_changed',
-      timestamp: new Date().toISOString(),
-      userAgent: 'NextJS-API-Route',
-      clientIP: 'server'
-    };
+    const stationId = (payload?.data as any)?.station_id;
+    const meterId = (payload?.data as any)?.meter_id;
 
-    console.log('[notifyOcpp] triggering profile update with payload:', JSON.stringify(triggerPayload));
+    console.log('[notifyOcpp] triggering ocpp-core rebalance', { stationId, meterId });
 
-    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/v1/trigger_profile_update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(triggerPayload),
+    const result = await triggerRebalance({
+      stationId,
+      meterId,
+      triggerEvent: (payload?.action as string) || 'site_setting_changed',
+      eventDetails: payload?.data as Record<string, unknown>,
     });
 
-    const result = await response.json();
-    
-    if (response.ok) {
-      console.log('[notifyOcpp] ✅ Profile update triggered successfully:', result);
-      console.log(`[notifyOcpp] 📊 Summary: ${result.onlineStations || 0} online stations, ${result.scheduledUpdates || 0} updates scheduled`);
-    } else {
-      console.error('[notifyOcpp] ❌ Profile update failed:', result);
-    }
-
+    console.log('[notifyOcpp] ✅ ocpp-core rebalance triggered:', result);
   } catch (err) {
     console.error('[notifyOcpp] error:', err);
   }

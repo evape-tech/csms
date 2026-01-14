@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import DatabaseUtils from '../../../../lib/database/utils.js';
 import { databaseService } from '../../../../lib/database/service.js';
+import { remoteStart, remoteStop } from '../../../../lib/ocppCoreClient';
 
 export const dynamic = 'force-dynamic';
-
-// 使用新的 OCPP API 端點
-const OCPP_BASE_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
-const OCPP_API_KEY = process.env.OCPP_API_KEY || 'cp_api_key16888';
 
 /**
  * OCPP 命令 API (無需 [id] 參數)
@@ -111,39 +108,43 @@ export async function POST(request: NextRequest) {
     
     console.log(`✅ [API /api/guns/ocpp] Found gun: ${gun.cpsn}`);
     
-    // 根據命令類型決定使用哪個 API 端點
-    let apiEndpoint: string;
-    let requestBody: Record<string, unknown>;
-    let httpMethod: string;
+    const connectorId = Number(body.connectorId) || 1;
+    const idTag = body.user_uuid || body.user_id_tag || body.idTag || gun.cpsn;
+    const transactionId = body.transactionId || gun.transactionid || gun.transactionId;
+
+    // 根據命令類型決定呼叫 ocpp-core 的 API
+    let upstreamResult: unknown;
+    let commandExecuted: 'remote-start' | 'remote-stop';
     
     switch (cmd) {
       case 'cmd_start_charging':
-        // 使用新的遠程啟動 API
-        apiEndpoint = `${OCPP_BASE_URL}/api/v1/chargepoints/${gun.cpsn}/remotestart`;
-        httpMethod = 'POST';
-        requestBody = {
-            //   注意事項：
-        //   目前使用webapp端是 uuid來判別使用者，之前使用rfid來判斷是因為充電樁會有一個逼卡的動作，現在應該是不需要了
-        //   idTag: body.user_id_tag,
-        //   userUuid: body.user_uuid
-          connectorId: body.connectorId || 1,
-          idTag: body.user_uuid,
-          userUuid: body.user_uuid
-        
-        };
         console.log(`🚀 [API /api/guns/ocpp] Starting charge for ${gun.cpsn}`);
+        upstreamResult = await remoteStart({
+          cpsn: gun.cpsn,
+          connectorId,
+          idTag,
+          chargingProfile: body.chargingProfile,
+        });
+        commandExecuted = 'remote-start';
         break;
         
       case 'cmd_stop_charging':
-        // 使用新的遠程停止 API
-        apiEndpoint = `${OCPP_BASE_URL}/api/v1/chargepoints/${gun.cpsn}/remotestop`;
-        httpMethod = 'POST';
-        requestBody = {
-          connectorId: body.connectorId || 1,
-          transactionId: body.transactionId || gun.transactionid || 1,
-          userUuid: body.user_uuid
-        };
+        if (!transactionId && transactionId !== 0) {
+          return NextResponse.json(
+            {
+              error: 'Missing transactionId',
+              message: '請提供 transactionId 用於停止充電',
+            },
+            { status: 400 },
+          );
+        }
+
         console.log(`🛑 [API /api/guns/ocpp] Stopping charge for ${gun.cpsn}`);
+        upstreamResult = await remoteStop({
+          cpsn: gun.cpsn,
+          transactionId: Number(transactionId),
+        });
+        commandExecuted = 'remote-stop';
         break;
         
       default:
@@ -158,54 +159,30 @@ export async function POST(request: NextRequest) {
         );
     }
     
-    // 發送請求到 OCPP 服務
-    const headers: Record<string, string> = { 
-      'Content-Type': 'application/json' 
-    };
-    
-    if (OCPP_API_KEY) {
-      headers['Authorization'] = `Bearer ${OCPP_API_KEY}`;
-    }
-    
-    console.log(`📡 [API /api/guns/ocpp] Sending ${httpMethod} request to: ${apiEndpoint}`);
-    
-    const upstream = await fetch(apiEndpoint, {
-      method: httpMethod,
-      headers,
-      body: JSON.stringify(requestBody),
-    }).catch((err) => {
-      console.error('❌ [API /api/guns/ocpp] Upstream request failed:', err);
-      throw new Error('Upstream request failed');
-    });
-    
-    const text = await upstream.text().catch(() => null);
-    
-    if (upstream.ok) {
-      console.log(`✅ [API /api/guns/ocpp] Command executed successfully`);
-    } else {
-      console.log(`❌ [API /api/guns/ocpp] Command failed with status: ${upstream.status}`);
-    }
-    
-    return NextResponse.json({ 
-      success: upstream.ok, 
-      status: upstream.status, 
-      upstreamBody: text,
+    return NextResponse.json({
+      success: true,
+      command: commandExecuted,
+      result: upstreamResult,
       gun: {
         id: gun.id,
         cpid: gun.cpid,
-        cpsn: gun.cpsn
-      }
+        cpsn: gun.cpsn,
+      },
     });
     
   } catch (err: unknown) {
     console.error('❌ [API /api/guns/ocpp] POST error:', err instanceof Error ? err.message : err);
     const errorMessage = err instanceof Error ? err.message : String(err);
+    const status = (err as any)?.status && Number.isInteger((err as any)?.status)
+      ? (err as any).status
+      : 500;
     return NextResponse.json(
-      { 
-        error: 'Internal Server Error', 
-        message: errorMessage 
-      }, 
-      { status: 500 }
+      {
+        error: 'Failed to execute OCPP command',
+        message: errorMessage,
+        details: (err as any)?.data,
+      },
+      { status: status === 0 ? 500 : status },
     );
   }
 }

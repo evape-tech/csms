@@ -5,10 +5,7 @@ import { revalidatePath } from 'next/cache';
 // 直接使用資料庫服務，避免繞過 API 路由
 import DatabaseUtils from '../lib/database/utils.js';
 import { databaseService } from '../lib/database/service.js';
-
-// OCPP 通知設定
-const OCPP_BASE_URL = process.env.OCPP_SERVICE_URL || 'http://localhost:8089';
-const OCPP_API_KEY = process.env.OCPP_API_KEY || '';
+import { triggerRebalance } from '../lib/ocppCoreClient';
 
 async function notifyOcpp(payload) {
   console.log('[notifyOcpp] incoming payload:', JSON.stringify(payload));
@@ -36,39 +33,24 @@ async function notifyOcpp(payload) {
       }
     }
 
-    // 構建更精確的觸發負載
     const triggerPayload = {
-      source: payload?.action || 'meter_setting_changed',
-      timestamp: new Date().toISOString(),
-      userAgent: 'NextJS-Server-Action',
-      clientIP: 'server',
-      // 新增電表和充電桩資訊
-      meter_id: meterId,
-      station_id: stationId,
-      affected_cpids: affectedCpids, // 明確指定要更新的充電桩
-      updated_settings: {
-        ems_mode: payload?.data?.ems_mode,
-        max_power_kw: payload?.data?.max_power_kw
-      }
+      stationId,
+      meterId,
+      triggerEvent: payload?.action || 'meter_setting_changed',
+      eventDetails: {
+        affected_cpids: affectedCpids,
+        updated_settings: {
+          ems_mode: payload?.data?.ems_mode,
+          max_power_kw: payload?.data?.max_power_kw,
+        },
+      },
     };
 
-    console.log('[notifyOcpp] triggering targeted profile update with payload:', JSON.stringify(triggerPayload));
+    console.log('[notifyOcpp] triggering ocpp-core rebalance with payload:', JSON.stringify(triggerPayload));
 
-    const response = await fetch(`${OCPP_BASE_URL}/ocpp/api/v1/trigger_profile_update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(triggerPayload),
-    });
+    const result = await triggerRebalance(triggerPayload);
 
-    const result = await response.json();
-    
-    if (response.ok) {
-      console.log('[notifyOcpp] ✅ Profile update triggered successfully:', result);
-      console.log(`[notifyOcpp] 📊 Summary: ${result.onlineStations || 0} online stations, ${result.scheduledUpdates || 0} updates scheduled`);
-      console.log(`[notifyOcpp] 🎯 Targeted: 電表 ${meterId} 影響 ${affectedCpids.length} 個充電桩`);
-    } else {
-      console.error('[notifyOcpp] ❌ Profile update failed:', result);
-    }
+    console.log('[notifyOcpp] ✅ ocpp-core rebalance triggered successfully:', result);
 
   } catch (err) {
     console.error('[notifyOcpp] error:', err);

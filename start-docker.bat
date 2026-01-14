@@ -33,11 +33,11 @@ echo ==========================================
 echo       Services are running!
 echo ==========================================
 echo Web App:         http://localhost:7500
-echo OCPP Server:     ws://localhost:9000
+echo OCPP-Core:       ws://localhost:9000/ocpp
 echo.
 echo Services:
 echo - csms-web       (Next.js Application)
-echo - csms-ocpp      (OCPP WebSocket Server)
+echo - ocpp-core      (OCPP/EMS Microservice)
 echo.
 echo "Showing logs... (Press Ctrl+C to exit logs, containers will keep running)"
 echo.

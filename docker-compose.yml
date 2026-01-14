@@ -9,31 +9,30 @@ services:
       - "7500:7500"
     environment:
       - NODE_ENV=production
+      - OCPP_CORE_URL=http://ocpp-core:9000
+      - OCPP_CORE_WS_URL=ws://ocpp-core:9000/ocpp
     env_file:
       - .env.production
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: node server.js
+    depends_on:
+      - ocpp-core
     networks:
       - csms-network
 
-  ocpp:
+  ocpp-core:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: csms-ocpp
+      context: ./ocpp-core
+      dockerfile: docker/Dockerfile
+    container_name: ocpp-core
     restart: always
     ports:
       - "9000:9000"
-    expose:
-      - "9000"
     environment:
       - NODE_ENV=production
     env_file:
-      - .env.production
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: npm run start:ocpp:prod
+      - ocpp-core/.env.production
     networks:
       - csms-network
 

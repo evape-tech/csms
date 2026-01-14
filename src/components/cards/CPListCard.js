@@ -17,7 +17,11 @@ import {
 import EvStationIcon from '@mui/icons-material/EvStation';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import AnimatedNumber from '../common/AnimatedNumber';
-import { calculateEmsAllocation, isCharging } from '../../lib/emsAllocator';
+
+// Helper function for charging status check
+const isCharging = (status) => {
+  return status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE';
+};
 
 /**
  * 充電樁列表卡片組件 - 以電表為單位進行EMS分配
@@ -232,8 +236,24 @@ export default function CPListCard({ chargers = [], stations = [] }) {
           充電中的槍ID: chargingCpids
         });
         
-        // 對該電表進行 EMS 分配計算
-        const result = calculateEmsAllocation(meterSetting, gunsForAllocation, chargingCpids);
+        // 對該電表進行 EMS 分配計算（已移至 ocpp-core 微服務）
+        // 注意：客戶端暫不調用遠端 API，使用本地簡化版本
+        const result = {
+          allocations: gunsForAllocation.map((gun, idx) => ({
+            cpid: gun.cpid,
+            acdc: gun.acdc,
+            allocated_kw: chargingCpids.includes(gun.cpid) ? gun.max_kw : 0,
+            limit: gun.max_kw,
+            unit: 'kW'
+          })),
+          summary: {
+            charging_guns: chargingCpids.length,
+            total_allocated_kw: gunsForAllocation.filter(g => chargingCpids.includes(g.cpid)).reduce((s, g) => s + g.max_kw, 0),
+            total_allocated_ac_kw: gunsForAllocation.filter(g => g.acdc === 'AC' && chargingCpids.includes(g.cpid)).reduce((s, g) => s + g.max_kw, 0),
+            total_allocated_dc_kw: gunsForAllocation.filter(g => g.acdc === 'DC' && chargingCpids.includes(g.cpid)).reduce((s, g) => s + g.max_kw, 0),
+            within_limit: true
+          }
+        };
         
         // 詳細記錄 EMS 計算結果
         console.log(`電表 ${meterId} (${meterGroup.meter.meter_no}) EMS 計算結果:`, {

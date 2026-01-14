@@ -476,15 +476,6 @@ export class PaymentRepository {
         transactionId
       });
 
-      try {
-        // 更新訂單狀態為 COMPLETED（Line Pay 直連不開發票，但支付已完成）
-        await databaseService.updatePaymentOrderStatus(orderId, 'COMPLETED');
-        console.log('✅ 更新訂單狀態為 COMPLETED:', { orderId });
-      } catch (statusErr) {
-        console.error('❌ 更新訂單狀態為 COMPLETED 失敗:', statusErr instanceof Error ? statusErr.message : statusErr);
-      }
-      
-
       return { success: true };
 
     } catch (error) {

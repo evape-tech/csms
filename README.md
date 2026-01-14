@@ -1,6 +1,37 @@
-# CSMS Next.js 專案
+# CSMS Next.js 專案 (Monorepo)
 
-這是一個基於 [Next.js](https://nextjs.org) 的充電站管理系統 (CSMS) 專案，採用現代化微服務架構，結合了前端使用者介面、後端 API 服務以及 OCPP (Open Charge Point Protocol) 伺服器，並內建了智能能源管理系統 (EMS)。
+這是一個基於 [Next.js](https://nextjs.org) 的充電站管理系統 (CSMS) 專案，採用 **npm workspace monorepo** 架構，將前端主項目和 OCPP 微服務清晰解耦。
+
+## 🏗️ Monorepo 架構
+
+- **主項目** - Next.js Web 應用 (http://localhost:3000)
+- **ocpp-core** - OCPP + EMS 微服務 (http://localhost:3001)
+
+詳細架構請查看 [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+## 🚀 快速開始
+
+### 安裝依賴
+```bash
+npm install
+```
+
+### 運行開發服務器
+```bash
+# 同時啟動主項目和 OCPP Core
+npm run dev:all
+
+# 或分別啟動
+npm run dev          # Next.js (http://localhost:3000)
+npm run ocpp:dev     # OCPP Core (http://localhost:3001)
+```
+
+### 構建項目
+```bash
+npm run build:all    # 構建所有項目
+```
+
+---
 
 ## 📚 文檔目錄
 
@@ -89,14 +120,10 @@ DATABASE_URL="mysql://user:password@localhost:3306/csms_db"
 # 如果使用 MySQL
 DB_PROVIDER="mysql"
 
-# OCPP 伺服器設定
-OCPP_SERVER_PORT=8089
-OCPP_NOTIFY_URL=http://localhost:8089/api/v1
-OCPP_API_KEY=cp_api_key16888
-
-# EMS 系統設定
-EMS_RECONCILE_INTERVAL=60000  # 定時校正間隔(毫秒)
-EMS_MODE=dynamic              # 分配模式: static/dynamic
+# OCPP-Core 微服務設定（取代內嵌 OCPP/EMS 伺服器）
+OCPP_CORE_URL=http://localhost:8089
+OCPP_CORE_WS_URL=ws://localhost:8089/ocpp
+OCPP_CORE_API_TOKEN=dev-token
 
 # RabbitMQ 消息隊列設定 (可選 - 目前為初步集成階段)
 MQ_ENABLED=false              # 是否啟用MQ，建議開發階段設為false
@@ -129,7 +156,7 @@ npm run db:init
 
 ### 4. 運行專案
 
-專案採用微服務架構，包含 Next.js 前端/API 和 OCPP 伺服器兩個主要服務。
+專案採用微服務架構，包含 Next.js 前端/API（本倉庫根目錄）與獨立的 `ocpp-core` 微服務（位於 `ocpp-core/`）。
 
 #### 🌐 啟動 Next.js 開發伺服器 (前端 + API)
 
@@ -141,22 +168,19 @@ npm run dev:fast
 
 這將在 [http://localhost:7500](http://localhost:7500) 啟動前端應用和 Next.js API 路由。
 
-#### ⚡ 啟動 OCPP 伺服器 (後端微服務)
+#### ⚡ 啟動 ocpp-core 微服務 (OCPP/EMS)
 
 ```bash
-# 生產模式
-npm run start:ocpp
-
-# 開發模式 (支援熱重載)
-npm run dev:ocpp
-
-# 同時啟動前端和 OCPP 伺服器
-npm run dev:all
+cd ocpp-core
+npm install
+npm run dev
+# 或使用 Docker Compose（ocpp-core 目錄下）
+npm run docker:up
 ```
 
-OCPP 伺服器將在 [http://localhost:8089](http://localhost:8089) 提供以下服務：
-- WebSocket 服務: `ws://localhost:8089/ocpp`
-- REST API: `http://localhost:8089/api/v1`
+ocpp-core 在 [http://localhost:8089](http://localhost:8089) 提供：
+- WebSocket: `ws://localhost:8089/ocpp`
+- REST API: `http://localhost:8089/api/ocpp`、`http://localhost:8089/api/ems`
 - 健康檢查: `http://localhost:8089/health`
  
 
@@ -410,7 +434,7 @@ Docker 部署包含以下服務:
 | **Caddy** | csms-caddy | 80, 443, 2019 | 反向代理 + 自動 HTTPS |
 | **Caddy UI** | csms-caddy-ui | 8888 | Caddy 管理界面 |
 | **Next.js Web** | csms-web | 7500 (內部) | Web 應用 |
-| **OCPP Server** | csms-ocpp | 8089 | OCPP WebSocket 服務 |
+| **OCPP-Core** | ocpp-core | 9000 | OCPP/EMS 微服務 |
 
 #### 訪問地址
 
@@ -418,7 +442,7 @@ Docker 部署包含以下服務:
 
 ```
 🌐 Web 應用:          http://localhost
-📡 OCPP WebSocket:    ws://localhost:8089
+📡 OCPP-Core WS:      ws://localhost:9000/ocpp
 🔧 Caddy Admin API:   http://localhost:2019
 🎨 Caddy Web UI:      http://localhost:8888
 ```
@@ -442,7 +466,7 @@ RABBITMQ_HOST=127.0.0.1
 ```env
 DATABASE_URL="mysql://user:password@host.docker.internal:3306/csms_db"
 RABBITMQ_HOST=host.docker.internal
-OCPP_PORT=8089
+OCPP_CORE_URL=http://ocpp-core:9000
 ```
 
 > **注意**: Docker 容器需使用 `host.docker.internal` 訪問主機服務 (MySQL/RabbitMQ)
@@ -461,7 +485,7 @@ docker-compose logs -f
 
 # 查看特定服務日誌
 docker-compose logs -f web
-docker-compose logs -f ocpp
+docker-compose logs -f ocpp-core
 docker-compose logs -f caddy
 
 # 停止所有服務
@@ -527,14 +551,11 @@ npm run start
 
 推薦部署平台：[Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme)
 
-#### 2. OCPP 後端服務部署
+#### 2. ocpp-core 微服務部署
 ```bash
-# 同時啟動前端和後端
-npm run start:prod
-
-# 或分別部署
-npm run start         # Next.js
-npm run start:ocpp:prod # OCPP Server (生產模式)
+cd ocpp-core
+npm install
+npm run start:prod    # ocpp-core (生產模式)
 ```
 
 #### 3. 環境變數設定
@@ -548,7 +569,7 @@ npm run start:ocpp:prod # OCPP Server (生產模式)
 - [ ] 配置生產資料庫連接
 - [ ] 設定環境變數 (`NODE_ENV=production`)
 - [ ] 配置 Caddy 域名和 SSL
-- [ ] 設定防火牆規則 (開放 80, 443, 8089)
+- [ ] 設定防火牆規則 (開放 80, 443, 9000)
 - [ ] 配置資料庫備份策略
 - [ ] 設定日誌收集和監控
 - [ ] 測試 OCPP WebSocket 連接

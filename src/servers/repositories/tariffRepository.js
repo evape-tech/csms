@@ -13,7 +13,6 @@
  */
 
 import { databaseService } from '../../lib/database/service.js';
-import { logger } from '../utils/index.js';
 
 /**
  * 费率管理仓库类
@@ -86,7 +85,7 @@ class TariffRepository {
    * @param {Date} chargingTime - 充電時間（用於判斷季節和有效期），預設為當前時間
    * @returns {Promise<Object|null>} 费率方案对象
    */
-  async getTariffForGun(gunId, chargingTime = new Date(), options = {}) {
+  async getTariffForGun(gunId, chargingTime = new Date()) {
     try {
       if (!gunId) {
         return null;
@@ -97,22 +96,8 @@ class TariffRepository {
 
       if (gunTariffs && gunTariffs.length > 0) {
         // 步驟2: 根據充電時間過濾出有效的費率（檢查有效期限）
-        const timeZone = options.timeZone;
-        let currentMonth;
+        const currentMonth = chargingTime.getMonth() + 1; // getMonth() 返回 0-11，需要 +1 變成 1-12
         const currentDate = chargingTime;
-        if (timeZone) {
-          try {
-            const monthStr = new Intl.DateTimeFormat('en-US', { timeZone, month: 'numeric' }).format(new Date(chargingTime));
-            currentMonth = parseInt(monthStr, 10);
-            logger.debug(`[tariffRepository] getTariffForGun using timeZone=${timeZone}, month=${currentMonth}`);
-          } catch (err) {
-            currentMonth = chargingTime.getMonth() + 1;
-            logger.warn(`[tariffRepository] timeZone parse failed (${timeZone}), fallback month=${currentMonth}: ${err.message}`);
-          }
-        } else {
-          currentMonth = chargingTime.getMonth() + 1; // getMonth() 返回 0-11，需要 +1 變成 1-12
-          logger.debug(`[tariffRepository] getTariffForGun using server month=${currentMonth}`);
-        }
         
         // 過濾出符合條件的費率
         const validTariffs = gunTariffs.filter(gt => {
@@ -158,13 +143,11 @@ class TariffRepository {
         
         if (validTariffs.length > 0) {
           // 找到符合條件的費率，返回優先級最高的（第一個，因為已按 priority 排序）
-          logger.debug(`[tariffRepository] getTariffForGun found valid tariff id=${validTariffs[0].tariffs.id} for month=${currentMonth}`);
           return validTariffs[0].tariffs;
         }
         
         // 如果沒有找到符合條件的費率，使用優先級最高的（不檢查有效期和季節）
-        logger.warn(`充電槍 ${gunId} 在 ${currentMonth} 月/${currentDate.toISOString()} 沒有找到符合條件的費率，使用優先級最高的費率 (timeZone=${timeZone || 'none'})`);
-        logger.debug(`fallback tariff id=${gunTariffs[0].tariffs.id} name=${gunTariffs[0].tariffs.name}`);
+        console.warn(`充電槍 ${gunId} 在 ${currentMonth} 月/${currentDate.toISOString()} 沒有找到符合條件的費率，使用優先級最高的費率`);
         return gunTariffs[0].tariffs;
       }
 
