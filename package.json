@@ -18,7 +18,8 @@
     "db:generate": "npx prisma generate --schema=prisma/schema.prisma",
     "db:migrate:mysql": "npx prisma migrate dev --schema=prisma/schema.prisma",
     "db:push:mysql": "npx prisma db push --schema=prisma/schema.prisma",
-    "db:pull:mysql": "npx prisma db pull --schema=prisma/schema.prisma"
+    "db:pull:mysql": "npx prisma db pull --schema=prisma/schema.prisma",
+    "db:setup-permissions": "node scripts/setup-db-permissions.js"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
