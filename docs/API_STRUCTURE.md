@@ -64,7 +64,7 @@ Next.js API 使用 Next.js 內建的 API 路由系統，無需額外版本配置
 這些端點不包含版本號，主要用於系統健康檢查和基礎功能：
 
 - `GET /health` - 系統健康檢查
- - `GET /health` - 系統健康檢查（回傳包含 MQ 狀態資訊）
+ - `GET /health` - 系統健康檢查
 
 ### 3. OCPP Server 標準 REST API（含版本號）
 用於充電樁管理的標準化 REST API：
@@ -233,7 +233,7 @@ curl "http://localhost:7500/api/operation-logs?actionType=LOGIN&startDate=2025-0
 
 # 系統健康檢查
 ```bash
-# 系統健康檢查 (回傳包含系統與 MQ 狀態資訊)
+# 系統健康檢查
 curl http://localhost:8089/health
 ```
      -d '{"action": "switch", "provider": "mysql"}'
@@ -248,7 +248,7 @@ curl http://localhost:8089/health
 
 # 系統健康檢查
 ```bash
-# 系統健康檢查（回傳包含系統與 MQ 狀態資訊）
+# 系統健康檢查
 curl http://localhost:8089/health
 ```
 

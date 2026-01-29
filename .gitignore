@@ -95,6 +95,9 @@ temp/
 *.bak
 *.backup
 
+# Kiro IDE configuration and specs
+.kiro/
+
 # package manager lock files (optional - comment out if you want to commit them)
 # package-lock.json
 # yarn.lock

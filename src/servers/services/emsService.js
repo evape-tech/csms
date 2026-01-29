@@ -4,8 +4,7 @@
  * 
  * 从旧版 ocppController.js 迁移而来
  */
-import * as mqService from './mqService.js';
-import { EXCHANGES } from '../mqServer.js';
+
 import { logger } from '../utils/index.js';
 import { chargePointRepository } from '../repositories/index.js';
 import * as connectionService from './connectionService.js';
@@ -33,42 +32,6 @@ const PROFILE_UPDATE_DEBOUNCE_MS = 3000;     // 3秒防抖延迟，避免短时�
 const PROFILE_MIN_INTERVAL_MS = 30000;       // 30秒最小间隔，防止过度频繁更新
 const RECONCILE_INTERVAL_MS = 60000;         // 60秒定时校正间隔，容错补偿机制
 let reconciliationIntervalId = null;         // 定时校正的 interval ID
-
-/**
- * 请求功率分配计算
- * @param {Object} data - 功率分配请求数据
- * @returns {Promise<boolean>}
- */
-async function requestAllocation(data) {
-  return await mqService.publishMessage(EXCHANGES.EMS_EVENTS, EVENT_TYPES.ALLOCATION_REQUEST, data);
-}
-
-/**
- * 发布功率分配结果
- * @param {Object} data - 分配结果数据
- * @returns {Promise<boolean>}
- */
-async function publishAllocationResult(data) {
-  return await mqService.publishMessage(EXCHANGES.EMS_EVENTS, EVENT_TYPES.ALLOCATION_RESULT, data);
-}
-
-/**
- * 发布功率配置更新事件
- * @param {Object} data - 更新数据
- * @returns {Promise<boolean>}
- */
-async function publishProfileUpdate(data) {
-  return await mqService.publishMessage(EXCHANGES.EMS_EVENTS, EVENT_TYPES.PROFILE_UPDATE, data);
-}
-
-/**
- * 发布全站重新分配事件
- * @param {Object} data - 事件数据
- * @returns {Promise<boolean>}
- */
-async function publishGlobalReallocation(data) {
-  return await mqService.publishMessage(EXCHANGES.EMS_EVENTS, EVENT_TYPES.GLOBAL_REALLOCATION, data);
-}
 
 /**
  * 处理功率分配请求 - 修复后按电表分组计算
@@ -120,14 +83,6 @@ async function handleAllocationRequest(data) {
       
       // 执行该电表的EMS分配算法
       const result = calculateEmsAllocation(siteSetting, meterGuns, meterOnlineCpids);
-      
-      // 发布分配结果
-      await publishAllocationResult({
-        requestId: data.requestId,
-        result: result,
-        meterId: meterId,
-        timestamp: new Date().toISOString()
-      });
       
       logger.info(`✅ 电表 ${meterId} 功率分配完成，共分配 ${result.allocations?.length || 0} 个充电桩`);
       return true;
@@ -194,27 +149,11 @@ async function handleAllocationRequest(data) {
       }
     }
     
-    // 发布合并后的分配结果
-    await publishAllocationResult({
-      requestId: data.requestId,
-      result: combinedResults,
-      processedMeters: processedMeters,
-      timestamp: new Date().toISOString()
-    });
-    
     logger.info(`✅ 所有电表功率分配完成: ${processedMeters} 个电表，共分配 ${combinedResults.allocations.length} 个充电桩，总功率 ${combinedResults.summary.total_allocated_kw.toFixed(2)}kW`);
     return true;
     
   } catch (error) {
     logger.error('❌ 功率分配计算失败:', error.message);
-    
-    // 发送失败结果
-    await publishAllocationResult({
-      requestId: data.requestId,
-      error: error.message,
-      success: false,
-      timestamp: new Date().toISOString()
-    });
     
     return false;
   }
@@ -228,7 +167,7 @@ async function handleAllocationRequest(data) {
  */
 async function handleGlobalReallocation(data) {
   const reallocationId = data.reallocationId || `auto_${Date.now()}`;
-  logger.info(`[全站重分配-MQ] 🔄 处理所有站點電表功率重新分配事件 (ID: ${reallocationId})`);
+  logger.info(`[全站重分配] 🔄 处理所有站點電表功率重新分配事件 (ID: ${reallocationId})`);
   
   try {
     let { immediate = false, eventType, eventDetails } = data;
@@ -237,11 +176,11 @@ async function handleGlobalReallocation(data) {
     const allStations = await chargePointRepository.getStations();
     
     if (!allStations || allStations.length === 0) {
-      logger.warn(`[全站重分配-MQ] ⚠️ 沒有找到任何站點，跳過處理`);
+      logger.warn(`[全站重分配] ⚠️ 沒有找到任何站點，跳過處理`);
       return false;
     }
     
-    logger.info(`[全站重分配-MQ] 📋 處理 ${allStations.length} 個站點的所有電表`);
+    logger.info(`[全站重分配] 📋 處理 ${allStations.length} 個站點的所有電表`);
     
     let totalProcessedMeters = 0;
     let totalScheduledUpdates = 0;
@@ -250,11 +189,11 @@ async function handleGlobalReallocation(data) {
     // 依序處理每個站點下的所有電表
     for (const station of allStations) {
       if (!station.meters || !Array.isArray(station.meters) || station.meters.length === 0) {
-        logger.info(`[全站重分配-MQ] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
+        logger.info(`[全站重分配] ⚠️ 站點 ${station.id} (${station.name}) 沒有電表，跳過`);
         continue;
       }
       
-      logger.info(`[全站重分配-MQ] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
+      logger.info(`[全站重分配] 🏭 處理站點 ${station.id} (${station.name})，共 ${station.meters.length} 個電表`);
       
       // 依序處理每個電表
       for (const meter of station.meters) {
@@ -264,7 +203,7 @@ async function handleGlobalReallocation(data) {
           const meterCpids = gunsForMeter.map(gun => gun.cpid).filter(cpid => cpid);
           
           if (meterCpids.length === 0) {
-            logger.info(`[全站重分配-MQ] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
+            logger.info(`[全站重分配] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 沒有關聯的充電桩，跳過`);
             continue;
           }
           
@@ -273,16 +212,16 @@ async function handleGlobalReallocation(data) {
           const onlineMeterCpids = meterCpids.filter(cpid => onlineCpids.includes(cpid));
           
           if (onlineMeterCpids.length === 0) {
-            logger.info(`[全站重分配-MQ] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
+            logger.info(`[全站重分配] ⚠️ 電表 ${meter.id} (${meter.meter_no}) 下沒有在線充電桩，跳過`);
             continue;
           }
           
-          logger.info(`[全站重分配-MQ] ⚡ 處理電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
+          logger.info(`[全站重分配] ⚡ 處理電表 ${meter.id} (${meter.meter_no})，包含 ${onlineMeterCpids.length} 個在線充電桩: [${onlineMeterCpids.join(', ')}]`);
           
           // 為該電表配置功率分配
           await configureStationPowerDistribution(onlineMeterCpids, {
             immediate,
-            eventType: `${eventType || 'mq_event'}_MeterReallocation`,
+            eventType: `${eventType || 'global_reallocation'}_MeterReallocation`,
             eventDetails: {
               ...(eventDetails || {}),
               meter_id: meter.id,
@@ -290,7 +229,7 @@ async function handleGlobalReallocation(data) {
               station_name: station.name,
               meter_name: meter.meter_no,
               reallocationId,
-              triggerEvent: eventType || 'mq_event'
+              triggerEvent: eventType || 'global_reallocation'
             }
           });
           
@@ -303,67 +242,33 @@ async function handleGlobalReallocation(data) {
           }
           
         } catch (meterError) {
-          logger.error(`[全站重分配-MQ] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
+          logger.error(`[全站重分配] ❌ 處理電表 ${meter.id} 時發生錯誤:`, meterError);
         }
       }
     }
     
     if (totalScheduledUpdates > 0) {
-      logger.info(`[全站重分配-MQ] 📈 重分配统计:`);
-      logger.info(`[全站重分配-MQ]   - 执行模式: ${executionMode} (事件驱动)`);
-      logger.info(`[全站重分配-MQ]   - 處理站點: ${allStations.length} 個`);
-      logger.info(`[全站重分配-MQ]   - 處理電表: ${totalProcessedMeters} 個`);
-      logger.info(`[全站重分配-MQ]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
+      logger.info(`[全站重分配] 📈 重分配统计:`);
+      logger.info(`[全站重分配]   - 执行模式: ${executionMode} (事件驱动)`);
+      logger.info(`[全站重分配]   - 處理站點: ${allStations.length} 個`);
+      logger.info(`[全站重分配]   - 處理電表: ${totalProcessedMeters} 個`);
+      logger.info(`[全站重分配]   - 排程更新: ${totalScheduledUpdates} 個充電桩`);
       
-      // 发送通知
-      await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
-        type: 'GLOBAL_REALLOCATION',
-        message: `所有站點電表功率重分配事件處理完成，共排程 ${totalScheduledUpdates} 個充電桩配置更新`,
-        data: {
-          reallocationId,
-          eventType: eventType || 'mq_event',
-          totalStations: allStations.length,
-          totalMeters: totalProcessedMeters,
-          scheduledCount: totalScheduledUpdates,
-          executionMode: `${executionMode} (事件驱动)`,
-          timestamp: new Date().toISOString()
-        }
-      });
+      logger.info(`[全站重分配] 📢 通知: 所有站點電表功率重分配事件處理完成，共排程 ${totalScheduledUpdates} 個充電桩配置更新`);
       
       return true;
     } else {
-      logger.warn(`[全站重分配-MQ] ⚠️ 沒有找到任何需要處理的在線充電桩`);
+      logger.warn(`[全站重分配] ⚠️ 沒有找到任何需要處理的在線充電桩`);
       
-      // 发送通知
-      await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
-        type: 'GLOBAL_REALLOCATION_SKIP',
-        message: `所有站點電表功率重分配事件跳過，沒有找到在線充電桩`,
-        data: {
-          reallocationId,
-          eventType: eventType || 'mq_event',
-          totalStations: allStations.length,
-          totalMeters: totalProcessedMeters,
-          scheduledCount: 0,
-          timestamp: new Date().toISOString()
-        }
-      });
+      logger.warn(`[全站重分配] 📢 通知: 所有站點電表功率重分配事件跳過，沒有找到在線充電桩`);
       
       return false;
     }
     
   } catch (error) {
-    logger.error(`[全站重分配-MQ] ❌ 處理過程發生錯誤: ${error.message}`, error);
+    logger.error(`[全站重分配] ❌ 處理過程發生錯誤: ${error.message}`, error);
     
-    // 发送错误通知
-    await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, 'ems.notification', {
-      type: 'GLOBAL_REALLOCATION_ERROR',
-      message: `所有站點電表功率重分配事件處理失敗: ${error.message}`,
-      data: {
-        reallocationId,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      }
-    });
+    logger.error(`[全站重分配] 📢 错误通知: 所有站點電表功率重分配事件處理失敗: ${error.message}`);
     
     return false;
   }
@@ -1312,10 +1217,6 @@ export {
   PROFILE_UPDATE_DEBOUNCE_MS,
   PROFILE_MIN_INTERVAL_MS,
   RECONCILE_INTERVAL_MS,
-  requestAllocation,
-  publishAllocationResult,
-  publishProfileUpdate,
-  publishGlobalReallocation,
   handleAllocationRequest,
   handleGlobalReallocation,
   detectChargingStatusChange,

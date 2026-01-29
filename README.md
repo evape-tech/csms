@@ -27,7 +27,7 @@
 -   **完整的用戶管理**: 管理員與一般用戶分離、RFID 卡片管理、錢包系統、操作日誌追蹤。
 -   **RESTful API**: 完整的 API 服務，涵蓋充電樁管理、使用者認證、支付處理、故障報告、計費管理等模組。
 -   **實時監控**: WebSocket 連接監控、系統狀態追蹤和效能分析。
--   **事件驅動架構 (進行中)**: RabbitMQ 消息隊列基礎架構已建立，正在逐步整合至各業務模組。
+-   **事件驅動架構**: 使用 Node.js EventEmitter 實現直接的組件間通信。
 
 ## 🛠️ 快速開始
 
@@ -36,7 +36,6 @@
 -   **Node.js** (v18+ 推薦)
 -   **npm** 或 **Yarn** 包管理器
 -   **資料庫**: MySQL 8.0+
--   **RabbitMQ** (可選，用於事件驅動架構，目前為初步接入階段)
 -   **Git** 版本控制
 
 ## ⚡ EMS 能源管理系統
@@ -55,7 +54,7 @@
 3. **事件驅動 (Event-driven)**
    - 即時響應 OCPP 事件 (StatusNotification, StartTransaction, StopTransaction)
    - 毫秒級響應充電狀態變化
-   - 基於消息隊列的非阻塞處理
+   - 基於 EventEmitter 的非阻塞處理
 
 ### EMS 架構特點
 
@@ -97,14 +96,6 @@ OCPP_API_KEY=cp_api_key16888
 # EMS 系統設定
 EMS_RECONCILE_INTERVAL=60000  # 定時校正間隔(毫秒)
 EMS_MODE=dynamic              # 分配模式: static/dynamic
-
-# RabbitMQ 消息隊列設定 (可選 - 目前為初步集成階段)
-MQ_ENABLED=false              # 是否啟用MQ，建議開發階段設為false
-MQ_HOST=127.0.0.1
-MQ_PORT=5672
-MQ_USERNAME=guest
-MQ_PASSWORD=guest
-MQ_VHOST=/
 
 # Firebase 設定 (如果使用)
 FIREBASE_API_KEY="..."
@@ -158,28 +149,6 @@ OCPP 伺服器將在 [http://localhost:8089](http://localhost:8089) 提供以下
 - WebSocket 服務: `ws://localhost:8089/ocpp`
 - REST API: `http://localhost:8089/api/v1`
 - 健康檢查: `http://localhost:8089/health`
- 
-
-#### 🐇 RabbitMQ 服務 (可選)
-
-**注意**: RabbitMQ 目前為初步接入階段，主要業務邏輯尚未完全遷移至事件驅動模式。開發階段建議設定 `MQ_ENABLED=false`。
-
-如需啟用 RabbitMQ 進行測試：
-```bash
-# 使用 Docker 啟動 RabbitMQ (推薦)
-docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
-
-# 或使用本地安裝
-rabbitmq-server
-
-# 管理介面 (如果啟用): http://localhost:15672 (guest/guest)
-```
-
-當前 MQ 架構狀態：
-- ✅ **基礎架構**: 完成 RabbitMQ 連接、交換機、隊列設定
-- ✅ **事件發布者**: 實現 OCPP 和 EMS 事件發布機制  
-- ✅ **事件消費者**: 建立消費者框架和消息處理邏輯
-- 🚧 **業務整合**: 正在逐步將核心業務邏輯遷移至事件驅動模式
 
 ## 📡 API 說明
 
@@ -194,7 +163,7 @@ rabbitmq-server
 - **系統管理**: 操作日誌、故障報告、報表生成
 
 - #### ⚡ OCPP Server API (http://localhost:8089)
-- **系統監控**: 健康檢查、MQ連接狀態
+- **系統監控**: 健康檢查、系統狀態
 - **充電樁管理**: 遠程控制、狀態查詢、重啟操作
 - **能源管理**: EMS功率分配、電表管理、站點調度
 
@@ -271,14 +240,14 @@ npm test tests/emsIntegration.test.js
          │    ┌──────────────────────┼────────────┐
          │    │                      │            │
          ↓    ↓                      ↓            ↓
-    ┌─────────────┐            ┌─────────┐  ┌──────────┐
-   │  Database   │            │   EMS   │  │ RabbitMQ │
-   │  (MySQL)    │            │ Engine  │  │ Message  │
-   │             │            │         │  │  Queue   │
-    └─────────────┘            └─────────┘  └──────────┘
-          ↑                          ↑            ↑
-          │                          │            │
-          └──────────────────────────┴────────────┘
+    ┌─────────────┐            ┌─────────┐
+   │  Database   │            │   EMS   │
+   │  (MySQL)    │            │ Engine  │
+   │             │            │         │
+    └─────────────┘            └─────────┘
+          ↑                          ↑
+          │                          │
+          └──────────────────────────┘
                   host.docker.internal
 ```
 
@@ -290,7 +259,7 @@ npm test tests/emsIntegration.test.js
 - **資料庫抽象**: 使用 Prisma ORM 支援多種資料庫，統一資料存取介面
 - **WebSocket 通訊**: 實現充電樁與伺服器的即時雙向通訊
 - **EMS 智能管理**: 三種觸發機制確保功率分配的即時性和準確性
-- **事件驅動 (進行中)**: RabbitMQ 基礎設施已就緒，正在逐步整合業務邏輯
+- **事件驅動架構**: 使用 Node.js EventEmitter 實現直接的組件間通信
 - **環境隔離**: 開發環境使用 `.env`，Docker/生產環境使用 `.env.production`
 
 ### EMS 系統組件
@@ -303,15 +272,8 @@ npm test tests/emsIntegration.test.js
    - `emsService.js` - EMS 能源管理服務，實現分配演算法
    - `ocppMessageService.js` - OCPP 消息處理，支援所有協議消息類型
    - `connectionService.js` - WebSocket 連接管理和狀態維護
-   - `chargeEventService.js` - 充電事件處理和狀態更新
 
-3. **Event System** - 事件驅動系統 (初步整合階段)
-   - `ocppEventConsumer.js` - OCPP 事件消費者框架
-   - `emsEventConsumer.js` - EMS 事件消費者框架  
-   - `ocppEventPublisher.js` - 事件發布機制
-   - `mqService.js` - 消息隊列基礎服務
-
-4. **Data Layer** - 資料存取層
+3. **Data Layer** - 資料存取層
    - `chargePointRepository.js` - 充電樁資料存取和業務邏輯
    - `databaseService.js` - 統一資料庫服務介面
    - Prisma ORM - 多資料庫支援和類型安全
@@ -328,26 +290,12 @@ npm test tests/emsIntegration.test.js
 2. **OCPP 伺服器無法啟動**
    - 檢查端口 8089 是否被佔用：`netstat -an | findstr 8089`
    - 確保所有依賴已安裝：`npm install`
-   - 檢查 RabbitMQ 是否正在運行
+   - 檢查系統資源使用情況
 
-3. **RabbitMQ 連接失敗**
-   - **注意**: 目前 MQ 為可選功能，建議開發階段設定 `MQ_ENABLED=false`
-   - 如需測試 MQ 功能：
-     - 確認 RabbitMQ 服務狀態：`rabbitmq-diagnostics status`
-     - 檢查防火牆設定，確保端口 5672 和 15672 開放
-     - 驗證連接參數：主機、端口、用戶名、密碼
-     - 檢查 Docker 容器狀態：`docker ps | grep rabbitmq`
-
-4. **EMS 系統無響應**
+3. **EMS 系統無響應**
    - 檢查 EMS 定時校正是否啟動：查看日誌中的定時器消息
    - 驗證事件驅動機制：查看 StatusNotification、StartTransaction 等事件處理
    - 檢查資料庫連接：`npm run db:init` 測試資料庫連接
-    - 檢查資料庫連接：`npm run db:init` 測試資料庫連接
-
-5. **MQ 相關問題 (如果啟用)**
-   - 檢查消息隊列連接狀態：`GET /health`（回傳中包含 MQ 狀態資訊）
-   - 查看 MQ 管理介面：http://localhost:15672 (guest/guest)
-   - 檢查事件發布者狀態：查看日誌中的發布消息
 
 5. **前端無法載入**
    - 確認 Next.js 開發伺服器正在運行：`npm run dev`
@@ -378,9 +326,6 @@ curl http://localhost:8089/health
 
 # 快速測試 - 健康檢查
 curl http://localhost:8089/health
-
-# 檢查 RabbitMQ 管理界面 (如果啟用)
-# http://localhost:15672 (guest/guest)
 ```
 
 如果遇到其他問題，請檢查 `docs/` 目錄下的文件或提交 Issue。
@@ -435,17 +380,15 @@ Docker 部署包含以下服務:
 **開發環境** (`.env`):
 ```env
 DATABASE_URL="mysql://user:password@127.0.0.1:3306/csms_db"
-RABBITMQ_HOST=127.0.0.1
 ```
 
 **Docker 環境** (`.env.production`):
 ```env
 DATABASE_URL="mysql://user:password@host.docker.internal:3306/csms_db"
-RABBITMQ_HOST=host.docker.internal
 OCPP_PORT=8089
 ```
 
-> **注意**: Docker 容器需使用 `host.docker.internal` 訪問主機服務 (MySQL/RabbitMQ)
+> **注意**: Docker 容器需使用 `host.docker.internal` 訪問主機服務 (MySQL)
 
 #### Docker 常用命令
 
@@ -539,7 +482,6 @@ npm run start:ocpp:prod # OCPP Server (生產模式)
 
 #### 3. 環境變數設定
 - 生產環境請確保設定正確的資料庫連接
-- 配置 RabbitMQ 集群以提高可用性
 - 設定適當的日誌級別和監控
 - 使用 `NODE_ENV=production` 載入 `.env.production`
 
@@ -674,32 +616,21 @@ csms-nextjs/
 │   ├── models/               # 資料庫模型定義 (Sequelize)
 │   └── servers/              # 後端微服務架構
 │       ├── config/           # 服務配置管理
-│       │   ├── apiConfig.js  # API 路徑配置
-│       │   └── mqConfig.js   # MQ 消息隊列配置
-│       ├── connectors/       # 外部系統連接器  
-│       │   └── ocppMqConnector.js # OCPP-MQ 橋接器
-│       ├── consumers/        # MQ 消息消費者 (初步整合)
-│       │   ├── ocppEventConsumer.js # OCPP 事件消費者
-│       │   └── emsEventConsumer.js  # EMS 事件消費者
+│       │   └── apiConfig.js  # API 路徑配置
 │       ├── controllers/      # 業務邏輯控制器
 │       │   ├── ocppController.js    # OCPP 協議主控制器
 │       │   └── emsController.js     # EMS 能源管理控制器
-│       ├── publishers/       # MQ 消息發布者 (初步整合)
-│       │   ├── ocppEventPublisher.js # OCPP 事件發布
-│       │   └── emsEventPublisher.js  # EMS 事件發布
 │       ├── repositories/     # 資料存取層 (Repository Pattern)
 │       │   └── chargePointRepository.js # 充電樁資料存取
 │       ├── services/         # 核心業務服務層
 │       │   ├── emsService.js         # EMS 能源管理服務
 │       │   ├── ocppMessageService.js # OCPP 消息處理服務
 │       │   ├── connectionService.js  # WebSocket 連接管理
-│       │   ├── mqService.js          # MQ 基礎服務 (初步整合)
 │       │   ├── chargeEventService.js # 充電事件處理
 │       │   └── systemStatusService.js # 系統狀態監控
 │       ├── utils/            # 伺服器端工具函式
 │       │   ├── logger.js     # 伺服器日誌工具
 │       │   └── helpers.js    # 輔助函式集合
-│       ├── mqServer.js       # RabbitMQ 伺服器初始化 (初步整合)
 │       └── ocppServer.js     # OCPP WebSocket 伺服器主入口
 ├── tests/                    # 測試文件
 │   ├── emsAllocator.test.js  # EMS 演算法單元測試
@@ -715,7 +646,7 @@ csms-nextjs/
 - **資料庫抽象**: Prisma ORM 提供類型安全的資料存取，支援多資料庫切換
 - **WebSocket 管理**: 企業級 WebSocket 連接池，支援大規模充電樁同時接入
 - **EMS 智能引擎**: 三觸發機制 + 事件驅動，確保功率分配的即時性和準確性
-- **事件驅動 (進行中)**: RabbitMQ 基礎設施就緒，正在逐步將同步業務邏輯遷移至非同步事件模式
+- **事件驅動架構**: 基於 EventEmitter 實現直接組件通信，無需中間件
 - **模組化設計**: 高內聚低耦合的組件設計，支援獨立開發和測試
 - **完整的認證系統**: JWT 認證、權限控制、操作日誌追蹤
 - **用戶管理系統**: 管理員/用戶分離、RFID 卡片綁定、錢包系統
@@ -743,7 +674,6 @@ csms-nextjs/
 - **計費管理**: 費率設定、計費渠道管理、交易記錄
 
 ### 🚧 正在開發
-- **事件驅動架構完整整合**: RabbitMQ 基礎設施已建立，正在將核心業務邏輯遷移至事件驅動模式
 - **效能監控增強**: WebSocket 連接監控、系統資源追蹤、告警機制
 - **OCPP 2.0.1 支援**: 新版協議研究和實現規劃
 - **進階 EMS 演算法**: 基於歷史數據的機器學習功率預測和優化
@@ -772,32 +702,7 @@ csms-nextjs/
 - TypeScript 支援，提供完整的類型安全
 - Prisma ORM 實現資料庫無關的開發體驗  
 - WebSocket 長連接管理，支援大規模充電樁接入
-- 事件驅動架構設計，為未來擴展奠定基礎
-
-**注意**: MQ 事件驅動架構目前為初步接入階段，主要業務邏輯仍在傳統同步模式下運行。建議開發階段使用 `MQ_ENABLED=false` 以確保系統穩定性。
-
----
-
-## 🔄 RabbitMQ 整合狀態
-
-### 目前進度
-- ✅ **基礎設施**: MQ 連接、交換機、隊列配置完成
-- ✅ **發布者框架**: OCPP 和 EMS 事件發布機制實現
-- ✅ **消費者框架**: 事件消費者結構建立
-- ✅ **配置管理**: 完整的 MQ 配置和環境變數支援
-- 🚧 **業務整合**: 正在將核心邏輯從同步轉為事件驅動模式
-
-### 開發建議
-1. **目前開發**: 使用 `MQ_ENABLED=false`，依賴現有同步邏輯
-2. **MQ 測試**: 設定 `MQ_ENABLED=true` 測試事件發布/消費功能  
-3. **生產部署**: 待業務邏輯完全整合後再啟用 MQ 模式
-
-### 相關檔案
-- **配置**: `src/servers/config/mqConfig.js`
-- **服務**: `src/servers/services/mqService.js`
-- **發布者**: `src/servers/publishers/`
-- **消費者**: `src/servers/consumers/`
-- **連接器**: `src/servers/mqServer.js`
+- 事件驅動架構設計，基於 EventEmitter 實現直接通信
 
 ---
 

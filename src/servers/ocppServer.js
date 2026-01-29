@@ -17,8 +17,7 @@ import cors from 'cors';
 import { logger } from './utils/index.js';
 
 // 引入配置
-import { mqConfig, apiConfig } from './config/index.js';
-const { MQ_ENABLED } = mqConfig;
+import { apiConfig } from './config/index.js';
 const { API_PATHS } = apiConfig;
 
 // 创建Express应用
@@ -65,9 +64,7 @@ const __filename = fileURLToPath(import.meta.url);
 // 引入控制器 (在wss初始化之后)
 import { ocppController, emsController } from './controllers/index.js';
 
-// 引入MQ服务 (如果启用)
-import * as mqServer from './mqServer.js';
-import * as ocppEventPublisher from './publishers/ocppEventPublisher.js';
+// 引入服務
 import { systemStatusService, orphanTransactionService, invoiceRetryService } from './services/index.js';
 
 /**
@@ -80,25 +77,8 @@ function initializeRoutes() {
       status: 'ok',
       version: '1.0.0',
       apiVersion: apiConfig.API.VERSION,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     };
-
-    // 附帶 MQ 狀態資訊（若啟用）
-    try {
-      if (MQ_ENABLED && mqServer) {
-        const mqChannel = mqServer.getChannel();
-        response.mq = {
-          enabled: MQ_ENABLED,
-          initialized: mqServer.isInitialized ? mqServer.isInitialized() : false,
-          connected: mqServer.isConnected ? mqServer.isConnected() : false,
-          channelReady: !!mqChannel
-        };
-      } else {
-        response.mq = { enabled: false };
-      }
-    } catch (err) {
-      response.mq = { enabled: MQ_ENABLED, error: err.message };
-    }
 
     // 附帶系統狀態資訊（僅供內部檢查）
     try {
@@ -240,47 +220,17 @@ function initializeWebSocketServer() {
       
       logger.info(`新WebSocket连接: id=${id}, remote=${remote}, agent=${userAgent}`);
       
-      // 发布连接事件到MQ（由 publisher 处理可用性与错误）
-      ocppEventPublisher.publishConnectionState({
-        cpsn: id,
-        state: 'connected',
-        timestamp: new Date().toISOString(),
-        remote,
-        userAgent
-      }).catch((err) => logger.warn(`MQ发布connected事件失败: ${err.message}`));
-      
       // 委托给控制器处理
       await ocppController.handleConnection(ws, req);
       
       // 监听WebSocket关闭事件
       ws.on('close', (code, reason) => {
         logger.info(`WebSocket断开: id=${id}, code=${code}, reason=${reason || 'No reason'}`);
-        
-        // 发布断开连接事件到MQ（由 publisher 处理可用性与错误）
-        ocppEventPublisher.publishConnectionState({
-          cpsn: id,
-          state: 'disconnected',
-          timestamp: new Date().toISOString(),
-          remote,
-          userAgent,
-          code,
-          reason: reason?.toString()
-        }).catch((err) => logger.warn(`MQ发布disconnected事件失败: ${err.message}`));
       });
       
       // 监听WebSocket错误事件
       ws.on('error', (error) => {
         logger.error(`WebSocket错误: id=${id}: ${error.message}`);
-        
-        // 发布WebSocket错误事件到MQ（由 publisher 处理可用性与错误）
-        ocppEventPublisher.publishConnectionState({
-          cpsn: id,
-          state: 'ws_error',
-          timestamp: new Date().toISOString(),
-          remote,
-          userAgent,
-          error: error.message
-        }).catch((err) => logger.warn(`MQ发布ws_error事件失败: ${err.message}`));
       });
     } catch (err) {
       logger.error('处理WebSocket连接时出错', err);
@@ -348,21 +298,14 @@ async function startServer(options = {}) {
         initializeWebSocketServer();
 
         // 异步初始化其他服务
-        initializeServices().then((mqInitialized) => {
+        initializeServices().then(() => {
           const { HOST, PORT } = getHostAndPort(startOptions);
           const serverInstance = server.listen(PORT, HOST, () => {
             logServerAddresses(HOST, PORT);
-            logger.info(`消息队列(MQ)状态: ${mqInitialized ? '已连接' : '未连接'}`);
 
-            // 更新系统状态並設定定時回報
+            // 更新系统状态
             if (systemStatusService) {
               systemStatusService.updateServerStatus('running');
-              const statusReportInterval = parseInt(process.env.STATUS_REPORT_INTERVAL || '600000', 10);
-              if (statusReportInterval > 0) {
-                setInterval(() => {
-                  systemStatusService.sendStatusReport('periodic');
-                }, statusReportInterval);
-              }
             }
 
             resolve();
@@ -433,16 +376,6 @@ async function startServer(options = {}) {
  * 初始化服務
  */
 async function initializeServices() {
-  // 初始化MQ系统（如果启用）
-  let mqInitialized = false;
-  if (MQ_ENABLED) {
-    try {
-      mqInitialized = await mqServer.initialize();
-    } catch (error) {
-      logger.warn(`MQ初始化失敗: ${error.message}`);
-    }
-  }
-  
   // 初始化EMS系统
   try {
     emsController.initializeEmsSystem();
@@ -476,8 +409,6 @@ async function initializeServices() {
   } catch (error) {
     logger.error(`⚠️ 發票重試監控服務啟動失败: ${error.message}`);
   }
-  
-  return mqInitialized;
 }
 
 // 捕获终止信号

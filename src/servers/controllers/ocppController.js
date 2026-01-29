@@ -7,8 +7,6 @@ import WebSocket from 'ws';
 import { logger } from '../utils/index.js';
 import { connectionService, ocppMessageService } from '../services/index.js';
 import { chargePointRepository } from '../repositories/index.js';
-import { mqConfig } from '../config/index.js';
-const { MQ_ENABLED } = mqConfig;
 
 // OCPP消息类型常量
 const CALL_MESSAGE = 2;
@@ -139,16 +137,6 @@ async function handleMessage(cpsn, ws, message) {
     
     default:
       logger.error(`未知的消息类型: ${msgTypeId}`);
-  }
-  
-  // 如果启用了MQ，发布消息到MQ
-  if (MQ_ENABLED) {
-    try {
-      // 这里会调用MQ服务发布消息
-      // 具体实现在MQ服务中
-    } catch (err) {
-      logger.error(`发布MQ消息时出错: ${err.message}`, err);
-    }
   }
 }
 

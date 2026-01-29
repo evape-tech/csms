@@ -5,8 +5,6 @@
 
 import { logger } from '../utils/index.js';
 import { chargePointRepository } from '../repositories/index.js';
-import { mqConfig } from '../config/index.js';
-const { MQ_ENABLED } = mqConfig;
 
 // WebSocket客户端池
 const wsClients = {};

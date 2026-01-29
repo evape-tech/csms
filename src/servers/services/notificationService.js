@@ -2,8 +2,6 @@
  * 通知服务
  * 处理系统通知和警报
  */
-import * as mqService from './mqService.js';
-import { EXCHANGES } from '../mqServer.js';
 
 // 定义通知类型
 const NOTIFICATION_TYPES = {
@@ -26,13 +24,8 @@ const NOTIFICATION_LEVELS = {
  * @returns {Promise<boolean>}
  */
 async function sendAlert(data) {
-  const alertData = {
-    type: NOTIFICATION_TYPES.ALERT,
-    level: data.level || NOTIFICATION_LEVELS.WARNING,
-    ...data
-  };
-  
-  return await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, NOTIFICATION_TYPES.ALERT, alertData);
+  console.log(`🚨 警報通知: ${data.message || '無訊息'}`);
+  return true;
 }
 
 /**
@@ -41,13 +34,8 @@ async function sendAlert(data) {
  * @returns {Promise<boolean>}
  */
 async function sendMaintenance(data) {
-  const maintenanceData = {
-    type: NOTIFICATION_TYPES.MAINTENANCE,
-    level: data.level || NOTIFICATION_LEVELS.INFO,
-    ...data
-  };
-  
-  return await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, NOTIFICATION_TYPES.MAINTENANCE, maintenanceData);
+  console.log(`🔧 維護通知: ${data.message || '無訊息'}`);
+  return true;
 }
 
 /**
@@ -56,13 +44,8 @@ async function sendMaintenance(data) {
  * @returns {Promise<boolean>}
  */
 async function sendStatus(data) {
-  const statusData = {
-    type: NOTIFICATION_TYPES.STATUS,
-    level: data.level || NOTIFICATION_LEVELS.INFO,
-    ...data
-  };
-  
-  return await mqService.publishMessage(EXCHANGES.NOTIFICATION_EVENTS, NOTIFICATION_TYPES.STATUS, statusData);
+  console.log(`ℹ️ 狀態通知: ${data.message || '無訊息'}`);
+  return true;
 }
 
 /**
