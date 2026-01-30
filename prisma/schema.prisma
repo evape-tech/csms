@@ -666,6 +666,7 @@ enum operation_logs_entity_type {
   RFID_CARD
   PAYMENT_CHANNEL
   SYSTEM_CONFIG
+  FAULT_REPORT
 }
 
 enum fault_reports_severity {

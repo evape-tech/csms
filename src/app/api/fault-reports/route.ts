@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '../../../lib/database/adapter.js';
 import DatabaseUtils from '../../../lib/database/utils.js';
+import { OperationLogger } from '@/lib/operationLogger';
 
 function serializeBigInt(obj: any) {
   return JSON.parse(
@@ -145,12 +146,13 @@ export async function GET(request: NextRequest) {
 
 // POST - 建立新的故障報告
 export async function POST(request: NextRequest) {
+  let body: any;
   try {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     const client = getDatabaseClient() as any;
 
-    const body = await request.json();
+    body = await request.json();
     const {
       cpid,
       cpsn,
@@ -223,6 +225,20 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // 記錄成功的建立操作
+    try {
+      await OperationLogger.log({
+        actionType: 'CREATE',
+        entityType: 'FAULT_REPORT',
+        entityId: String(faultReport.id),
+        entityName: `FR-${faultReport.id}`,
+        description: `建立故障回報: ${cpid} - ${fault_type}`,
+        status: 'SUCCESS'
+      }, request);
+    } catch (logErr) {
+      console.warn('[fault-reports] log create success failed:', logErr);
+    }
+
     return NextResponse.json({
       success: true,
       data: serializeBigInt(faultReport),
@@ -231,6 +247,21 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Create fault report error:', error);
+    
+    // 記錄失敗的建立操作
+    try {
+      await OperationLogger.log({
+        actionType: 'CREATE',
+        entityType: 'FAULT_REPORT',
+        entityId: body?.cpid || 'unknown',
+        entityName: body?.cpid ? `CPID: ${body.cpid}` : '未知',
+        description: `建立故障回報失敗: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        status: 'FAILED'
+      }, request);
+    } catch (logErr) {
+      console.warn('[fault-reports] log create failure failed:', logErr);
+    }
+    
     return NextResponse.json(
       { 
         success: false, 

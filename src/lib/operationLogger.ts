@@ -6,7 +6,7 @@ export interface OperationLogData {
   userEmail?: string;
   userName?: string;
   actionType: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'EXPORT' | 'IMPORT' | 'APPROVE' | 'REJECT' | 'RESET';
-  entityType: 'USER' | 'STATION' | 'METER' | 'GUN' | 'TARIFF' | 'TRANSACTION' | 'BILLING' | 'WALLET' | 'RFID_CARD' | 'PAYMENT_CHANNEL' | 'SYSTEM_CONFIG';
+  entityType: 'USER' | 'STATION' | 'METER' | 'GUN' | 'TARIFF' | 'TRANSACTION' | 'BILLING' | 'WALLET' | 'RFID_CARD' | 'PAYMENT_CHANNEL' | 'SYSTEM_CONFIG' | 'FAULT_REPORT';
   entityId?: string;
   entityName?: string;
   description?: string;
@@ -53,8 +53,15 @@ export class OperationLogger {
     let adminInfo;
     
     try {
-      db = getDatabaseClient();
+      console.log('[OperationLogger] 開始記錄日誌:', data);
+      
+      // 先嘗試初始化資料庫
+      const { getDatabase } = await import('@/lib/database/adapter');
+      db = await getDatabase();
+      
       adminInfo = await this.getCurrentAdmin(request);
+      
+      console.log('[OperationLogger] 用戶資訊:', adminInfo);
 
       // 驗證 userId 是否存在於資料庫中
       let validUserId: string | null = null;
@@ -73,7 +80,9 @@ export class OperationLogger {
         }
       }
 
-      await db.$executeRaw`
+      console.log('[OperationLogger] 準備插入資料庫，validUserId:', validUserId);
+      
+      const result = await db.$executeRaw`
         INSERT INTO operation_logs (
           user_id,
           user_email,
@@ -98,6 +107,8 @@ export class OperationLogger {
           NOW()
         )
       `;
+      
+      console.log('[OperationLogger] 插入結果:', result);
     } catch (error) {
       // 檢查是否為資料庫未初始化錯誤
       if (error instanceof Error && error.message.includes('Database not initialized')) {

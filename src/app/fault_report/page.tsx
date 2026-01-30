@@ -453,11 +453,49 @@ export default function FaultReport() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || "更新失敗");
   
+      // 記錄成功的調度操作
+      try {
+        await fetch('/api/operation-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actionType: 'UPDATE',
+            entityType: 'FAULT_REPORT',
+            entityId: String(reportId),
+            entityName: `FR-${reportId}`,
+            description: `調度故障回報給維修人員 (ID: ${targetAssignee})`,
+            status: 'SUCCESS'
+          })
+        });
+      } catch (logErr) {
+        console.warn('[fault-report] log assign success failed:', logErr);
+      }
+  
       resetAssignDialog();
       await fetchFaultReports();
   
     } catch (err) {
       console.error(err);
+      const errorMsg = err instanceof Error ? err.message : "調度失敗";
+      
+      // 記錄失敗的調度操作
+      try {
+        await fetch('/api/operation-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actionType: 'UPDATE',
+            entityType: 'FAULT_REPORT',
+            entityId: String(reportId),
+            entityName: `FR-${reportId}`,
+            description: `調度故障回報失敗: ${errorMsg}`,
+            status: 'FAILED'
+          })
+        });
+      } catch (logErr) {
+        console.warn('[fault-report] log assign failure failed:', logErr);
+      }
+      
       setError("調度失敗，請稍後再試");
     } finally {
       setUpdatingId(null);
@@ -528,9 +566,46 @@ export default function FaultReport() {
             throw new Error(data?.message ?? '更新故障報告狀態失敗');
           }
   
+          // 記錄成功的關閉操作
+          try {
+            await fetch('/api/operation-logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                actionType: 'UPDATE',
+                entityType: 'FAULT_REPORT',
+                entityId: String(id),
+                entityName: `FR-${id}`,
+                description: '關閉故障回報',
+                status: 'SUCCESS'
+              })
+            });
+          } catch (logErr) {
+            console.warn('[fault-report] log close success failed:', logErr);
+          }
+  
           await fetchFaultReports();
         } catch (err) {
           const message = err instanceof Error ? err.message : '更新故障報告狀態失敗';
+          
+          // 記錄失敗的關閉操作
+          try {
+            await fetch('/api/operation-logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                actionType: 'UPDATE',
+                entityType: 'FAULT_REPORT',
+                entityId: String(id),
+                entityName: `FR-${id}`,
+                description: `關閉故障回報失敗: ${message}`,
+                status: 'FAILED'
+              })
+            });
+          } catch (logErr) {
+            console.warn('[fault-report] log close failure failed:', logErr);
+          }
+          
           setError(message);
           console.error('Update fault report status error:', err);
         } finally {
@@ -596,6 +671,8 @@ export default function FaultReport() {
     } catch (e) {// 忽略：防止 SSR 或環境錯誤
     }
   };
+
+
 
   return (
     <Container
@@ -1226,11 +1303,49 @@ export default function FaultReport() {
             if (!res.ok || !data.success) {
               throw new Error(data?.message ?? '更新故障報告失敗');
             }
+            
+            // 記錄成功的完成操作
+            try {
+              await fetch('/api/operation-logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  actionType: 'UPDATE',
+                  entityType: 'FAULT_REPORT',
+                  entityId: String(id),
+                  entityName: `FR-${id}`,
+                  description: `完成故障回報，解決方案: ${resolutionText.substring(0, 50)}${resolutionText.length > 50 ? '...' : ''}`,
+                  status: 'SUCCESS'
+                })
+              });
+            } catch (logErr) {
+              console.warn('[fault-report] log resolve success failed:', logErr);
+            }
+            
             setResolutionDialog({ open: false, reportId: null, resolution: '' });
             setSuccessMessage('故障回報已標記為已完成');
             await fetchFaultReports();
           } catch (err: any) {
             const message = err instanceof Error ? err.message : '更新失敗';
+            
+            // 記錄失敗的完成操作
+            try {
+              await fetch('/api/operation-logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  actionType: 'UPDATE',
+                  entityType: 'FAULT_REPORT',
+                  entityId: String(id),
+                  entityName: `FR-${id}`,
+                  description: `完成故障回報失敗: ${message}`,
+                  status: 'FAILED'
+                })
+              });
+            } catch (logErr) {
+              console.warn('[fault-report] log resolve failure failed:', logErr);
+            }
+            
             setError(message);
             console.error('Resolve error:', err);
           } finally {

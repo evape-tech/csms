@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseClient } from '@/lib/database/adapter';
 import { AuthUtils } from '@/lib/auth/auth';
+import { OperationLogger } from '@/lib/operationLogger';
 
 // 強制動態渲染，避免靜態快取
 export const dynamic = 'force-dynamic';
@@ -172,5 +173,61 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ 
       error: '獲取操作日誌失敗，請稍後再試' 
     }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { 
+      actionType, 
+      entityType, 
+      entityId, 
+      entityName, 
+      description, 
+      status = 'SUCCESS' 
+    } = body;
+
+    console.log('[operation-logs/POST] 收到日誌記錄請求:', { actionType, entityType, entityId, entityName, description, status });
+
+    // 驗證必要參數
+    if (!actionType || !entityType) {
+      console.error('[operation-logs/POST] 缺少必要參數');
+      return NextResponse.json({ 
+        success: false,
+        error: '缺少必要參數：actionType 和 entityType' 
+      }, { status: 400 });
+    }
+
+    // 使用 OperationLogger 記錄日誌
+    try {
+      await OperationLogger.log({
+        actionType,
+        entityType,
+        entityId,
+        entityName,
+        description,
+        status
+      }, request);
+      console.log('[operation-logs/POST] 日誌記錄成功');
+    } catch (logError) {
+      console.error('[operation-logs/POST] OperationLogger.log 失敗:', logError);
+      throw logError;
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '操作日誌記錄成功'
+    });
+
+  } catch (error) {
+    console.error('[operation-logs/POST] 記錄操作日誌失敗:', error);
+    console.error('[operation-logs/POST] 錯誤詳情:', error instanceof Error ? error.message : String(error));
+    
+    // 即使記錄失敗也返回成功，避免影響主要功能
+    return NextResponse.json({
+      success: true,
+      message: '操作日誌記錄失敗（已忽略）'
+    });
   }
 }
