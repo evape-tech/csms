@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthHelper } from '../../../lib/auth/authHelper';
-import DatabaseUtils from '../../../lib/database/utils.js';
-import { databaseService } from '../../../lib/database/service.js';
+import { AuthHelper } from '../../../../lib/auth/authHelper';
+import DatabaseUtils from '../../../../lib/database/utils.js';
+import { databaseService } from '../../../../lib/database/service.js';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Get billing records
+ * Get user's billing records
  * 
- * @route GET /api/billing-records
+ * @route GET /api/billing/user-records
  * @auth Bearer Token or Cookie
  * 
  * @query start_date - Start date (YYYY-MM-DD)
  * @query end_date - End date (YYYY-MM-DD)
- * @query status - Billing status (default: COMPLETED)
- * @query user_id - Filter by user UUID
+ * @query status - Billing status (default: CALCULATED)
  * @query cpid - Filter by charge point ID
  * @query cpsn - Filter by charge point serial number
  * @query limit - Number of results (default: 100)
@@ -39,18 +38,19 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const status = searchParams.get('status') || 'CALCULATED';
-    const userId = searchParams.get('user_id');
     const cpid = searchParams.get('cpid');
     const cpsn = searchParams.get('cpsn');
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '100', 10), 1), 500);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
 
-    console.log(`🔍 [API /api/billing-records] 查詢營收記錄`);
+    console.log(`🔍 [API /api/billing/user-records] 查詢營收記錄`);
 
-    // 構建查詢條件
-    const where: any = { status };
+    // 構建查詢條件 (限制只能查詢自己的記錄)
+    const where: any = { 
+      status,
+      user_id: currentUser.userId,
+    };
 
-    if (userId) where.user_id = userId;
     if (cpid) where.cpid = cpid;
     if (cpsn) where.cpsn = cpsn;
 
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       returned: formattedRecords.length,
     });
   } catch (error) {
-    console.error('[API /api/billing-records] error:', error);
+    console.error('[API /api/billing/user-records] error:', error);
     return NextResponse.json(
       {
         success: false,
@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
 /**
  * Create billing record
  * 
- * @route POST /api/billing-records
+ * @route POST /api/billing/user-records
  * @auth Bearer Token or Cookie
  * 
  * @body {
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🧾 [API /api/billing-records] 建立新的帳單記錄: ${transaction_id}`);
+    console.log(`🧾 [API /api/billing/user-records] 建立新的帳單記錄: ${transaction_id}`);
 
     const record = await databaseService.createBillingRecord({
       transaction_id,
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('[API /api/billing-records] error:', error);
+    console.error('[API /api/billing/user-records] error:', error);
     return NextResponse.json(
       {
         success: false,

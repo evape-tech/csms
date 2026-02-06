@@ -567,15 +567,18 @@ csms-nextjs/
 │   │   ├── charging_status/  # 充電狀態監控頁面
 │   │   ├── dashboard/        # 系統儀表板頁面
 │   │   ├── database-management/ # 資料庫管理介面
-│   │   ├── fault_report/     # 故障報告頁面
-│   │   ├── hardware_maintenance/ # 硬體維護頁面
+│   │   ├── electricity-rates/ # 用電與費率管理頁面組
+│   │   │   ├── power_analysis/ # 電力統計與分析ページ
+│   │   │   └── pricing_management/ # 電價管理頁面
 │   │   ├── login/            # 用戶登入頁面
-│   │   ├── operation_log/    # 操作日誌頁面
-│   │   ├── power_analysis/   # 功率分析頁面
-│   │   ├── pricing_management/ # 費率管理頁面
-│   │   ├── reports/          # 報表中心頁面
-│   │   ├── security_log/     # 安全日誌頁面
-│   │   ├── user_management/  # 用戶管理頁面
+│   │   ├── operations-reports/ # 維運與報表頁面組
+│   │   │   ├── fault_report/ # 故障回報協調頁面
+│   │   │   ├── hardware_maintenance/ # 硬體維護頁面
+│   │   │   ├── operation_log/ # 操作日誌頁面
+│   │   │   └── reports/      # 報表中心頁面
+│   │   ├── users-permissions/ # 用戶與權限管理頁面組
+│   │   │   ├── user_management/ # 用戶資料管理頁面
+│   │   │   └── payment_management/ # 儲值與支付方式管理頁面
 │   │   └── ... (其他功能頁面)
 │   ├── actions/              # Next.js Server Actions
 │   │   ├── authActions.js    # 認證相關動作

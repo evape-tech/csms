@@ -29,7 +29,7 @@ export async function togglePaymentMethodStatus(channelId: number) {
       data: { status: newStatus }
     });
 
-    revalidatePath('/payment_management');
+    revalidatePath('/users-permissions/payment_management');
     return { success: true, data: updatedChannel };
   } catch (error) {
     console.error('Error toggling payment method status:', error);
@@ -69,7 +69,7 @@ export async function createPaymentMethod(data: { name: string; code: string; st
       }
     });
 
-    revalidatePath('/payment_management');
+    revalidatePath('/users-permissions/payment_management');
     return { success: true, data: newChannel };
   } catch (error) {
     console.error('Error creating payment method:', error);
@@ -105,7 +105,7 @@ export async function updatePaymentMethod(channelId: number, data: { name: strin
       data: updateData
     });
 
-    revalidatePath('/payment_management');
+    revalidatePath('/users-permissions/payment_management');
     return { success: true, data: updatedChannel };
   } catch (error) {
     console.error('Error updating payment method:', error);
@@ -143,7 +143,7 @@ export async function deletePaymentMethod(channelId: number) {
       where: { id: channelId }
     });
 
-    revalidatePath('/payment_management');
+    revalidatePath('/users-permissions/payment_management');
     return { success: true };
   } catch (error) {
     console.error('Error deleting payment method:', error);

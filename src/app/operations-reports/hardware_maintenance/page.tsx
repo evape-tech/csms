@@ -36,7 +36,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoIcon from '@mui/icons-material/Info';
-import { CreateMaintenanceDialog } from '../../components/dialog';
+import { CreateMaintenanceDialog } from '@/components/dialog';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },

@@ -11,7 +11,7 @@ import {
   CircularProgress,
   Typography
 } from '@mui/material';
-import type { FaultReport } from '@/app/fault_report/page';
+import type { FaultReport } from '@/app/operations-reports/fault_report/page';
 
 interface FaultReportDetailDialogProps {
   open: boolean;

@@ -34,10 +34,10 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import AddIcon from '@mui/icons-material/Add';
-import UserDialog from '../../components/dialog/UserDialog';
-import ResetPasswordDialog from '../../components/dialog/ResetPasswordDialog';
-import CardManagementDialog from '../../components/dialog/CardManagementDialog';
-import { createUser } from '../../actions/userActions';
+import UserDialog from '@/components/dialog/UserDialog';
+import ResetPasswordDialog from '@/components/dialog/ResetPasswordDialog';
+import CardManagementDialog from '@/components/dialog/CardManagementDialog';
+import { createUser } from '@/actions/userActions';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -134,7 +134,7 @@ export default function UserManagement() {
       let result;
       if (editingUser) {
         // 編輯模式
-        const { updateUser } = await import('../../actions/userActions');
+        const { updateUser } = await import('../../../actions/userActions');
         result = await updateUser(editingUser.id, formData);
       } else {
         // 新增模式

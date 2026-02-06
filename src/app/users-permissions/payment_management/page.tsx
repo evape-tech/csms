@@ -37,7 +37,7 @@ import {
   createPaymentMethod,
   updatePaymentMethod,
   deletePaymentMethod
-} from '../../actions/paymentActions';
+} from '@/actions/paymentActions';
 import SearchIcon from '@mui/icons-material/Search';
 import PaymentIcon from '@mui/icons-material/Payment';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -49,8 +49,8 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PaymentMethodDialog from '../../components/dialog/PaymentMethodDialog';
-import PaymentDetailDialog from '../../components/dialog/PaymentDetailDialog';
+import PaymentMethodDialog from '@/components/dialog/PaymentMethodDialog';
+import PaymentDetailDialog from '@/components/dialog/PaymentDetailDialog';
 
 // 定義類型
 interface PaymentMethod {

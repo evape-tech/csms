@@ -56,7 +56,7 @@ export async function createUser(formData: FormData) {
       }
     });
 
-    revalidatePath('/user_management');
+    revalidatePath('/users-permissions/user_management');
     return { success: true, data: newUser };
   } catch (error) {
     console.error('Error creating user:', error);
@@ -100,7 +100,7 @@ export async function updateUser(userId: number, formData: FormData) {
       }
     });
 
-    revalidatePath('/user_management');
+    revalidatePath('/users-permissions/user_management');
     return { success: true, data: updatedUser };
   } catch (error) {
     console.error('Error updating user:', error);
@@ -120,7 +120,7 @@ export async function deleteUser(userId: number) {
       where: { id: userId }
     });
 
-    revalidatePath('/user_management');
+    revalidatePath('/users-permissions/user_management');
     return { success: true };
   } catch (error) {
     console.error('Error deleting user:', error);
@@ -156,7 +156,7 @@ export async function toggleUserStatus(userId: number) {
       }
     });
     
-    revalidatePath('/user_management');
+    revalidatePath('/users-permissions/user_management');
     return { success: true, data: updatedUser };
   } catch (error) {
     console.error('Error toggling user status:', error);

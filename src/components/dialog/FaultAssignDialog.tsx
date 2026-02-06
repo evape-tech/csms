@@ -12,7 +12,7 @@ import {
   Select,
   MenuItem
 } from '@mui/material';
-import type { FaultReportUser } from '@/app/fault_report/page';
+import type { FaultReportUser } from '@/app/operations-reports/fault_report/page';
 
 export interface FaultAssignDialogProps {
   open: boolean;

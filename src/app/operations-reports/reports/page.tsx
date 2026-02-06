@@ -21,7 +21,6 @@ import {
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
 import ReceiptIcon from '@mui/icons-material/Receipt';
-import SettingsIcon from '@mui/icons-material/Settings';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -30,7 +29,6 @@ import InsightsIcon from '@mui/icons-material/Insights';
 // 使用 lazy loading 加載組件
 const ChargingRecords = lazy(() => import('./ChargingRecords'));
 const TransactionRecords = lazy(() => import('./TransactionRecords'));
-const SystemRecords = lazy(() => import('./SystemRecords'));
 const UsageRecords = lazy(() => import('./UsageRecords'));
 
 // 優化的 TabPanel 組件
@@ -155,16 +153,10 @@ const ReportTabs = memo(function ReportTabs({
           {...a11yProps(1)}
         />
         <Tab
-          icon={<SettingsIcon sx={{ fontSize: '1.2rem' }} />}
-          iconPosition="start"
-          label="系統紀錄"
-          {...a11yProps(2)}
-        />
-        <Tab
           icon={<AnalyticsIcon sx={{ fontSize: '1.2rem' }} />}
           iconPosition="start"
           label="使用紀錄"
-          {...a11yProps(3)}
+          {...a11yProps(2)}
         />
       </Tabs>
     </Box>
@@ -183,7 +175,6 @@ function a11yProps(index: number) {
 const SUMMARY_DEFAULT = {
   charging: { count: 0, today: 0 },
   transactions: { count: 0, today: 0 },
-  system: { count: 0, today: 0 },
   usage: { count: 0, today: 0 }
 };
 
@@ -274,7 +265,6 @@ const Reports = memo(function Reports() {
       setSummary({
         charging: normalize(json.data?.charging),
         transactions: normalize(json.data?.transactions),
-        system: normalize(json.data?.system),
         usage: normalize(json.data?.usage)
       });
     } catch (error) {
@@ -305,14 +295,6 @@ const Reports = memo(function Reports() {
       delta: summary.transactions.today,
       icon: <ReceiptIcon />,
       color: theme.palette.success.main
-    },
-    {
-      key: 'system',
-      title: '系統記錄總數',
-      value: summary.system.count,
-      delta: summary.system.today,
-      icon: <SettingsIcon />,
-      color: theme.palette.warning.main
     },
     {
       key: 'usage',
@@ -482,9 +464,6 @@ const Reports = memo(function Reports() {
             <TransactionRecords />
           </TabPanel>
           <TabPanel value={value} index={2}>
-            <SystemRecords />
-          </TabPanel>
-          <TabPanel value={value} index={3}>
             <UsageRecords />
           </TabPanel>
         </Box>

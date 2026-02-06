@@ -30,7 +30,7 @@ async function fetchBillingRecords(startDate, endDate, selectedGuns = null) {
       status: 'CALCULATED' // 只獲取已計算的交易
     });
     
-    const response = await fetch(`/api/billing-records?${params}`);
+    const response = await fetch(`/api/billing/user-records?${params}`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }

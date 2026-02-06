@@ -39,24 +39,24 @@ const groupedMenuItems = [
   {
     group: '用電與費率',
     items: [
-      { label: '電力統計與分析', path: '/power_analysis', icon: QueryStatsIcon },
-      { label: '電價管理', path: '/pricing_management', icon: PriceChangeIcon },
+      { label: '電力統計與分析', path: '/electricity-rates/power_analysis', icon: QueryStatsIcon },
+      { label: '電價管理', path: '/electricity-rates/pricing_management', icon: PriceChangeIcon },
     ],
   },
   {
     group: '用戶與權限',
     items: [
-      { label: '用戶資料管理', path: '/user_management', icon: PeopleIcon },
-      { label: '儲值與支付方式管理', path: '/payment_management', icon: PaymentIcon },
+      { label: '用戶資料管理', path: '/users-permissions/user_management', icon: PeopleIcon },
+      { label: '儲值與支付方式管理', path: '/users-permissions/payment_management', icon: PaymentIcon },
     ],
   },
   {
     group: '維運與報表',
     items: [
-      { label: '故障回報協調', path: '/fault_report', icon: ReportProblemIcon },
-      { label: '硬體維護', path: '/hardware_maintenance', icon: BuildIcon },
-      { label: '操作日誌', path: '/operation_log', icon: SecurityIcon },
-      { label: '報表中心', path: '/reports', icon: DescriptionIcon },
+      { label: '故障回報協調', path: '/operations-reports/fault_report', icon: ReportProblemIcon },
+      { label: '硬體維護', path: '/operations-reports/hardware_maintenance', icon: BuildIcon },
+      { label: '操作日誌', path: '/operations-reports/operation_log', icon: SecurityIcon },
+      { label: '報表中心', path: '/operations-reports/reports', icon: DescriptionIcon },
     ],
   },
 ];
