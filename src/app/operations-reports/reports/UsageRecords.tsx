@@ -76,9 +76,9 @@ export default function UsageRecords() {
   // 抓充電樁選項，依選中的電表過濾
   const fetchChargersByMeters = useCallback(async (meters: string[]) => { // NEW
     try {
-      let url = '/api/guns/search?search=';
+      let url = '/api/guns?search=';
       if (meters.length > 0) {
-        url = `/api/guns/search?meterNo=${meters.join(',')}`; // MODIFIED
+        url = `/api/guns?meterNo=${meters.join(',')}`; // MODIFIED
       }
       const res = await fetch(url);
       const json = await res.json();
