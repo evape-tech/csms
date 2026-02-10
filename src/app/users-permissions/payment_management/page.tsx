@@ -620,7 +620,8 @@ export default function PaymentManagement() {
           </Card>
         </Box>
       </Box>
-      {/* 儲值與支付方式管理區域 */}
+      {/* 儲值與支付方式管理區域 (已註解) */}
+      {/*
       <Paper
         elevation={2}
         sx={{
@@ -759,6 +760,7 @@ export default function PaymentManagement() {
           )}
         </Box>
       </Paper>
+      */}
       {/* 支付記錄查詢篩選區 */}
       <Paper
         elevation={1}

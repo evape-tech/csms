@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
 import { FilterField } from './types/filter';
-import { useSiteId } from '@/contexts/SiteContext';
+import { useSiteId } from '@/stores/siteStore';
 
 const columns = [
   {

@@ -12,7 +12,7 @@ import {
   UsagePatternCard,
   RevenueStatisticsCard
 } from '@/components/cards';
-import { useSiteId } from '@/contexts/SiteContext';
+import { useSiteId } from '@/stores/siteStore';
 
 // 獲取電表列表
 async function fetchMeters(stationId?: number | null) {

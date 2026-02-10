@@ -17,7 +17,7 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import { CreateFaultReportDialog, FaultReportDetailDialog, FaultAssignDialog, ResolutionDialog } from '@/components/dialog';
-import { useSiteId } from '@/contexts/SiteContext';
+import { useSiteId } from '@/stores/siteStore';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },

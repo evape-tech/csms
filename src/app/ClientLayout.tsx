@@ -14,9 +14,11 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { Sidebar } from '../components/layout';
 import { SiteDialog } from '../components/dialog';
 import Drawer from '@mui/material/Drawer';
-import { LoadingSpinner } from '../components/ui';
-import { SiteProvider, useSite } from '../contexts/SiteContext';
-import type { Site } from '../contexts/SiteContext';
+import { LoadingSpinner, GlobalNotification } from '../components/ui';
+import { useSiteStore, useSite } from '../stores/siteStore';
+import type { Site } from '../stores/siteStore';
+import { useUIStore } from '../stores/uiStore';
+import { useUserStore, useUserDisplayName, useUserEmail } from '../stores/userStore';
 import SiteSearchParamsSync from './SiteSearchParamsSync';
 
 const drawerWidth = 240;
@@ -37,6 +39,42 @@ const drawerSx = {
     transition: 'width 200ms',
   },
 };
+
+// Memoized User Info component for AppBar
+const AppBarUserInfo = React.memo(function AppBarUserInfo() {
+  const userDisplayName = useUserDisplayName();
+  const userEmail = useUserEmail();
+  
+  if (!userEmail) return null;
+
+  return (
+    <Box sx={{ minWidth: 0, mr: 2 }}>
+      <Typography 
+        variant="body2" 
+        sx={{ 
+          fontWeight: 500, 
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {userDisplayName || userEmail}
+      </Typography>
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          display: 'block', 
+          opacity: 0.8, 
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {userEmail}
+      </Typography>
+    </Box>
+  );
+});
 
 // Memoized AppBar component
 const AppBarComponent = React.memo(function AppBarComponent({
@@ -67,6 +105,8 @@ const AppBarComponent = React.memo(function AppBarComponent({
         <Typography variant="h6" noWrap component="div" sx={titleSx}>
           EMS 能源管理系統
         </Typography>
+        <Box sx={{ flexGrow: 1 }} />
+        <AppBarUserInfo />
         <Typography variant="body2" sx={siteNameSx}>
           {selectedSiteName}
         </Typography>
@@ -120,22 +160,24 @@ export default function ClientLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <SiteProvider>
-      <ClientLayoutInner>{children}</ClientLayoutInner>
-    </SiteProvider>
-  );
-}
-
-function ClientLayoutInner({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+  const fetchSites = useSiteStore((s) => s.fetchSites);
+  const fetchCurrentUser = useUserStore((s) => s.fetchCurrentUser);
   const { sites, selectedSite, selectedSiteName, selectSite, refreshSites } = useSite();
-  const [drawerOpen, setDrawerOpen] = React.useState(true);
-  const [siteDialogOpen, setSiteDialogOpen] = React.useState(false);
-  const [darkMode, setDarkMode] = React.useState(false);
+
+  // Trigger initial site fetch and user fetch on mount
+  React.useEffect(() => {
+    fetchSites();
+    fetchCurrentUser();
+  }, [fetchSites, fetchCurrentUser]);
+
+  // UI state from Zustand store (persisted: drawerOpen, darkMode)
+  const drawerOpen = useUIStore((s) => s.drawerOpen);
+  const darkMode = useUIStore((s) => s.darkMode);
+  const siteDialogOpen = useUIStore((s) => s.siteDialogOpen);
+  const toggleDrawer = useUIStore((s) => s.toggleDrawer);
+  const toggleDarkMode = useUIStore((s) => s.toggleDarkMode);
+  const openSiteDialog = useUIStore((s) => s.openSiteDialog);
+  const closeSiteDialog = useUIStore((s) => s.closeSiteDialog);
 
   const theme = React.useMemo(() => createTheme({
     palette: {
@@ -149,30 +191,23 @@ function ClientLayoutInner({
   // Memoized handlers to prevent unnecessary re-renders
   const handleDrawerToggle = React.useCallback(() => {
     React.startTransition(() => {
-      setDrawerOpen((prev) => !prev);
+      toggleDrawer();
     });
-  }, []);
+  }, [toggleDrawer]);
   
   const handleThemeToggle = React.useCallback(() => {
-    setDarkMode((prev) => !prev);
-  }, []);
+    toggleDarkMode();
+  }, [toggleDarkMode]);
   
   const handleSiteSelect = React.useCallback((site: Site) => {
     selectSite(site);
-    setSiteDialogOpen(false);
-  }, [selectSite]);
+    closeSiteDialog();
+  }, [selectSite, closeSiteDialog]);
   
-  const handleOpenSiteDialog = React.useCallback(() => setSiteDialogOpen(true), []);
+  const handleOpenSiteDialog = React.useCallback(() => openSiteDialog(), [openSiteDialog]);
   
   const handleLogout = React.useCallback(async () => {
-    try {
-      // 使用 server action 進行登出
-      await logoutAction();
-    } catch (e) {
-      console.error('Logout failed', e);
-      // 如果 server action 失敗，直接導航到登入頁面
-      window.location.href = '/login';
-    }
+    await logoutAction();
   }, []);
 
   // Memoized main content sx to avoid recreation
@@ -225,12 +260,15 @@ function ClientLayoutInner({
         {/* Site Selection Dialog */}
         <SiteDialog
           open={siteDialogOpen}
-          onClose={() => setSiteDialogOpen(false)}
+          onClose={closeSiteDialog}
           sites={sites}
           selectedSite={selectedSite}
           onSiteSelect={handleSiteSelect}
           onSitesChanged={refreshSites}
         />
+
+        {/* Global Notification Snackbar */}
+        <GlobalNotification />
       </Box>
     </ThemeProvider>
   );

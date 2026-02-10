@@ -37,7 +37,7 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoIcon from '@mui/icons-material/Info';
 import { CreateMaintenanceDialog } from '@/components/dialog';
-import { useSiteId } from '@/contexts/SiteContext';
+import { useSiteId } from '@/stores/siteStore';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },

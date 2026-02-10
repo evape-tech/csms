@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useSite } from '../contexts/SiteContext';
+import { useSiteStore } from '../stores/siteStore';
 
 /**
  * Syncs the selected site from SiteContext to the URL searchParams (?stationId=X).
@@ -9,7 +9,8 @@ import { useSite } from '../contexts/SiteContext';
  * Place this inside the SiteProvider in ClientLayout.
  */
 function SiteSearchParamsSyncInner() {
-  const { selectedSiteId, loading } = useSite();
+  const selectedSiteId = useSiteStore((s) => s.selectedSite?.id ?? null);
+  const loading = useSiteStore((s) => s.loading);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
