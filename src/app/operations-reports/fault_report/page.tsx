@@ -17,6 +17,7 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import { CreateFaultReportDialog, FaultReportDetailDialog, FaultAssignDialog, ResolutionDialog } from '@/components/dialog';
+import { useSiteId } from '@/contexts/SiteContext';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -223,6 +224,7 @@ const initialAssignDialogState: AssignDialogState = {
 
 export default function FaultReport() {
   const theme = useTheme();
+  const siteId = useSiteId();
   const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState('');
   const [faultReports, setFaultReports] = useState<FaultReport[]>([]);
@@ -304,6 +306,7 @@ export default function FaultReport() {
       const params = new URLSearchParams();
       if (status) params.append('status', status);
       params.append('limit', '100');
+      if (siteId) params.append('station_id', String(siteId));
 
       const response = await fetch(`/api/fault-reports?${params.toString()}`);
       const data = await response.json();
@@ -326,7 +329,7 @@ export default function FaultReport() {
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, siteId]);
 
   useEffect(() => {
     fetchFaultReports();

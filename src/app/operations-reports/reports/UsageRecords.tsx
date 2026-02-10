@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RecordsPage from './RecordsPage';
 import { FilterField } from './types/filter';
+import { useSiteId } from '@/contexts/SiteContext';
 
 const columns = [
   {
@@ -61,6 +62,7 @@ interface DateRange {
 }
 
 export default function UsageRecords() {
+  const siteId = useSiteId();
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +82,9 @@ export default function UsageRecords() {
       if (meters.length > 0) {
         url = `/api/guns?meterNo=${meters.join(',')}`; // MODIFIED
       }
+      if (siteId) {
+        url += `${url.includes('?') ? '&' : '?'}station_id=${siteId}`;
+      }
       const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
@@ -88,7 +93,7 @@ export default function UsageRecords() {
     } catch (err) {
       console.error('抓充電樁失敗', err);
     }
-  }, []);
+  }, [siteId]);
   
   interface FetchParams extends Partial<DateRange> {
     meterNo?: string[];
@@ -122,6 +127,10 @@ export default function UsageRecords() {
         query.set('meterNo', params.meterNo.join(','));
       }
 
+      if (siteId) {
+        query.set('station_id', String(siteId));
+      }
+
       const response = await fetch(`/api/reports/usage?${query.toString()}`);
       const json = await response.json();
 
@@ -144,7 +153,7 @@ export default function UsageRecords() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
     rangeRef.current = defaultRange;
@@ -157,7 +166,8 @@ export default function UsageRecords() {
       let ignore = false;
       const loadOptions = async () => {
           try {
-          const metersRes = await fetch(`/api/meters?search=`);
+          const metersUrl = siteId ? `/api/meters?search=&station_id=${siteId}` : `/api/meters?search=`;
+          const metersRes = await fetch(metersUrl);
           const metersJson = await metersRes.json();
           if (!ignore) {
             setMeterOptions(Array.isArray(metersJson?.data) ? metersJson.data : []);
@@ -169,7 +179,7 @@ export default function UsageRecords() {
       };
       loadOptions();
       return () => { ignore = true; };
-    }, [fetchChargersByMeters]);
+    }, [fetchChargersByMeters, siteId]);
     // onAdvancedFilter 處理：電表改變時自動刷新充電樁選項
     const handleAdvancedFilter = useCallback((filters: Record<string, any>) => {
       const meters: string[] = filters.meterNo || [];   
@@ -209,6 +219,9 @@ export default function UsageRecords() {
       }
       if (lastFilters.charger && lastFilters.charger.length > 0) {
         params.set('charger', lastFilters.charger.join(','));
+      }
+      if (siteId) {
+        params.set('station_id', String(siteId));
       }
       params.set('format', 'xlsx');
 

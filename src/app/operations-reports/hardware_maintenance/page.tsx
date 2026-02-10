@@ -37,6 +37,7 @@ import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoIcon from '@mui/icons-material/Info';
 import { CreateMaintenanceDialog } from '@/components/dialog';
+import { useSiteId } from '@/contexts/SiteContext';
 
 const statusOptions = [
   { label: '全部狀態', value: '' },
@@ -97,6 +98,7 @@ interface MaintenanceStats {
 
 export default function HardwareMaintenance() {
   const theme = useTheme();
+  const siteId = useSiteId();
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -130,6 +132,7 @@ export default function HardwareMaintenance() {
       if (status) params.append('status', status);
       if (type) params.append('maintenance_type', type);
       if (keyword) params.append('cpid', keyword);
+      if (siteId) params.append('station_id', String(siteId));
       
       const response = await fetch(`/api/maintenance-records?${params.toString()}`);
       const data = await response.json();
@@ -181,7 +184,7 @@ export default function HardwareMaintenance() {
   // 初始載入
   React.useEffect(() => {
     fetchMaintenanceRecords();
-  }, [status, type]);
+  }, [status, type, siteId]);
 
   // 手動搜尋
   const handleSearch = () => {

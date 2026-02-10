@@ -60,9 +60,16 @@ class DatabaseService {
 
   async getGuns(filter) {
     const client = getDatabaseClient();
-    // console.log(`🔍 [DatabaseService] getGuns() called with filter:`, filter);
+    // Support station_id filtering via meter relation
+    const where = { ...filter };
+    if (where.station_id) {
+      const stationId = parseInt(where.station_id);
+      delete where.station_id;
+      where.meter = { station_id: stationId };
+    }
+    // console.log(`🔍 [DatabaseService] getGuns() called with filter:`, where);
     return await client.guns.findMany({ 
-      where: filter,
+      where,
       include: {
         gun_tariffs: {
           include: {
@@ -425,11 +432,16 @@ class DatabaseService {
 
   async getStations(filter = {}) {
     const client = getDatabaseClient();
-    // 構建 where 條件，如果傳入 station_code 則只查詢符合的場域
+    // 構建 where 條件
     const where = {};
     if (filter.station_code) {
-      // 支援 exact match 或可以擴展為包含/like
       where.station_code = filter.station_code;
+    }
+    if (filter.station_id) {
+      where.id = parseInt(filter.station_id);
+    }
+    if (filter.id) {
+      where.id = parseInt(filter.id);
     }
 
     // 獲取場域及其相關的電表與充電槍資訊（包含費率與充電標準）
@@ -506,6 +518,25 @@ class DatabaseService {
         }
       }
     });
+  }
+
+  /**
+   * 根據 stationId 取得該場域下所有 guns 的 cpid 列表
+   * 用於 fault_reports / maintenance_records 等以 cpid 關聯的查詢
+   * @param {number} stationId
+   * @returns {Promise<string[]>} cpid 列表
+   */
+  async getCpidsByStationId(stationId) {
+    const client = getDatabaseClient();
+    const guns = await client.guns.findMany({
+      where: {
+        meter: {
+          station_id: parseInt(stationId)
+        }
+      },
+      select: { cpid: true }
+    });
+    return guns.map(g => g.cpid).filter(Boolean);
   }
 
   async updateStation(id, data) {

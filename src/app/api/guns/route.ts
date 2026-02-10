@@ -18,6 +18,8 @@ export async function GET(req: Request) {
 
     console.log(`🔍 [API /api/guns] DB_PROVIDER = "${process.env.DB_PROVIDER}"`);
 
+    const stationIdParam = searchParams.get('station_id') || searchParams.get('stationId');
+
     // 🔍 如果有搜尋或電表過濾，使用進階查詢
     if (search || meterNoParam) {
       console.log(`🔍 [API /api/guns] 使用進階搜尋模式`);
@@ -32,6 +34,11 @@ export async function GET(req: Request) {
 
       // 準備查詢條件
       const where: any = {};
+
+      // 場域過濾
+      if (stationIdParam) {
+        where.meter = { ...where.meter, station_id: parseInt(stationIdParam) };
+      }
 
       // 🔍 模糊搜尋條件
       if (search) {
@@ -78,6 +85,12 @@ export async function GET(req: Request) {
 
     // 根據查詢參數建立過濾條件
     const filter: Record<string, any> = {};
+    const stationId = searchParams.get('station_id') || searchParams.get('stationId');
+
+    if (stationId) {
+      filter.station_id = stationId;
+      console.log(`🔍 [API /api/guns] Filtering by station_id: ${stationId}`);
+    }
 
     if (cpid) {
       filter.cpid = cpid;

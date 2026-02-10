@@ -48,11 +48,19 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('end_date');
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 500);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
+    const stationId = searchParams.get('station_id') || searchParams.get('stationId');
 
     console.log(`🔍 [API /api/charging-transactions] 查詢充電交易記錄`);
 
     // 構建查詢條件
     const where: any = {};
+
+    // 場域過濾：根據 station_id 查找該場域下所有 guns 的 cpid
+    if (stationId) {
+      const guns = await databaseService.getGuns({ station_id: stationId });
+      const cpids = guns.map((g: any) => g.cpid).filter(Boolean);
+      where.cpid = { in: cpids.length > 0 ? cpids : ['__no_match__'] };
+    }
 
     if (status) {
       where.status = status.toUpperCase();

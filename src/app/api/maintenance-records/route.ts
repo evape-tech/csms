@@ -37,11 +37,22 @@ export async function GET(request: NextRequest) {
     const technician_id = searchParams.get('technician_id');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const stationId = searchParams.get('station_id') || searchParams.get('stationId');
 
     const skip = (page - 1) * limit;
 
     // 建立過濾條件
     const where: any = {};
+
+    // 場域過濾：根據 station_id 查找該場域下所有 guns 的 cpid
+    if (stationId) {
+      const guns = await client.guns.findMany({
+        where: { meter: { station_id: parseInt(stationId) } },
+        select: { cpid: true }
+      });
+      const cpids = guns.map((g: any) => g.cpid).filter(Boolean);
+      where.cpid = { in: cpids.length > 0 ? cpids : ['__no_match__'] };
+    }
     
     if (status) {
       where.status = status;

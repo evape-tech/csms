@@ -8,13 +8,18 @@ export const GET = async (request: NextRequest) => {
     const client = getDatabaseClient() as any; // 避免跨資料庫 PrismaClient union 造成的 overload 衝突
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
+    const stationId = searchParams.get('station_id') || searchParams.get('stationId');
+
+    const where: any = {};
+    if (search) {
+      where.meter_no = { contains: search };
+    }
+    if (stationId) {
+      where.station_id = parseInt(stationId);
+    }
 
     const meters = await client.meters.findMany({
-      where: {
-        meter_no: {
-          contains: search,          
-        },
-      },
+      where,
       select: {
         id: true,
         meter_no: true,

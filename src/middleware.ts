@@ -91,5 +91,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Inject stationId from cookie into URL for Server Components that rely on searchParams
+  if (!req.nextUrl.searchParams.has('stationId')) {
+    const siteIdCookie = req.cookies.get('csms_selected_site_id')?.value;
+    if (siteIdCookie && /^\d+$/.test(siteIdCookie)) {
+      const url = req.nextUrl.clone();
+      url.searchParams.set('stationId', siteIdCookie);
+      return NextResponse.rewrite(url);
+    }
+  }
+
   return NextResponse.next();
 }

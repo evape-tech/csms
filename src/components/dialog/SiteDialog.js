@@ -18,7 +18,7 @@ import {
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
-export default function SiteDialog({ open, onClose, sites, selectedSite, onSiteSelect }) {
+export default function SiteDialog({ open, onClose, sites, selectedSite, onSiteSelect, onSitesChanged }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [stationCode, setStationCode] = useState('');
   const [stationName, setStationName] = useState('');
@@ -50,6 +50,8 @@ export default function SiteDialog({ open, onClose, sites, selectedSite, onSiteS
 
         const result = await createStationAction(formData);
         if (result && result.success) {
+          // Refresh sites list in context
+          if (onSitesChanged) await onSitesChanged();
           // Notify parent about new station
           if (onSiteSelect) onSiteSelect(result.data);
           // Reset and close

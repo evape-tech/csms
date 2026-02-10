@@ -137,6 +137,17 @@ export async function GET(request: NextRequest) {
 
     const where = buildWhereClause(searchParams);
 
+    // 場域過濾：根據 station_id 過濾 cpid
+    const stationId = searchParams.get('station_id') || searchParams.get('stationId');
+    if (stationId) {
+      const stationGuns = await client.guns.findMany({
+        where: { meter: { station_id: parseInt(stationId) } },
+        select: { cpid: true }
+      });
+      const cpids = stationGuns.map((g: any) => g.cpid).filter(Boolean);
+      where.cpid = { in: cpids.length > 0 ? cpids : ['__no_match__'] };
+    }
+
     const [records, totalCount, aggregates] = await Promise.all([
       client.charging_transactions.findMany({
         where,

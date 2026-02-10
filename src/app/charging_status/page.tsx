@@ -59,7 +59,14 @@ interface MeterData {
   [key: string]: unknown;
 }
 
-export default async function ChargingStatus() {
+export default async function ChargingStatus({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const stationId = typeof params.stationId === 'string' ? params.stationId : undefined;
+
   // --- load Gun table directly via databaseService on the server ---
   let gunsFromDb: GunData[] = [];
   let stationsFromDb: StationData[] = [];
@@ -70,12 +77,21 @@ export default async function ChargingStatus() {
     
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
+
+    // 根據場域過濾
+    const gunFilter: any = {};
+    const stationFilter: any = {};
+    const meterId = stationId ? parseInt(stationId) : null;
+    if (stationId) {
+      gunFilter.station_id = stationId;
+      stationFilter.id = stationId;
+    }
     
     // 並行獲取 guns、stations 和 meters 數據
     const [gunsRows, stationsRows, metersRows] = await Promise.all([
-      databaseService.getGuns({}),
-      databaseService.getStations(),
-      databaseService.getMeters()
+      databaseService.getGuns(gunFilter),
+      databaseService.getStations(stationFilter),
+      (databaseService as any).getMeters(stationId)
     ]);
     
     // 處理 guns 數據 - 使用 serializeData 函數處理 Decimal 和其他非序列化的數據

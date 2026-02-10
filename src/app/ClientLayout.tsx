@@ -15,22 +15,11 @@ import { Sidebar } from '../components/layout';
 import { SiteDialog } from '../components/dialog';
 import Drawer from '@mui/material/Drawer';
 import { LoadingSpinner } from '../components/ui';
+import { SiteProvider, useSite } from '../contexts/SiteContext';
+import type { Site } from '../contexts/SiteContext';
+import SiteSearchParamsSync from './SiteSearchParamsSync';
 
 const drawerWidth = 240;
-
-// Site interface based on the new stations schema
-interface Site {
-  id: number;
-  station_code: string;
-  name: string | null;
-  address: string | null;
-  floor: string | null;
-  operator_id: string | null;
-  tariff_id: number | null;
-  updated_at: string;
-  meters?: any[];
-  tariff?: any;
-}
 
 // Stable sx objects to avoid recreating on every render
 const flexBoxSx = { display: 'flex' };
@@ -131,44 +120,23 @@ export default function ClientLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <SiteProvider>
+      <ClientLayoutInner>{children}</ClientLayoutInner>
+    </SiteProvider>
+  );
+}
+
+function ClientLayoutInner({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { sites, selectedSite, selectedSiteName, selectSite, refreshSites } = useSite();
   const [drawerOpen, setDrawerOpen] = React.useState(true);
   const [siteDialogOpen, setSiteDialogOpen] = React.useState(false);
-  const [sites, setSites] = React.useState<Site[]>([]);
-  const [selectedSite, setSelectedSite] = React.useState<Site | null>(null);
   const [darkMode, setDarkMode] = React.useState(false);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
 
-  // Fetch sites from API
-  React.useEffect(() => {
-    const fetchSites = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const response = await fetch('/api/stations');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch sites: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setSites(data);
-        
-        // Set first site as selected if available
-        if (data.length > 0) {
-          setSelectedSite(data[0]);
-        }
-      } catch (err) {
-        console.error('Failed to fetch sites:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load sites');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSites();
-  }, []);
-  
   const theme = React.useMemo(() => createTheme({
     palette: {
       mode: darkMode ? 'dark' : 'light',
@@ -190,9 +158,9 @@ export default function ClientLayout({
   }, []);
   
   const handleSiteSelect = React.useCallback((site: Site) => {
-    setSelectedSite(site);
+    selectSite(site);
     setSiteDialogOpen(false);
-  }, []);
+  }, [selectSite]);
   
   const handleOpenSiteDialog = React.useCallback(() => setSiteDialogOpen(true), []);
   
@@ -206,12 +174,6 @@ export default function ClientLayout({
       window.location.href = '/login';
     }
   }, []);
-
-  // Compute selected site name with proper fallback
-  const selectedSiteName = React.useMemo(() => {
-    if (!selectedSite) return '載入中...';
-    return selectedSite.name || selectedSite.station_code || '未命名站點';
-  }, [selectedSite]);
 
   // Memoized main content sx to avoid recreation
   const mainSx = React.useMemo(() => ({
@@ -236,6 +198,7 @@ export default function ClientLayout({
     <ThemeProvider theme={theme}>
       <Box sx={flexBoxSx} suppressHydrationWarning>
         <CssBaseline />
+        <SiteSearchParamsSync />
         
         <AppBarComponent
           onDrawerToggle={handleDrawerToggle}
@@ -266,6 +229,7 @@ export default function ClientLayout({
           sites={sites}
           selectedSite={selectedSite}
           onSiteSelect={handleSiteSelect}
+          onSitesChanged={refreshSites}
         />
       </Box>
     </ThemeProvider>

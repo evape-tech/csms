@@ -12,11 +12,14 @@ import {
   UsagePatternCard,
   RevenueStatisticsCard
 } from '@/components/cards';
+import { useSiteId } from '@/contexts/SiteContext';
 
 // 獲取電表列表
-async function fetchMeters() {
+async function fetchMeters(stationId?: number | null) {
   try {
-    const response = await fetch('/api/meters');
+    const params = new URLSearchParams();
+    if (stationId) params.set('station_id', String(stationId));
+    const response = await fetch(`/api/meters${params.toString() ? '?' + params.toString() : ''}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
     return result.success ? result.data : [];
@@ -27,9 +30,11 @@ async function fetchMeters() {
 }
 
 // 獲取場域、電表和充電樁的關聯關係
-async function fetchStations() {
+async function fetchStations(stationId?: number | null) {
   try {
-    const response = await fetch('/api/stations');
+    const params = new URLSearchParams();
+    if (stationId) params.set('station_id', String(stationId));
+    const response = await fetch(`/api/stations${params.toString() ? '?' + params.toString() : ''}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const stations = await response.json();
     return Array.isArray(stations) ? stations : [];
@@ -66,24 +71,26 @@ function buildMeterGunMap(stations: any[]) {
 }
 
 export default function PowerQuery() {
+  const siteId = useSiteId();
   const [selectedMeter, setSelectedMeter] = useState('全部');
   const [meters, setMeters] = useState<string[]>([]);
   const [meterGunMap, setMeterGunMap] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
 
-  // 初始化：獲取電表列表和關聯關係
+  // 初始化：獲取電表列表和關聯關係（當場域切換時重新載入）
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
       try {
         const [meterList, stations] = await Promise.all([
-          fetchMeters(),
-          fetchStations()
+          fetchMeters(siteId),
+          fetchStations(siteId)
         ]);
         
         setMeters(meterList);
         const map = buildMeterGunMap(stations);
         setMeterGunMap(map);
+        setSelectedMeter('全部');
       } catch (error) {
         console.error('初始化失敗:', error);
       } finally {
@@ -92,7 +99,7 @@ export default function PowerQuery() {
     };
     
     initialize();
-  }, []);
+  }, [siteId]);
 
   // 根據選中的電表獲取對應的充電樁識別碼
   const getSelectedMeterGuns = () => {

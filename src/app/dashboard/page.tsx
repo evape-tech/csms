@@ -66,7 +66,14 @@ interface FaultReportData {
   [key: string]: unknown;
 }
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const stationId = typeof params.stationId === 'string' ? params.stationId : undefined;
+
   // --- load Gun table directly via databaseService on the server ---
   let gunsData: GunData[] = [];
   let stations: StationData[] = [];
@@ -77,10 +84,18 @@ export default async function Dashboard() {
     // 確保資料庫已初始化
     await DatabaseUtils.initialize(process.env.DB_PROVIDER);
     
+    // 根據場域過濾
+    const gunFilter: any = {};
+    const stationFilter: any = {};
+    if (stationId) {
+      gunFilter.station_id = stationId;
+      stationFilter.id = stationId;
+    }
+
     // 並行獲取 guns、stations 和 fault_reports 數據
     const [gunsRows, siteSettingsRows, faultReportsRows] = await Promise.all([
-      databaseService.getGuns({}),
-      databaseService.getStations(),
+      databaseService.getGuns(gunFilter),
+      databaseService.getStations(stationFilter),
       (databaseService as any).getFaultReports({}) // 獲取所有故障報告
     ]);
     
